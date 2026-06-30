@@ -9,11 +9,19 @@ struct IndicatorDetailView: View {
     var body: some View {
         GeometryReader { proxy in
             let usesSplitLayout = horizontalSizeClass == .regular && proxy.size.width > proxy.size.height
+            let horizontalPadding: CGFloat = horizontalSizeClass == .regular ? 20 : 16
+            let verticalPadding: CGFloat = 16
 
-            ScrollView {
-                detailContent(usesSplitLayout: usesSplitLayout)
-                    .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-                    .padding(.vertical, 16)
+            if usesSplitLayout {
+                splitDetailContent(availableSize: proxy.size)
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.vertical, verticalPadding)
+            } else {
+                ScrollView {
+                    compactDetailContent
+                        .padding(.horizontal, horizontalPadding)
+                        .padding(.vertical, verticalPadding)
+                }
             }
         }
         .background(AppBackground())
@@ -24,32 +32,58 @@ struct IndicatorDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func detailContent(usesSplitLayout: Bool) -> some View {
-        if usesSplitLayout {
+    private func splitDetailContent(availableSize: CGSize) -> some View {
+        let headerHeight = splitHeaderHeight(for: availableSize)
+        let lowerHeight = splitLowerSectionHeight(for: availableSize, headerHeight: headerHeight)
+
+        return VStack(alignment: .leading, spacing: 16) {
+            IndicatorHero(indicator: indicator)
+                .frame(maxWidth: .infinity, minHeight: headerHeight, maxHeight: headerHeight, alignment: .leading)
+
             HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 16) {
-                    IndicatorHero(indicator: indicator)
-                    chartSection(usesSplitLayout: usesSplitLayout)
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                chartSection(fillsAvailableHeight: true)
+                    .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight)
 
                 rowsSection
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
             }
-        } else {
-            VStack(alignment: .leading, spacing: 16) {
-                IndicatorHero(indicator: indicator)
-                chartSection(usesSplitLayout: usesSplitLayout)
-                rowsSection
-            }
+
+            Spacer(minLength: 0)
         }
     }
 
-    private func chartSection(usesSplitLayout: Bool) -> some View {
-        AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
+    private var compactDetailContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            IndicatorHero(indicator: indicator)
+            chartSection(fillsAvailableHeight: false)
+            rowsSection
+        }
+    }
+
+    private func splitHeaderHeight(for availableSize: CGSize) -> CGFloat {
+        min(156, max(132, availableSize.height * 0.13))
+    }
+
+    private func splitLowerSectionHeight(for availableSize: CGSize, headerHeight: CGFloat) -> CGFloat {
+        let verticalPadding: CGFloat = 32
+        let contentSpacing: CGFloat = 16
+        let remainingHeight = availableSize.height - verticalPadding - headerHeight - contentSpacing
+
+        return max(320, remainingHeight * 0.8)
+    }
+
+    @ViewBuilder
+    private func chartSection(fillsAvailableHeight: Bool) -> some View {
+        let chart = AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
             .frame(maxWidth: .infinity)
-            .aspectRatio(usesSplitLayout ? 0.82 : 1.0, contentMode: .fit)
+
+        if fillsAvailableHeight {
+            chart
+                .frame(maxHeight: .infinity)
+        } else {
+            chart
+                .aspectRatio(1.0, contentMode: .fit)
+        }
     }
 
     private var rowsSection: some View {
