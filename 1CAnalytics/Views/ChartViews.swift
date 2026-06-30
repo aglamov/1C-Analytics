@@ -90,6 +90,7 @@ struct AnalyticsChart: View {
                 }
             }
         }
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
         .chartYAxis {
             AxisMarks(position: .leading)
         }
@@ -104,7 +105,7 @@ struct AnalyticsChart: View {
                 x: .value("Значение", animatedValue(for: row)),
                 y: .value("Группа", row.label)
             )
-            .foregroundStyle(indicator.accent.primary)
+            .foregroundStyle(by: .value("Группа", row.label))
             .opacity(opacity(for: row))
             .cornerRadius(6)
             .annotation(position: .trailing, alignment: .center) {
@@ -113,6 +114,7 @@ struct AnalyticsChart: View {
                 }
             }
         }
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
         .chartXAxis {
             AxisMarks(position: .bottom)
         }
@@ -136,6 +138,7 @@ struct AnalyticsChart: View {
                 }
             }
         }
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
         .chartOverlay { proxy in
             chartTapOverlay(proxy: proxy, mode: .stackedBar)
         }
@@ -158,6 +161,7 @@ struct AnalyticsChart: View {
                 }
             }
         }
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
         .chartOverlay { proxy in
             donutTapOverlay(proxy: proxy)
         }

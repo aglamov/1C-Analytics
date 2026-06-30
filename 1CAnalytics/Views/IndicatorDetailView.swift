@@ -76,7 +76,7 @@ struct IndicatorDetailView: View {
                         group: group,
                         maxValue: maxValue,
                         totalValue: totalValue,
-                        accent: indicator.accent,
+                        indicator: indicator,
                         selectedRowID: selectedRowID,
                         onSelect: selectRow
                     )
@@ -141,7 +141,7 @@ private struct DetailGroupRowView: View {
     let group: IndicatorRowGroup
     let maxValue: Double
     let totalValue: Double
-    let accent: AppAccent
+    let indicator: Indicator
     let selectedRowID: IndicatorRow.ID?
     let onSelect: (IndicatorRow.ID) -> Void
     @State private var hasAppeared = false
@@ -152,7 +152,7 @@ private struct DetailGroupRowView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(group.label)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(isSelected ? accent.primary : .primary)
+                        .foregroundStyle(isSelected ? groupColor : .primary)
                         .lineLimit(1)
 
                     if group.rows.count > 1 {
@@ -168,7 +168,7 @@ private struct DetailGroupRowView: View {
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(group.totalValue.formatted(.number.precision(.fractionLength(0))))
                         .font((isSelected ? Font.title3 : Font.body).monospacedDigit().weight(.bold))
-                        .foregroundStyle(isSelected ? accent.primary : .primary)
+                        .foregroundStyle(isSelected ? groupColor : .primary)
                         .contentTransition(.numericText())
 
                     Text(shareText)
@@ -201,10 +201,10 @@ private struct DetailGroupRowView: View {
             .frame(height: group.rows.count > 1 ? 28 : 10)
         }
         .padding(14)
-        .background(isSelected ? accent.primary.opacity(0.12) : .white.opacity(0.42), in: RoundedRectangle(cornerRadius: 8))
+        .background(isSelected ? groupColor.opacity(0.12) : .white.opacity(0.42), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isSelected ? accent.primary.opacity(0.35) : .clear, lineWidth: 1)
+                .strokeBorder(isSelected ? groupColor.opacity(0.35) : .clear, lineWidth: 1)
         }
         .scaleEffect(isSelected ? 1.015 : 1)
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isSelected)
@@ -221,6 +221,10 @@ private struct DetailGroupRowView: View {
         }
 
         return group.rows.contains { $0.id == selectedRowID }
+    }
+
+    private var groupColor: Color {
+        indicator.chartColor(forGroupLabel: group.label)
     }
 
     private var progress: Double {
@@ -287,11 +291,6 @@ private struct DetailGroupRowView: View {
     }
 
     private func segmentColor(for row: IndicatorRow) -> Color {
-        let rows = group.rows
-        guard let index = rows.firstIndex(where: { $0.id == row.id }) else {
-            return accent.primary
-        }
-
-        return index.isMultiple(of: 2) ? accent.primary : accent.secondary
+        indicator.chartColor(for: row)
     }
 }

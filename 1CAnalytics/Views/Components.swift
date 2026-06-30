@@ -53,6 +53,69 @@ enum AppAccent {
     }
 }
 
+enum ChartPalette {
+    static let colors: [Color] = [
+        Color(red: 0.10, green: 0.36, blue: 0.95),
+        Color(red: 0.02, green: 0.55, blue: 0.40),
+        Color(red: 0.88, green: 0.38, blue: 0.10),
+        Color(red: 0.45, green: 0.22, blue: 0.88),
+        Color(red: 0.08, green: 0.69, blue: 0.84),
+        Color(red: 0.88, green: 0.28, blue: 0.61),
+        Color(red: 0.56, green: 0.74, blue: 0.18),
+        Color(red: 0.96, green: 0.69, blue: 0.18)
+    ]
+
+    static func color(for key: String, in domain: [String], fallback: Color) -> Color {
+        guard let index = domain.firstIndex(of: key), !colors.isEmpty else {
+            return fallback
+        }
+
+        return colors[index % colors.count]
+    }
+}
+
+extension Indicator {
+    var chartColorDomain: [String] {
+        switch chartType {
+        case .stackedBar:
+            orderedRows.uniqueValues { $0.series ?? "Значение" }
+        case .bar, .horizontalBar, .donut:
+            orderedRows.uniqueValues(\.label)
+        }
+    }
+
+    func chartColor(for row: IndicatorRow) -> Color {
+        let key: String
+        switch chartType {
+        case .stackedBar:
+            key = row.series ?? "Значение"
+        case .bar, .horizontalBar, .donut:
+            key = row.label
+        }
+
+        return ChartPalette.color(for: key, in: chartColorDomain, fallback: accent.primary)
+    }
+
+    func chartColor(forGroupLabel label: String) -> Color {
+        ChartPalette.color(for: label, in: orderedRows.uniqueValues(\.label), fallback: accent.primary)
+    }
+}
+
+private extension Array where Element == IndicatorRow {
+    func uniqueValues(_ transform: (IndicatorRow) -> String) -> [String] {
+        reduce(into: [String]()) { values, row in
+            let value = transform(row)
+            if !values.contains(value) {
+                values.append(value)
+            }
+        }
+    }
+
+    func uniqueValues(_ keyPath: KeyPath<IndicatorRow, String>) -> [String] {
+        uniqueValues { $0[keyPath: keyPath] }
+    }
+}
+
 struct AppBackground: View {
     var body: some View {
         ZStack {
