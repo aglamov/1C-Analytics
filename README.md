@@ -70,11 +70,12 @@
 Debug-сборка по умолчанию использует мок-данные, чтобы приложение сразу запускалось на iPhone и iPad Simulator. Для подключения реального API нужно создать локальный файл `Config/Secrets.xcconfig` на основе `Config/Secrets.xcconfig.example` и переопределить настройки:
 
 ```xcconfig
+ANALYTICS_PATH_TOKEN = paste_path_key_here
 ANALYTICS_API_KEY = your_key_here
 USE_MOCK_ANALYTICS = NO
 ```
 
-Ссылка на сервис хранится в `Config/Debug.xcconfig` и `Config/Release.xcconfig`:
+Ссылка на сервис хранится в `Config/Debug.xcconfig` и `Config/Release.xcconfig`. Сейчас API использует ключ как последний компонент URL, поэтому секретная часть должна лежать в `ANALYTICS_PATH_TOKEN`:
 
 ```xcconfig
 ANALYTICS_BASE_URL = https:/$()/sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/analitycs/

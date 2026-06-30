@@ -53,7 +53,6 @@ struct AnalyticsChart: View {
                 y: .value("Значение", row.value)
             )
             .foregroundStyle(by: .value("Серия", row.series ?? "Значение"))
-            .position(by: .value("Серия", row.series ?? "Значение"))
         }
     }
 
@@ -69,4 +68,3 @@ struct AnalyticsChart: View {
         }
     }
 }
-

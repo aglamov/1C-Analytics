@@ -1,4 +1,5 @@
 ANALYTICS_BASE_URL = https:/$()/sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/analitycs/
+ANALYTICS_PATH_TOKEN =
 ANALYTICS_API_KEY =
 USE_MOCK_ANALYTICS = YES
 

@@ -1,8 +1,8 @@
 # Xcode
 DerivedData/
+xcuserdata/
 *.xcuserdata/
 *.xcuserstate
 
 # Local secrets
 Config/Secrets.xcconfig
-
