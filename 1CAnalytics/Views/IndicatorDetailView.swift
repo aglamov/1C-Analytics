@@ -46,7 +46,7 @@ struct IndicatorDetailView: View {
     }
 
     private func chartSection(usesSplitLayout: Bool) -> some View {
-        AnalyticsChart(indicator: indicator, selectedRowID: $selectedRowID)
+        AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
             .frame(maxWidth: .infinity)
             .aspectRatio(usesSplitLayout ? 1.15 : 1.0, contentMode: .fit)
     }
