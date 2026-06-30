@@ -45,3 +45,41 @@ enum ChartType: String, CaseIterable, Decodable {
     }
 }
 
+extension Indicator {
+    var orderedRows: [IndicatorRow] {
+        rows.sortedByOrder()
+    }
+
+    var accent: AppAccent {
+        switch id {
+        case "students-total":
+            .blue
+        case "citizenship":
+            .green
+        case "students-persons":
+            .violet
+        case "full-time":
+            .orange
+        default:
+            switch chartType {
+            case .bar:
+                .blue
+            case .horizontalBar:
+                .green
+            case .stackedBar:
+                .violet
+            case .donut:
+                .orange
+            }
+        }
+    }
+
+}
+
+extension Array where Element == IndicatorRow {
+    func sortedByOrder() -> [IndicatorRow] {
+        sorted {
+            ($0.sortOrder ?? .max, $0.label, $0.id) < ($1.sortOrder ?? .max, $1.label, $1.id)
+        }
+    }
+}

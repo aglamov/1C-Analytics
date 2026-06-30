@@ -33,12 +33,26 @@ struct DashboardView: View {
             ContentUnavailableView("Не удалось загрузить данные", systemImage: "wifi.exclamationmark", description: Text(message))
         case let .loaded(dashboard):
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    DashboardSummaryHeader(dashboard: dashboard)
+                VStack(alignment: .leading, spacing: 16) {
+                    DashboardHeader(dashboard: dashboard)
 
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                         ForEach(dashboard.indicators) { indicator in
                             IndicatorDashboardCard(indicator: indicator)
+                                .overlay(alignment: .topTrailing) {
+                                    NavigationLink {
+                                        IndicatorDetailView(indicator: indicator)
+                                    } label: {
+                                        Image(systemName: "arrow.up.right")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(indicator.accent.primary)
+                                            .frame(width: 30, height: 30)
+                                            .background(Color(.systemBackground).opacity(0.88), in: RoundedRectangle(cornerRadius: 8))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Открыть детализацию")
+                                    .padding(14)
+                                }
                         }
                     }
                 }
@@ -46,7 +60,7 @@ struct DashboardView: View {
                 .padding(.horizontal, horizontalSizeClass == .regular ? 24 : 16)
                 .padding(.vertical, 18)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(AppBackground())
             .safeAreaInset(edge: .bottom) {
                 UpdatedAtBar(date: dashboard.updatedAt)
             }
@@ -66,54 +80,59 @@ struct DashboardView: View {
     }
 }
 
-private struct DashboardSummaryHeader: View {
+private struct DashboardHeader: View {
     let dashboard: Dashboard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(dashboard.title)
-                        .font(.largeTitle.weight(.bold))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.82)
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(dashboard.title)
+                    .font(.largeTitle.weight(.bold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
 
-                    Text("\(dashboard.indicators.count) показателя")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 12)
-
-                Image(systemName: "chart.xyaxis.line")
-                    .font(.title2)
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.blue, in: RoundedRectangle(cornerRadius: 8))
+                Text("\(dashboard.indicators.count) показателя")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+
+            Spacer(minLength: 12)
+
+            Image(systemName: "chart.xyaxis.line")
+                .font(.title2)
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(AppAccent.blue.primary, in: RoundedRectangle(cornerRadius: 8))
         }
-        .padding(18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        .premiumPanel()
     }
 }
 
 private struct IndicatorDashboardCard: View {
     let indicator: Indicator
+    @State private var isVisible = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
-            AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false)
-                .frame(height: chartHeight)
+            AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false, showsLegend: false)
+                .frame(height: 250)
                 .padding(.top, 2)
-
-            rowsPreview
         }
         .padding(18)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity, minHeight: 420, alignment: .topLeading)
+        .premiumPanel()
+        .scaleEffect(isVisible ? 1 : 0.98)
+        .opacity(isVisible ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) {
+                isVisible = true
+            }
+        }
     }
 
     private var header: some View {
@@ -123,17 +142,13 @@ private struct IndicatorDashboardCard: View {
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(tint, in: RoundedRectangle(cornerRadius: 8))
+                    .background(indicator.accent.primary, in: RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(indicator.title)
                         .font(.headline)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-
-                    Text(indicator.chartType.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: 0)
@@ -143,6 +158,7 @@ private struct IndicatorDashboardCard: View {
                 Text(valueText)
                     .font(.system(.title, design: .rounded).weight(.bold))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
 
@@ -159,44 +175,6 @@ private struct IndicatorDashboardCard: View {
         }
     }
 
-    private var rowsPreview: some View {
-        VStack(spacing: 0) {
-            ForEach(sortedRows) { row in
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.label)
-                            .font(.caption.weight(.medium))
-                            .lineLimit(1)
-
-                        if let series = row.series {
-                            Text(series)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Text(row.value.formatted(.number.precision(.fractionLength(0))))
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.vertical, 8)
-
-                if row.id != sortedRows.last?.id {
-                    Divider()
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private var sortedRows: [IndicatorRow] {
-        indicator.rows.sortedByOrder()
-    }
-
     private var valueText: String {
         guard let value = indicator.value else {
             return "нет данных"
@@ -205,44 +183,12 @@ private struct IndicatorDashboardCard: View {
         return "\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")"
     }
 
-    private var chartHeight: CGFloat {
-        switch indicator.chartType {
-        case .donut:
-            240
-        case .horizontalBar:
-            220
-        case .bar, .stackedBar:
-            230
-        }
-    }
-
     private var iconName: String {
         switch indicator.chartType {
         case .bar, .horizontalBar, .stackedBar:
             "chart.bar.fill"
         case .donut:
             "chart.pie.fill"
-        }
-    }
-
-    private var tint: Color {
-        switch indicator.chartType {
-        case .bar:
-            .blue
-        case .horizontalBar:
-            .teal
-        case .stackedBar:
-            .indigo
-        case .donut:
-            .orange
-        }
-    }
-}
-
-private extension Array where Element == IndicatorRow {
-    func sortedByOrder() -> [IndicatorRow] {
-        sorted {
-            ($0.sortOrder ?? .max, $0.label) < ($1.sortOrder ?? .max, $1.label)
         }
     }
 }
