@@ -89,21 +89,30 @@ private struct AnalyticsAPIIndicator: Decodable {
 private struct AnalyticsAPIValue: Decodable {
     let group: String
     let value: Double?
-    let valueRF: Double?
-    let valueIG: Double?
+    let subgroup: [AnalyticsAPISubgroup]?
 
     func toRows(index: Int) -> [IndicatorRow] {
-        if let valueRF, let valueIG {
-            return [
-                IndicatorRow(id: "\(group.stableID)-rf", label: group, value: valueRF, series: "РФ", sortOrder: index * 2),
-                IndicatorRow(id: "\(group.stableID)-ig", label: group, value: valueIG, series: "ИГ", sortOrder: index * 2 + 1)
-            ]
+        if let subgroup, !subgroup.isEmpty {
+            return subgroup.enumerated().map { subgroupIndex, subgroup in
+                IndicatorRow(
+                    id: "\(group.stableID)-\(subgroup.name.stableID)",
+                    label: group,
+                    value: subgroup.value,
+                    series: subgroup.name,
+                    sortOrder: index * 100 + subgroupIndex
+                )
+            }
         }
 
         return [
             IndicatorRow(id: group.stableID, label: group, value: value ?? 0, series: nil, sortOrder: index)
         ]
     }
+}
+
+private struct AnalyticsAPISubgroup: Decodable {
+    let name: String
+    let value: Double
 }
 
 private extension String {
