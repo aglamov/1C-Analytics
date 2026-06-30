@@ -48,7 +48,7 @@ struct IndicatorDetailView: View {
     private func chartSection(usesSplitLayout: Bool) -> some View {
         AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
             .frame(maxWidth: .infinity)
-            .aspectRatio(usesSplitLayout ? 1.15 : 1.0, contentMode: .fit)
+            .aspectRatio(usesSplitLayout ? 0.82 : 1.0, contentMode: .fit)
     }
 
     private var rowsSection: some View {
@@ -70,7 +70,7 @@ struct IndicatorDetailView: View {
                     .foregroundStyle(indicator.accent.primary)
             }
 
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 ForEach(rankedGroups) { group in
                     DetailGroupRowView(
                         group: group,
@@ -80,8 +80,14 @@ struct IndicatorDetailView: View {
                         selectedRowID: selectedRowID,
                         onSelect: selectRow
                     )
+
+                    if group.id != rankedGroups.last?.id {
+                        Divider()
+                            .padding(.leading, 2)
+                    }
                 }
             }
+            .background(.white.opacity(0.32), in: RoundedRectangle(cornerRadius: 8))
         }
         .padding(16)
         .premiumPanel(accent: indicator.accent)
@@ -148,12 +154,18 @@ private struct DetailGroupRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(group.label)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(isSelected ? groupColor : .primary)
-                        .lineLimit(1)
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(groupColor)
+                            .frame(width: 7, height: 7)
+
+                        Text(group.label)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(isSelected ? groupColor : .primary)
+                            .lineLimit(1)
+                    }
 
                     if group.rows.count > 1 {
                         Text(seriesSummary)
@@ -165,9 +177,9 @@ private struct DetailGroupRowView: View {
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 3) {
+                VStack(alignment: .trailing, spacing: 2) {
                     Text(group.totalValue.formatted(.number.precision(.fractionLength(0))))
-                        .font((isSelected ? Font.title3 : Font.body).monospacedDigit().weight(.bold))
+                        .font(.body.monospacedDigit().weight(.bold))
                         .foregroundStyle(isSelected ? groupColor : .primary)
                         .contentTransition(.numericText())
 
@@ -184,13 +196,15 @@ private struct DetailGroupRowView: View {
 
                     HStack(spacing: 2) {
                         ForEach(group.rows) { row in
+                            let width = segmentWidth(for: row, availableWidth: proxy.size.width)
+
                             Button {
                                 onSelect(row.id)
                             } label: {
-                                segmentView(for: row)
+                                segmentView(for: row, showsInlineLabel: width > 76)
                             }
                             .buttonStyle(.plain)
-                            .frame(width: segmentWidth(for: row, availableWidth: proxy.size.width))
+                            .frame(width: width)
                             .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "")")
                         }
                     }
@@ -198,15 +212,15 @@ private struct DetailGroupRowView: View {
                     .clipShape(Capsule())
                 }
             }
-            .frame(height: group.rows.count > 1 ? 28 : 10)
+            .frame(height: group.rows.count > 1 ? 22 : 10)
         }
-        .padding(14)
-        .background(isSelected ? groupColor.opacity(0.12) : .white.opacity(0.42), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(isSelected ? groupColor.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isSelected ? groupColor.opacity(0.35) : .clear, lineWidth: 1)
+                .strokeBorder(isSelected ? groupColor.opacity(0.32) : .clear, lineWidth: 1)
         }
-        .scaleEffect(isSelected ? 1.015 : 1)
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isSelected)
         .onAppear {
             withAnimation(.easeOut(duration: 0.65)) {
@@ -246,7 +260,7 @@ private struct DetailGroupRowView: View {
     private var seriesSummary: String {
         group.rows
             .map { row in
-                "\(row.series ?? "Значение") \(row.value.formatted(.number.notation(.compactName).precision(.fractionLength(0))))"
+                "\(row.series ?? "Значение") \(row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0))))"
             }
             .joined(separator: " / ")
     }
@@ -259,19 +273,19 @@ private struct DetailGroupRowView: View {
         return availableWidth * progress * (row.value / group.totalValue)
     }
 
-    private func segmentView(for row: IndicatorRow) -> some View {
+    private func segmentView(for row: IndicatorRow, showsInlineLabel: Bool) -> some View {
         let isSegmentSelected = selectedRowID == row.id
 
         return ZStack {
             Rectangle()
                 .fill(segmentColor(for: row).opacity(isSegmentSelected ? 1 : 0.86))
 
-            if group.rows.count > 1 {
+            if group.rows.count > 1, showsInlineLabel {
                 HStack(spacing: 4) {
                     Text(row.series ?? "Значение")
                         .lineLimit(1)
 
-                    Text(row.value.formatted(.number.notation(.compactName).precision(.fractionLength(0))))
+                    Text(row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0))))
                         .monospacedDigit()
                         .lineLimit(1)
                 }

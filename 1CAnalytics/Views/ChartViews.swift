@@ -34,7 +34,7 @@ struct AnalyticsChart: View {
                 HStack {
                     Spacer()
 
-                    Text("\(selectedRow.label): \(selectedRow.value.formatted(.number.precision(.fractionLength(0))))")
+                    Text(selectedRowTitle(for: selectedRow))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(indicator.accent.primary)
                         .lineLimit(1)
@@ -208,6 +208,15 @@ struct AnalyticsChart: View {
 
     private var selectedRowID: IndicatorRow.ID? {
         externalSelection?.wrappedValue ?? internalSelectedRowID
+    }
+
+    private func selectedRowTitle(for row: IndicatorRow) -> String {
+        let value = row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0)))
+        if let series = row.series {
+            return "\(row.label), \(series): \(value)"
+        }
+
+        return "\(row.label): \(value)"
     }
 
     private func animatedValue(for row: IndicatorRow) -> Double {
@@ -402,7 +411,7 @@ private struct ChartValueLabel: View {
     let accent: AppAccent
 
     var body: some View {
-        Text(value.formatted(.number.notation(.compactName).precision(.fractionLength(0))))
+        Text(valueText)
             .font(.caption2.monospacedDigit().weight(.bold))
             .foregroundStyle(isSelected ? accent.primary : .secondary)
             .lineLimit(1)
@@ -422,6 +431,14 @@ private struct ChartValueLabel: View {
             .scaleEffect(isSelected ? 1.28 : 1)
             .shadow(color: isSelected ? accent.primary.opacity(0.18) : .clear, radius: 8, x: 0, y: 4)
             .animation(.spring(response: 0.32, dampingFraction: 0.66), value: isSelected)
+    }
+
+    private var valueText: String {
+        if isSelected {
+            return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0)))
+        }
+
+        return value.formatted(.number.notation(.compactName).precision(.fractionLength(0)))
     }
 }
 
