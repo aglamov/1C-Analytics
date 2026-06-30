@@ -8,8 +8,6 @@
 	<string>$(ANALYTICS_BASE_URL)</string>
 	<key>AnalyticsPathToken</key>
 	<string>$(ANALYTICS_PATH_TOKEN)</string>
-	<key>AnalyticsUseMockData</key>
-	<string>$(USE_MOCK_ANALYTICS)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

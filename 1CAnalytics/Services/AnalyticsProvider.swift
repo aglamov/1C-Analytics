@@ -8,11 +8,7 @@ protocol AnalyticsProvider {
 enum AnalyticsProviderFactory {
     @MainActor
     static func makeProvider(configuration: AppConfiguration = .load()) -> any AnalyticsProvider {
-        if configuration.useMockData {
-            MockAnalyticsProvider()
-        } else {
-            APIAnalyticsProvider(configuration: configuration)
-        }
+        APIAnalyticsProvider(configuration: configuration)
     }
 }
 

@@ -55,7 +55,7 @@
 - async/await для сетевых запросов;
 - отдельный слой клиента 1С/API;
 - модели показателей, независимые от конкретного транспорта;
-- мок-данные для разработки UI без доступа к промышленной базе.
+- работа только с реальными данными подготовленного API.
 
 ## Запуск в Xcode
 
@@ -67,12 +67,11 @@
 
 Схема приложения: `1C Analytics`.
 
-Debug-сборка по умолчанию использует мок-данные, чтобы приложение сразу запускалось на iPhone и iPad Simulator. Для подключения реального API нужно создать локальный файл `Config/Secrets.xcconfig` на основе `Config/Secrets.xcconfig.example` и переопределить настройки:
+Приложение использует реальные данные подготовленного API. Для доступа нужно создать локальный файл `Config/Secrets.xcconfig` на основе `Config/Secrets.xcconfig.example` и переопределить настройки:
 
 ```xcconfig
 ANALYTICS_PATH_TOKEN = paste_path_key_here
 ANALYTICS_API_KEY = your_key_here
-USE_MOCK_ANALYTICS = NO
 ```
 
 Ссылка на сервис хранится в `Config/Debug.xcconfig` и `Config/Release.xcconfig`. Сейчас API использует ключ как последний компонент URL, поэтому секретная часть должна лежать в `ANALYTICS_PATH_TOKEN`:

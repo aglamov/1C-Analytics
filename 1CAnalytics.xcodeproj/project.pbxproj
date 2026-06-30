@@ -12,7 +12,6 @@
 		A10000000000000000000003 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* AppConfiguration.swift */; };
 		A10000000000000000000004 /* AnalyticsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* AnalyticsProvider.swift */; };
 		A10000000000000000000005 /* APIAnalyticsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* APIAnalyticsProvider.swift */; };
-		A10000000000000000000006 /* MockAnalyticsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* MockAnalyticsProvider.swift */; };
 		A10000000000000000000007 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* DashboardViewModel.swift */; };
 		A10000000000000000000008 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* DashboardView.swift */; };
 		A10000000000000000000009 /* IndicatorDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* IndicatorDetailView.swift */; };
@@ -26,7 +25,6 @@
 		A20000000000000000000003 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* AnalyticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000005 /* APIAnalyticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIAnalyticsProvider.swift; sourceTree = "<group>"; };
-		A20000000000000000000006 /* MockAnalyticsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAnalyticsProvider.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* IndicatorDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorDetailView.swift; sourceTree = "<group>"; };
@@ -86,7 +84,6 @@
 				A20000000000000000000003 /* AppConfiguration.swift */,
 				A20000000000000000000004 /* AnalyticsProvider.swift */,
 				A20000000000000000000005 /* APIAnalyticsProvider.swift */,
-				A20000000000000000000006 /* MockAnalyticsProvider.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -201,7 +198,6 @@
 				A10000000000000000000003 /* AppConfiguration.swift in Sources */,
 				A10000000000000000000004 /* AnalyticsProvider.swift in Sources */,
 				A10000000000000000000005 /* APIAnalyticsProvider.swift in Sources */,
-				A10000000000000000000006 /* MockAnalyticsProvider.swift in Sources */,
 				A10000000000000000000007 /* DashboardViewModel.swift in Sources */,
 				A10000000000000000000008 /* DashboardView.swift in Sources */,
 				A10000000000000000000009 /* IndicatorDetailView.swift in Sources */,
@@ -409,4 +405,3 @@
 	};
 	rootObject = A80000000000000000000001 /* Project object */;
 }
-

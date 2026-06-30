@@ -34,8 +34,6 @@ struct DashboardView: View {
         case let .loaded(dashboard):
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    DashboardHeader(dashboard: dashboard)
-
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
                         ForEach(dashboard.indicators) { indicator in
                             IndicatorDashboardCard(indicator: indicator)
@@ -77,37 +75,6 @@ struct DashboardView: View {
                 GridItem(.flexible(minimum: 0, maximum: .infinity), spacing: 14, alignment: .top)
             ]
         }
-    }
-}
-
-private struct DashboardHeader: View {
-    let dashboard: Dashboard
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(dashboard.title)
-                    .font(.largeTitle.weight(.bold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.82)
-
-                Text("\(dashboard.indicators.count) показателя")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 12)
-
-            Image(systemName: "chart.xyaxis.line")
-                .font(.title2)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(AppAccent.blue.primary, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .premiumPanel()
     }
 }
 
