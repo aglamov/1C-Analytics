@@ -4,6 +4,7 @@ struct IndicatorDetailView: View {
     let indicator: Indicator
     @State private var selectedRowID: IndicatorRow.ID?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         GeometryReader { proxy in
@@ -87,10 +88,14 @@ struct IndicatorDetailView: View {
                     }
                 }
             }
-            .background(.white.opacity(0.32), in: RoundedRectangle(cornerRadius: 8))
+            .background(rowsBackgroundColor, in: RoundedRectangle(cornerRadius: 8))
         }
         .padding(16)
         .premiumPanel(accent: indicator.accent)
+    }
+
+    private var rowsBackgroundColor: Color {
+        colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.48) : .white.opacity(0.32)
     }
 
     private var rankedGroups: [IndicatorRowGroup] {

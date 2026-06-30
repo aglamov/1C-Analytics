@@ -117,34 +117,49 @@ private extension Array where Element == IndicatorRow {
 }
 
 struct AppBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
             Color(.systemGroupedBackground)
 
             LinearGradient(
-                colors: [
-                    Color(red: 0.92, green: 0.97, blue: 1.00),
-                    Color(red: 0.96, green: 0.94, blue: 1.00),
-                    Color(red: 1.00, green: 0.97, blue: 0.91)
-                ],
+                colors: gradientColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            .ignoresSafeArea()
         }
+        .ignoresSafeArea()
+    }
+
+    private var gradientColors: [Color] {
+        if colorScheme == .dark {
+            return [
+                Color(red: 0.05, green: 0.07, blue: 0.09),
+                Color(red: 0.08, green: 0.08, blue: 0.12),
+                Color(red: 0.09, green: 0.07, blue: 0.05)
+            ]
+        }
+
+        return [
+            Color(red: 0.92, green: 0.97, blue: 1.00),
+            Color(red: 0.96, green: 0.94, blue: 1.00),
+            Color(red: 1.00, green: 0.97, blue: 0.91)
+        ]
     }
 }
 
 struct PremiumPanelModifier: ViewModifier {
     var accent: AppAccent?
     var isElevated = true
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
         content
             .background(backgroundShape)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(.white.opacity(0.55), lineWidth: 1)
+                    .strokeBorder(borderColor, lineWidth: 1)
             )
             .shadow(color: shadowColor, radius: isElevated ? 18 : 8, x: 0, y: isElevated ? 10 : 4)
     }
@@ -161,8 +176,16 @@ struct PremiumPanelModifier: ViewModifier {
             ))
     }
 
+    private var borderColor: Color {
+        colorScheme == .dark ? .white.opacity(0.10) : .white.opacity(0.55)
+    }
+
     private var shadowColor: Color {
-        (accent?.primary ?? .black).opacity(isElevated ? 0.14 : 0.08)
+        if colorScheme == .dark {
+            return .black.opacity(isElevated ? 0.30 : 0.18)
+        }
+
+        return (accent?.primary ?? .black).opacity(isElevated ? 0.14 : 0.08)
     }
 }
 
