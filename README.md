@@ -57,6 +57,31 @@
 - модели показателей, независимые от конкретного транспорта;
 - мок-данные для разработки UI без доступа к промышленной базе.
 
+## Запуск в Xcode
+
+Откройте проект:
+
+```text
+1CAnalytics.xcodeproj
+```
+
+Схема приложения: `1C Analytics`.
+
+Debug-сборка по умолчанию использует мок-данные, чтобы приложение сразу запускалось на iPhone и iPad Simulator. Для подключения реального API нужно создать локальный файл `Config/Secrets.xcconfig` на основе `Config/Secrets.xcconfig.example` и переопределить настройки:
+
+```xcconfig
+ANALYTICS_API_KEY = your_key_here
+USE_MOCK_ANALYTICS = NO
+```
+
+Ссылка на сервис хранится в `Config/Debug.xcconfig` и `Config/Release.xcconfig`:
+
+```xcconfig
+ANALYTICS_BASE_URL = https:/$()/sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/analitycs/
+```
+
+API key не коммитится в git: файл `Config/Secrets.xcconfig` добавлен в `.gitignore`.
+
 ## Документация
 
 Подробное продуктовое описание и зафиксированный состав первого дашборда лежат в [docs/product-brief.md](docs/product-brief.md).
