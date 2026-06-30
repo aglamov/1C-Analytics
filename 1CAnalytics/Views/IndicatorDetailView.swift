@@ -3,18 +3,17 @@ import SwiftUI
 struct IndicatorDetailView: View {
     let indicator: Indicator
     @State private var selectedRowID: IndicatorRow.ID?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                IndicatorHero(indicator: indicator)
-                AnalyticsChart(indicator: indicator, selectedRowID: $selectedRowID)
-                    .frame(height: 340)
-                rowsSection
+        GeometryReader { proxy in
+            let usesSplitLayout = horizontalSizeClass == .regular && proxy.size.width > proxy.size.height
+
+            ScrollView {
+                detailContent(usesSplitLayout: usesSplitLayout)
+                    .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
+                    .padding(.vertical, 16)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 18)
-            .frame(maxWidth: 920, alignment: .leading)
         }
         .background(AppBackground())
         .navigationTitle(indicator.title)
@@ -22,6 +21,34 @@ struct IndicatorDetailView: View {
         .onDisappear {
             selectedRowID = nil
         }
+    }
+
+    @ViewBuilder
+    private func detailContent(usesSplitLayout: Bool) -> some View {
+        if usesSplitLayout {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 16) {
+                    IndicatorHero(indicator: indicator)
+                    chartSection(usesSplitLayout: usesSplitLayout)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                rowsSection
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                IndicatorHero(indicator: indicator)
+                chartSection(usesSplitLayout: usesSplitLayout)
+                rowsSection
+            }
+        }
+    }
+
+    private func chartSection(usesSplitLayout: Bool) -> some View {
+        AnalyticsChart(indicator: indicator, selectedRowID: $selectedRowID)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(usesSplitLayout ? 1.15 : 1.0, contentMode: .fit)
     }
 
     private var rowsSection: some View {
