@@ -137,10 +137,6 @@ struct IndicatorCard: View {
                     .foregroundStyle(.primary)
             }
 
-            Text(indicator.source ?? "Источник не указан")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 176, alignment: .leading)
@@ -196,17 +192,6 @@ struct IndicatorHero: View {
                     .minimumScaleFactor(0.75)
             }
 
-            if let source = indicator.source {
-                HStack(spacing: 8) {
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .foregroundStyle(indicator.accent.primary)
-
-                    Text(source)
-                        .lineLimit(2)
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)

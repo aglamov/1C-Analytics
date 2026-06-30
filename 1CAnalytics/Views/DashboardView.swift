@@ -165,13 +165,6 @@ private struct IndicatorDashboardCard: View {
                 Spacer(minLength: 8)
             }
 
-            if let source = indicator.source {
-                Text(source)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 

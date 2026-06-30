@@ -30,21 +30,15 @@ struct AnalyticsChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if showsTitle {
+            if showsTitle, let selectedRow {
                 HStack {
-                    Text(indicator.chartType.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
                     Spacer()
 
-                    if let selectedRow {
-                        Text("\(selectedRow.label): \(selectedRow.value.formatted(.number.precision(.fractionLength(0))))")
-                            .font(.caption.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(indicator.accent.primary)
-                            .lineLimit(1)
-                            .transition(.opacity.combined(with: .move(edge: .trailing)))
-                    }
+                    Text("\(selectedRow.label): \(selectedRow.value.formatted(.number.precision(.fractionLength(0))))")
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(indicator.accent.primary)
+                        .lineLimit(1)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
             }
 
