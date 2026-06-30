@@ -18,7 +18,7 @@ struct IndicatorDetailView: View {
                     .padding(.vertical, verticalPadding)
             } else {
                 ScrollView {
-                    compactDetailContent
+                    compactDetailContent(availableSize: proxy.size)
                         .padding(.horizontal, horizontalPadding)
                         .padding(.vertical, verticalPadding)
                 }
@@ -52,10 +52,10 @@ struct IndicatorDetailView: View {
         }
     }
 
-    private var compactDetailContent: some View {
+    private func compactDetailContent(availableSize: CGSize) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             IndicatorHero(indicator: indicator)
-            chartSection(fillsAvailableHeight: false)
+            chartSection(fillsAvailableHeight: false, aspectRatio: compactChartAspectRatio(for: availableSize))
             rowsSection
         }
     }
@@ -72,8 +72,16 @@ struct IndicatorDetailView: View {
         return max(320, remainingHeight * 0.8)
     }
 
+    private func compactChartAspectRatio(for availableSize: CGSize) -> CGFloat {
+        guard horizontalSizeClass == .regular, availableSize.height > availableSize.width else {
+            return 1.0
+        }
+
+        return 1.28
+    }
+
     @ViewBuilder
-    private func chartSection(fillsAvailableHeight: Bool) -> some View {
+    private func chartSection(fillsAvailableHeight: Bool, aspectRatio: CGFloat = 1.0) -> some View {
         let chart = AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
             .frame(maxWidth: .infinity)
 
@@ -82,7 +90,7 @@ struct IndicatorDetailView: View {
                 .frame(maxHeight: .infinity)
         } else {
             chart
-                .aspectRatio(1.0, contentMode: .fit)
+                .aspectRatio(aspectRatio, contentMode: .fit)
         }
     }
 
