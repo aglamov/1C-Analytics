@@ -3,12 +3,16 @@ import SwiftUI
 
 struct AnalyticsChart: View {
     let indicator: Indicator
+    var showsTitle = true
+    var usesCardBackground = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(indicator.chartType.title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            if showsTitle {
+                Text(indicator.chartType.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
 
             switch indicator.chartType {
             case .bar:
@@ -21,8 +25,7 @@ struct AnalyticsChart: View {
                 donut
             }
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        .modifier(ChartChromeModifier(isEnabled: usesCardBackground))
     }
 
     private var verticalBars: some View {
@@ -65,6 +68,21 @@ struct AnalyticsChart: View {
             )
             .cornerRadius(5)
             .foregroundStyle(by: .value("Группа", row.label))
+        }
+    }
+}
+
+private struct ChartChromeModifier: ViewModifier {
+    let isEnabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .padding(16)
+                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+        } else {
+            content
         }
     }
 }
