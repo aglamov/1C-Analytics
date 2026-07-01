@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @StateObject var viewModel: DashboardViewModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.corporate.rawValue
 
     var body: some View {
         NavigationStack {
@@ -16,6 +17,7 @@ struct DashboardView: View {
                     }
                 }
         }
+        .environment(\.chartPaletteScheme, chartPaletteScheme)
         .task {
             if case .idle = viewModel.state {
                 await viewModel.load()
@@ -33,23 +35,31 @@ struct DashboardView: View {
             ContentUnavailableView("Не удалось загрузить данные", systemImage: "wifi.exclamationmark", description: Text(message))
         case let .loaded(dashboard):
             ScrollView {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(dashboard.indicators) { indicator in
-                        IndicatorDashboardCard(indicator: indicator)
-                            .overlay(alignment: .topTrailing) {
-                                NavigationLink {
-                                    IndicatorDetailView(indicator: indicator)
-                                } label: {
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(indicator.accent.primary)
-                                        .frame(width: 30, height: 30)
-                                        .background(Color(.systemBackground).opacity(0.88), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 16) {
+                    ChartPalettePicker(selection: chartPaletteBinding)
+
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                        ForEach(dashboard.indicators) { indicator in
+                            IndicatorDashboardCard(indicator: indicator)
+                                .overlay(alignment: .topTrailing) {
+                                    NavigationLink {
+                                        IndicatorDetailView(indicator: indicator)
+                                    } label: {
+                                        Image(systemName: "arrow.up.right")
+                                            .font(.caption.weight(.bold))
+                                            .foregroundStyle(indicator.accent.primary)
+                                            .frame(width: 30, height: 30)
+                                            .background(Color(.systemBackground).opacity(0.94), in: RoundedRectangle(cornerRadius: 8))
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .strokeBorder(Color.secondary.opacity(0.12), lineWidth: 1)
+                                            }
+                                        }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Открыть детализацию")
+                                    .padding(14)
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Открыть детализацию")
-                                .padding(14)
-                            }
+                        }
                     }
                 }
                 .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
@@ -73,6 +83,34 @@ struct DashboardView: View {
                 GridItem(.flexible(), spacing: 16, alignment: .top)
             ]
         }
+    }
+
+    private var chartPaletteScheme: ChartPaletteScheme {
+        ChartPaletteScheme(rawValue: chartPaletteSchemeRawValue) ?? .corporate
+    }
+
+    private var chartPaletteBinding: Binding<ChartPaletteScheme> {
+        Binding {
+            chartPaletteScheme
+        } set: { newValue in
+            chartPaletteSchemeRawValue = newValue.rawValue
+        }
+    }
+}
+
+private struct ChartPalettePicker: View {
+    @Binding var selection: ChartPaletteScheme
+
+    var body: some View {
+        Picker("Цвета графиков", selection: $selection) {
+            ForEach(ChartPaletteScheme.allCases) { scheme in
+                Text(scheme.title)
+                    .tag(scheme)
+                    .accessibilityLabel(scheme.accessibilityTitle)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Цветовая схема графиков")
     }
 }
 
@@ -121,7 +159,7 @@ private struct IndicatorDashboardCard: View {
 
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text(valueText)
-                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .font(.system(.title, design: .default).weight(.semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .minimumScaleFactor(0.7)

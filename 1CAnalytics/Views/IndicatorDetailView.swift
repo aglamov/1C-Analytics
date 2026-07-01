@@ -110,7 +110,7 @@ struct IndicatorDetailView: View {
 
                 Text(totalText)
                     .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(indicator.accent.primary)
+                    .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 0) {
@@ -131,13 +131,17 @@ struct IndicatorDetailView: View {
                 }
             }
             .background(rowsBackgroundColor, in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+            }
         }
         .padding(16)
-        .premiumPanel(accent: indicator.accent)
+        .premiumPanel()
     }
 
     private var rowsBackgroundColor: Color {
-        colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.48) : .white.opacity(0.32)
+        colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.44) : Color(.systemBackground).opacity(0.56)
     }
 
     private var rankedGroups: [IndicatorRowGroup] {
@@ -198,6 +202,7 @@ private struct DetailGroupRowView: View {
     let selectedRowID: IndicatorRow.ID?
     let onSelect: (IndicatorRow.ID) -> Void
     @State private var hasAppeared = false
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -210,7 +215,7 @@ private struct DetailGroupRowView: View {
 
                         Text(group.label)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(isSelected ? groupColor : .primary)
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
                     }
 
@@ -227,7 +232,7 @@ private struct DetailGroupRowView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(group.totalValue.formatted(.number.precision(.fractionLength(0))))
                         .font(.body.monospacedDigit().weight(.bold))
-                        .foregroundStyle(isSelected ? groupColor : .primary)
+                        .foregroundStyle(.primary)
                         .contentTransition(.numericText())
 
                     Text(shareText)
@@ -263,10 +268,10 @@ private struct DetailGroupRowView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
-        .background(isSelected ? groupColor.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 8))
+        .background(isSelected ? groupColor.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isSelected ? groupColor.opacity(0.32) : .clear, lineWidth: 1)
+                .strokeBorder(isSelected ? groupColor.opacity(0.24) : .clear, lineWidth: 1)
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isSelected)
         .onAppear {
@@ -285,7 +290,7 @@ private struct DetailGroupRowView: View {
     }
 
     private var groupColor: Color {
-        indicator.chartColor(forGroupLabel: group.label)
+        indicator.chartColor(forGroupLabel: group.label, scheme: chartPaletteScheme)
     }
 
     private var progress: Double {
@@ -325,7 +330,7 @@ private struct DetailGroupRowView: View {
 
         return ZStack {
             Rectangle()
-                .fill(segmentColor(for: row).opacity(isSegmentSelected ? 1 : 0.86))
+                .fill(segmentColor(for: row).opacity(isSegmentSelected ? 1 : 0.78))
 
             if group.rows.count > 1, showsInlineLabel {
                 HStack(spacing: 4) {
@@ -352,6 +357,6 @@ private struct DetailGroupRowView: View {
     }
 
     private func segmentColor(for row: IndicatorRow) -> Color {
-        indicator.chartColor(for: row)
+        indicator.chartColor(for: row, scheme: chartPaletteScheme)
     }
 }

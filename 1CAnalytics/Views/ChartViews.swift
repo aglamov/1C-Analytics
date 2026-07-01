@@ -11,6 +11,8 @@ struct AnalyticsChart: View {
     @State private var internalSelectedRowID: IndicatorRow.ID?
     @State private var hasAppeared = false
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     init(
         indicator: Indicator,
@@ -36,8 +38,18 @@ struct AnalyticsChart: View {
 
                     Text(selectedRowTitle(for: selectedRow))
                         .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(indicator.accent.primary)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .allowsTightening(true)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .background(selectedTitleBackground, in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .strokeBorder(Color.secondary.opacity(colorScheme == .dark ? 0.20 : 0.12), lineWidth: 1)
+                        }
                         .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
             }
@@ -83,16 +95,31 @@ struct AnalyticsChart: View {
             )
             .foregroundStyle(by: .value("Группа", row.label))
             .opacity(opacity(for: row))
-            .cornerRadius(6)
+            .cornerRadius(3)
             .annotation(position: .top, alignment: .center) {
                 if showsValueLabels {
                     valueLabel(for: row)
                 }
             }
         }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
         .chartYAxis {
-            AxisMarks(position: .leading)
+            AxisMarks(position: .leading) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                    .foregroundStyle(Color.secondary.opacity(0.16))
+                AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
+                    .foregroundStyle(Color.secondary.opacity(0.26))
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
+        }
+        .chartXAxis {
+            AxisMarks { _ in
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
         }
         .chartOverlay { proxy in
             chartTapOverlay(proxy: proxy, mode: .verticalBar)
@@ -107,16 +134,31 @@ struct AnalyticsChart: View {
             )
             .foregroundStyle(by: .value("Группа", row.label))
             .opacity(opacity(for: row))
-            .cornerRadius(6)
+            .cornerRadius(3)
             .annotation(position: .trailing, alignment: .center) {
                 if showsValueLabels {
                     valueLabel(for: row)
                 }
             }
         }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
         .chartXAxis {
-            AxisMarks(position: .bottom)
+            AxisMarks(position: .bottom) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                    .foregroundStyle(Color.secondary.opacity(0.16))
+                AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
+                    .foregroundStyle(Color.secondary.opacity(0.26))
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
+        }
+        .chartYAxis {
+            AxisMarks { _ in
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
         }
         .chartOverlay { proxy in
             chartTapOverlay(proxy: proxy, mode: .horizontalBar)
@@ -131,14 +173,32 @@ struct AnalyticsChart: View {
             )
             .foregroundStyle(by: .value("Серия", row.series ?? "Значение"))
             .opacity(opacity(for: row))
-            .cornerRadius(5)
+            .cornerRadius(3)
             .annotation(position: .overlay, alignment: .center) {
                 if showsValueLabels {
                     valueLabel(for: row)
                 }
             }
         }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+        .chartYAxis {
+            AxisMarks(position: .leading) { _ in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                    .foregroundStyle(Color.secondary.opacity(0.16))
+                AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
+                    .foregroundStyle(Color.secondary.opacity(0.26))
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
+        }
+        .chartXAxis {
+            AxisMarks { _ in
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
+        }
         .chartOverlay { proxy in
             chartTapOverlay(proxy: proxy, mode: .stackedBar)
         }
@@ -152,7 +212,7 @@ struct AnalyticsChart: View {
                 outerRadius: selectedRowID == row.id ? .ratio(1.0) : .ratio(0.92),
                 angularInset: 1.5
             )
-            .cornerRadius(5)
+            .cornerRadius(3)
             .foregroundStyle(by: .value("Группа", row.label))
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
@@ -161,7 +221,7 @@ struct AnalyticsChart: View {
                 }
             }
         }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: ChartPalette.colors)
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
         .chartOverlay { proxy in
             donutTapOverlay(proxy: proxy)
         }
@@ -175,7 +235,7 @@ struct AnalyticsChart: View {
                 } label: {
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(selectedRowID == row.id ? indicator.accent.primary : indicator.accent.secondary)
+                            .fill(chartColor(for: row).opacity(selectedRowID == row.id ? 1 : 0.72))
                             .frame(width: 7, height: 7)
 
                         Text(row.label)
@@ -188,9 +248,13 @@ struct AnalyticsChart: View {
                     .padding(.vertical, 7)
                     .frame(minHeight: 28)
                     .background(
-                        selectedRowID == row.id ? indicator.accent.primary.opacity(0.14) : Color(.tertiarySystemGroupedBackground),
+                        selectedRowID == row.id ? chartColor(for: row).opacity(0.12) : Color(.tertiarySystemGroupedBackground).opacity(0.72),
                         in: RoundedRectangle(cornerRadius: 8)
                     )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(selectedRowID == row.id ? chartColor(for: row).opacity(0.22) : .clear, lineWidth: 1)
+                    }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Выбрать \(row.label)")
@@ -210,6 +274,14 @@ struct AnalyticsChart: View {
         externalSelection?.wrappedValue ?? internalSelectedRowID
     }
 
+    private var chartColors: [Color] {
+        ChartPalette.colors(for: chartPaletteScheme)
+    }
+
+    private func chartColor(for row: IndicatorRow) -> Color {
+        indicator.chartColor(for: row, scheme: chartPaletteScheme)
+    }
+
     private func selectedRowTitle(for row: IndicatorRow) -> String {
         let value = row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0)))
         if let series = row.series {
@@ -217,6 +289,10 @@ struct AnalyticsChart: View {
         }
 
         return "\(row.label): \(value)"
+    }
+
+    private var selectedTitleBackground: Color {
+        colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.92) : Color(.systemBackground).opacity(0.86)
     }
 
     private func animatedValue(for row: IndicatorRow) -> Double {
@@ -235,7 +311,7 @@ struct AnalyticsChart: View {
         ChartValueLabel(
             value: row.value,
             isSelected: selectedRowID == row.id,
-            accent: indicator.accent
+            selectionColor: chartColor(for: row)
         )
     }
 
@@ -408,28 +484,30 @@ private enum ChartSelectionMode {
 private struct ChartValueLabel: View {
     let value: Double
     let isSelected: Bool
-    let accent: AppAccent
+    let selectionColor: Color
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Text(valueText)
             .font(.caption2.monospacedDigit().weight(.bold))
-            .foregroundStyle(isSelected ? accent.primary : .secondary)
+            .foregroundStyle(isSelected ? selectedForeground : Color.secondary)
             .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, isSelected ? 7 : 0)
-            .padding(.vertical, isSelected ? 4 : 0)
+            .minimumScaleFactor(0.55)
+            .allowsTightening(true)
+            .frame(maxWidth: isSelected ? 88 : 54)
+            .padding(.horizontal, isSelected ? 8 : 0)
+            .padding(.vertical, isSelected ? 5 : 0)
             .background(
-                isSelected ? Color(.systemBackground).opacity(0.92) : .clear,
+                isSelected ? selectedBackground : .clear,
                 in: Capsule()
             )
             .overlay {
                 if isSelected {
                     Capsule()
-                        .strokeBorder(accent.primary.opacity(0.22), lineWidth: 1)
+                        .strokeBorder(selectionColor.opacity(colorScheme == .dark ? 0.46 : 0.26), lineWidth: 1)
                 }
             }
-            .scaleEffect(isSelected ? 1.28 : 1)
-            .shadow(color: isSelected ? accent.primary.opacity(0.18) : .clear, radius: 8, x: 0, y: 4)
+            .shadow(color: isSelected ? .black.opacity(colorScheme == .dark ? 0.24 : 0.10) : .clear, radius: 6, x: 0, y: 3)
             .animation(.spring(response: 0.32, dampingFraction: 0.66), value: isSelected)
     }
 
@@ -439,6 +517,14 @@ private struct ChartValueLabel: View {
         }
 
         return value.formatted(.number.notation(.compactName).precision(.fractionLength(0)))
+    }
+
+    private var selectedBackground: Color {
+        colorScheme == .dark ? Color(.secondarySystemGroupedBackground).opacity(0.96) : Color(.systemBackground).opacity(0.94)
+    }
+
+    private var selectedForeground: Color {
+        colorScheme == .dark ? .white : selectionColor
     }
 }
 
@@ -450,7 +536,11 @@ private struct ChartChromeModifier: ViewModifier {
         if isEnabled {
             content
                 .padding(16)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                .background(Color(.secondarySystemGroupedBackground).opacity(0.82), in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+                }
         } else {
             content
         }
