@@ -14,6 +14,8 @@ https://id.rudn.ru/sign-in?client_id=ed75cd5e-b477-4f3e-84b6-074608eee315&respon
 POST https://sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/auth/code
 Content-Type: application/json
 Accept: application/json
+X-Auth-Key: <device-identifier>
+X-Auth-Timestamp: <unix-timestamp-seconds>
 
 {"code_analitic":"<authorization-code>"}
 ```
@@ -23,10 +25,13 @@ Backend возвращает `token` и `username` в корне JSON либо �
 Каждый последующий запрос к API получает заголовки из Keychain:
 
 ```http
-XAuthToken: <token>
+X-Auth-Token: <sha1-signature>
 Login: <username>
 X-Auth-Key: <device-identifier>
+X-Auth-Timestamp: <unix-timestamp-seconds>
 ```
+
+Подпись формируется отдельно для каждого запроса как lowercase hex: `SHA1(X-Auth-Key + X-Auth-Timestamp + token)`. Компоненты объединяются без разделителей в указанном порядке. Timestamp передаётся в Unix-секундах.
 
 ## Base URL
 
@@ -34,9 +39,9 @@ X-Auth-Key: <device-identifier>
 https://sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/analitycs/
 ```
 
-Endpoint подготовлен для мобильного клиента аналитики. Текущий API использует ключ как последний компонент пути. Ключ хранится локально в `Config/Secrets.xcconfig` через `ANALYTICS_PATH_TOKEN` и не коммитится в git.
+Endpoint подготовлен для мобильного клиента аналитики и используется без дополнительных компонентов пути.
 
-Запрос `/analitycs/` дополнительно требует заголовки `XAuthToken`, `Login` и `X-Auth-Key`. Последний содержит системный `identifierForVendor` устройства в формате UUID.
+Запрос `/analitycs/` дополнительно требует заголовки `X-Auth-Token`, `X-Auth-Timestamp`, `Login` и `X-Auth-Key`. Идентификатор содержит системный `identifierForVendor` устройства в формате UUID.
 
 ## Client Responsibility
 
@@ -140,7 +145,6 @@ enum ChartType: String, Decodable {
 
 ## Open Questions
 
-- Нужно ли будет заменить path-token на header-token.
 - Какие параметры фильтрации поддерживаются.
 - Будет ли API возвращать дату среза.
 - Какие ошибки возвращаются при пустых данных, отсутствии доступа и недоступности 1С.

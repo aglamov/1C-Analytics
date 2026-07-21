@@ -83,6 +83,7 @@ final class RUDNAuthenticationService {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(AuthorizationCodeRequest(codeAnalitic: code))
+        credentialsStore.addDeviceContext(to: &request)
 
         let (data, response) = try await urlSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {

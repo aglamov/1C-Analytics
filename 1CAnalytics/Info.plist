@@ -6,8 +6,6 @@
 	<string>$(ANALYTICS_API_KEY)</string>
 	<key>AnalyticsBaseURL</key>
 	<string>$(ANALYTICS_BASE_URL)</string>
-	<key>AnalyticsPathToken</key>
-	<string>$(ANALYTICS_PATH_TOKEN)</string>
 	<key>AuthenticationClientID</key>
 	<string>ed75cd5e-b477-4f3e-84b6-074608eee315</string>
 	<key>AuthenticationCallbackURL</key>

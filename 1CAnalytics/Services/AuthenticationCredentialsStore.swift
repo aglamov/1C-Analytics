@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Security
 import UIKit
@@ -82,9 +83,24 @@ final class AuthenticationCredentialsStore {
         guard let credentials = try load() else {
             throw AuthenticationError.missingCredentials
         }
-        request.setValue(credentials.token, forHTTPHeaderField: "XAuthToken")
+        let timestamp = addDeviceContext(to: &request)
+        let signature = sha1Hex(deviceIdentifier + timestamp + credentials.token)
+        request.setValue(signature, forHTTPHeaderField: "X-Auth-Token")
         request.setValue(credentials.username, forHTTPHeaderField: "Login")
+    }
+
+    @discardableResult
+    func addDeviceContext(to request: inout URLRequest) -> String {
+        let timestamp = String(Int(Date().timeIntervalSince1970))
         request.setValue(deviceIdentifier, forHTTPHeaderField: "X-Auth-Key")
+        request.setValue(timestamp, forHTTPHeaderField: "X-Auth-Timestamp")
+        return timestamp
+    }
+
+    private func sha1Hex(_ value: String) -> String {
+        Insecure.SHA1.hash(data: Data(value.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 
     private var baseQuery: [String: Any] {

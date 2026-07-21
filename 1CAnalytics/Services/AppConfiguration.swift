@@ -2,24 +2,14 @@ import Foundation
 
 struct AppConfiguration {
     let analyticsBaseURL: URL
-    let analyticsPathToken: String?
     let analyticsAPIKey: String?
     let authenticationURL: URL
     let authenticationClientID: String
     let authenticationCallbackURL: URL
     let authorizationCodeExchangeURL: URL
 
-    var analyticsEndpointURL: URL {
-        guard let analyticsPathToken else {
-            return analyticsBaseURL
-        }
-
-        return analyticsBaseURL.appending(path: analyticsPathToken)
-    }
-
     static func load(bundle: Bundle = .main) -> AppConfiguration {
         let baseURLString = bundle.object(forInfoDictionaryKey: "AnalyticsBaseURL") as? String
-        let pathToken = bundle.object(forInfoDictionaryKey: "AnalyticsPathToken") as? String
         let key = bundle.object(forInfoDictionaryKey: "AnalyticsAPIKey") as? String
         let authenticationURLString = bundle.object(forInfoDictionaryKey: "AuthenticationURL") as? String
         let authenticationClientID = bundle.object(forInfoDictionaryKey: "AuthenticationClientID") as? String
@@ -29,7 +19,6 @@ struct AppConfiguration {
 
         return AppConfiguration(
             analyticsBaseURL: baseURLString.flatMap(URL.init(string:)) ?? fallbackURL,
-            analyticsPathToken: pathToken?.isEmpty == false ? pathToken : nil,
             analyticsAPIKey: key?.isEmpty == false ? key : nil,
             authenticationURL: authenticationURLString.flatMap(URL.init(string:)) ?? URL(string: "https://id.rudn.ru/sign-in")!,
             authenticationClientID: authenticationClientID?.isEmpty == false

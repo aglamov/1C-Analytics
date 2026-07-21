@@ -70,11 +70,10 @@
 Приложение использует реальные данные подготовленного API. Для доступа нужно создать локальный файл `Config/Secrets.xcconfig` на основе `Config/Secrets.xcconfig.example` и переопределить настройки:
 
 ```xcconfig
-ANALYTICS_PATH_TOKEN = paste_path_key_here
 ANALYTICS_API_KEY = your_key_here
 ```
 
-Ссылка на сервис хранится в `Config/Debug.xcconfig` и `Config/Release.xcconfig`. Сейчас API использует ключ как последний компонент URL, поэтому секретная часть должна лежать в `ANALYTICS_PATH_TOKEN`:
+Ссылка на сервис хранится в `Config/Debug.xcconfig` и `Config/Release.xcconfig`:
 
 ```xcconfig
 ANALYTICS_BASE_URL = https:/$()/sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/analitycs/
@@ -102,6 +101,8 @@ https://sed.rudn.ru/DGU_DEMO/hs/DGU_APP_Mobile_Client/return_uri?code=<authoriza
 POST /DGU_HTTP/hs/DGU_APP_Mobile_Client/auth/code
 Content-Type: application/json
 Accept: application/json
+X-Auth-Key: <device-identifier>
+X-Auth-Timestamp: <unix-timestamp-seconds>
 
 {"code_analitic":"<authorization-code>"}
 ```
@@ -118,12 +119,14 @@ Backend возвращает данные сессии:
 `token` и `username` сохраняются в Keychain с режимом `WhenUnlockedThisDeviceOnly` и удаляются при выходе. Все последующие запросы к API, включая `/analitycs/`, содержат заголовки:
 
 ```http
-XAuthToken: <token>
+X-Auth-Token: <sha1-signature>
 Login: <username>
 X-Auth-Key: <device-identifier>
+X-Auth-Timestamp: <unix-timestamp-seconds>
 ```
 
 `X-Auth-Key` содержит `identifierForVendor` текущего устройства в формате UUID.
+`X-Auth-Token` содержит SHA1 в lowercase hex от конкатенации без разделителей: `X-Auth-Key + X-Auth-Timestamp + token`. Значение timestamp формируется в Unix-секундах и совпадает со значением заголовка `X-Auth-Timestamp`.
 
 Дашборд открывается только после ответа backend со статусом `2xx` и успешного сохранения непустых данных сессии. Authorization code не сохраняется на устройстве. В Debug-сборке полученный code выводится в Xcode Console с префиксом `[RUDN ID]`.
 

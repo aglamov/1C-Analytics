@@ -20,7 +20,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
     }
 
     func fetchDashboard() async throws -> Dashboard {
-        var request = URLRequest(url: configuration.analyticsEndpointURL)
+        var request = URLRequest(url: configuration.analyticsBaseURL)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
