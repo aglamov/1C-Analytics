@@ -3,8 +3,40 @@ import Foundation
 struct Dashboard: Identifiable, Codable, Equatable {
     let id: String
     let title: String
-    let updatedAt: Date?
+    let fetchedAt: Date?
     let indicators: [Indicator]
+
+    init(id: String, title: String, fetchedAt: Date?, indicators: [Indicator]) {
+        self.id = id
+        self.title = title
+        self.fetchedAt = fetchedAt
+        self.indicators = indicators
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case fetchedAt
+        case legacyUpdatedAt = "updatedAt"
+        case indicators
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        fetchedAt = try container.decodeIfPresent(Date.self, forKey: .fetchedAt)
+            ?? container.decodeIfPresent(Date.self, forKey: .legacyUpdatedAt)
+        indicators = try container.decode([Indicator].self, forKey: .indicators)
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(fetchedAt, forKey: .fetchedAt)
+        try container.encode(indicators, forKey: .indicators)
+    }
 }
 
 struct Indicator: Identifiable, Codable, Equatable {

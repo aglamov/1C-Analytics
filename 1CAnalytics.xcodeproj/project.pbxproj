@@ -22,7 +22,19 @@
 		A10000000000000000000019 /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* AuthenticationView.swift */; };
 		A10000000000000000000020 /* AuthenticationCredentialsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* AuthenticationCredentialsStore.swift */; };
 		A10000000000000000000021 /* DashboardCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* DashboardCache.swift */; };
+		A10000000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* Assets.xcassets */; };
+		B10000000000000000000001 /* ReleaseReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* ReleaseReadinessTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B01000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A80000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000000000000000000001;
+			remoteInfo = "1C Analytics";
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A20000000000000000000001 /* 1CAnalyticsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = 1CAnalyticsApp.swift; sourceTree = "<group>"; };
@@ -45,10 +57,20 @@
 		A20000000000000000000019 /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationView.swift; sourceTree = "<group>"; };
 		A20000000000000000000020 /* AuthenticationCredentialsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationCredentialsStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000021 /* DashboardCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCache.swift; sourceTree = "<group>"; };
+		A20000000000000000000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B20000000000000000000001 /* 1C AnalyticsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "1C AnalyticsTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20000000000000000000002 /* ReleaseReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseReadinessTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -62,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				A40000000000000000000002 /* 1CAnalytics */,
+				B40000000000000000000001 /* 1CAnalyticsTests */,
 				A40000000000000000000007 /* Config */,
 				A40000000000000000000008 /* Products */,
 			);
@@ -72,6 +95,7 @@
 			children = (
 				A20000000000000000000001 /* 1CAnalyticsApp.swift */,
 				A20000000000000000000012 /* Info.plist */,
+				A20000000000000000000022 /* Assets.xcassets */,
 				A40000000000000000000003 /* Models */,
 				A40000000000000000000004 /* Services */,
 				A40000000000000000000005 /* ViewModels */,
@@ -136,8 +160,17 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000016 /* 1C Analytics.app */,
+				B20000000000000000000001 /* 1C AnalyticsTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B40000000000000000000001 /* 1CAnalyticsTests */ = {
+			isa = PBXGroup;
+			children = (
+				B20000000000000000000002 /* ReleaseReadinessTests.swift */,
+			);
+			path = 1CAnalyticsTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -160,6 +193,24 @@
 			productReference = A20000000000000000000016 /* 1C Analytics.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B50000000000000000000001 /* 1C AnalyticsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B90000000000000000000002 /* Build configuration list for PBXNativeTarget "1C AnalyticsTests" */;
+			buildPhases = (
+				B60000000000000000000001 /* Sources */,
+				B30000000000000000000001 /* Frameworks */,
+				B70000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B80000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = "1C AnalyticsTests";
+			productName = "1C AnalyticsTests";
+			productReference = B20000000000000000000001 /* 1C AnalyticsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -172,6 +223,10 @@
 				TargetAttributes = {
 					A50000000000000000000001 = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					B50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = A50000000000000000000001;
 					};
 				};
 			};
@@ -189,12 +244,21 @@
 			projectRoot = "";
 			targets = (
 				A50000000000000000000001 /* 1C Analytics */,
+				B50000000000000000000001 /* 1C AnalyticsTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A70000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000022 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B70000000000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -226,7 +290,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B60000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* ReleaseReadinessTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B80000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A50000000000000000000001 /* 1C Analytics */;
+			targetProxy = B01000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A90000000000000000000003 /* Debug */ = {
@@ -348,6 +428,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A20000000000000000000013 /* Debug.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -376,6 +457,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = A20000000000000000000014 /* Release.xcconfig */;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -400,6 +482,42 @@
 			};
 			name = Release;
 		};
+		B90000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7U4GTZSW74;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aglamov.OneCAnalyticsTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/1C Analytics.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/1C Analytics";
+			};
+			name = Debug;
+		};
+		B90000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7U4GTZSW74;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.aglamov.OneCAnalyticsTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/1C Analytics.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/1C Analytics";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -417,6 +535,15 @@
 			buildConfigurations = (
 				A90000000000000000000005 /* Debug */,
 				A90000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B90000000000000000000002 /* Build configuration list for PBXNativeTarget "1C AnalyticsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B90000000000000000000003 /* Debug */,
+				B90000000000000000000004 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

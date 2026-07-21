@@ -9,7 +9,10 @@ struct OneCAnalyticsApp: App {
             Group {
                 if authenticationViewModel.state == .signedIn {
                     DashboardView(
-                        viewModel: DashboardViewModel(provider: AnalyticsProviderFactory.makeProvider()),
+                        viewModel: DashboardViewModel(
+                            provider: AnalyticsProviderFactory.makeProvider(),
+                            onAuthenticationRequired: authenticationViewModel.handleSessionExpired
+                        ),
                         onSignOut: authenticationViewModel.signOut
                     )
                 } else {

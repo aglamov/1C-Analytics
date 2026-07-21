@@ -44,4 +44,8 @@ final class AuthenticationViewModel: ObservableObject {
             state = .failed(error.localizedDescription)
         }
     }
+
+    func handleSessionExpired() {
+        signOut()
+    }
 }

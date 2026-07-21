@@ -23,7 +23,12 @@ enum AuthenticationCredentialsStoreError: LocalizedError {
 }
 
 @MainActor
-final class AuthenticationCredentialsStore {
+protocol AuthenticationRequestAuthorizing {
+    func addAuthentication(to request: inout URLRequest) throws
+}
+
+@MainActor
+final class AuthenticationCredentialsStore: AuthenticationRequestAuthorizing {
     static let shared = AuthenticationCredentialsStore()
 
     private let service = "com.aglamov.OneCAnalytics.authentication"

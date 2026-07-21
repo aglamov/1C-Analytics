@@ -84,7 +84,7 @@ struct DashboardView: View {
             }
             .background(AppBackground())
             .safeAreaInset(edge: .bottom) {
-                UpdatedAtBar(date: dashboard.updatedAt, isCached: viewModel.isShowingCachedData)
+                UpdatedAtBar(date: dashboard.fetchedAt, isCached: viewModel.isShowingCachedData)
             }
         }
     }

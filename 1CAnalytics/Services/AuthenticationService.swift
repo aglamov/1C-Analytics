@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import UIKit
 import WebKit
 
@@ -8,6 +9,7 @@ enum AuthenticationError: LocalizedError {
     case missingAuthorizationCode
     case missingCredentials
     case invalidBackendResponse
+    case invalidState
     case backendRejected(statusCode: Int, message: String?)
 
     var errorDescription: String? {
@@ -22,6 +24,8 @@ enum AuthenticationError: LocalizedError {
             "Данные сессии не найдены. Выполните вход повторно."
         case .invalidBackendResponse:
             "Сервер авторизации вернул некорректный ответ."
+        case .invalidState:
+            "Не удалось подтвердить безопасность ответа авторизации. Повторите вход."
         case let .backendRejected(statusCode, message):
             if let message, !message.isEmpty {
                 "Сервер не подтвердил авторизацию (код \(statusCode)): \(message)"
@@ -49,16 +53,14 @@ final class RUDNAuthenticationService {
     }
 
     func signIn() async throws {
-        let authenticationURL = try makeAuthenticationURL()
-        let code = try await requestAuthorizationCode(at: authenticationURL)
-#if DEBUG
-        print("[RUDN ID] Authorization code: \(code)")
-#endif
+        let state = try Self.makeOAuthState()
+        let authenticationURL = try makeAuthenticationURL(state: state)
+        let code = try await requestAuthorizationCode(at: authenticationURL, expectedState: state)
         let credentials = try await exchangeAuthorizationCode(code)
         try credentialsStore.save(credentials)
     }
 
-    private func requestAuthorizationCode(at authenticationURL: URL) async throws -> String {
+    private func requestAuthorizationCode(at authenticationURL: URL, expectedState: String) async throws -> String {
         guard let presenter = Self.topViewController() else {
             throw AuthenticationError.invalidConfiguration
         }
@@ -66,7 +68,8 @@ final class RUDNAuthenticationService {
         return try await withCheckedThrowingContinuation { continuation in
             let authorizationController = RUDNAuthorizationViewController(
                 authenticationURL: authenticationURL,
-                callbackURL: configuration.authenticationCallbackURL
+                callbackURL: configuration.authenticationCallbackURL,
+                expectedState: expectedState
             ) { result in
                 continuation.resume(with: result)
             }
@@ -111,23 +114,26 @@ final class RUDNAuthenticationService {
         }
     }
 
-    private func makeAuthenticationURL() throws -> URL {
-        guard var components = URLComponents(url: configuration.authenticationURL, resolvingAgainstBaseURL: false) else {
+    private func makeAuthenticationURL(state: String) throws -> URL {
+        try OAuthFlow.makeAuthorizationURL(
+            baseURL: configuration.authenticationURL,
+            clientID: configuration.authenticationClientID,
+            state: state
+        )
+    }
+
+    private static func makeOAuthState() throws -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = bytes.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, buffer.count, buffer.baseAddress!)
+        }
+        guard status == errSecSuccess else {
             throw AuthenticationError.invalidConfiguration
         }
-
-        var queryItems = components.queryItems ?? []
-        queryItems.removeAll { ["client_id", "response_type", "redirect_uri", "state"].contains($0.name) }
-        queryItems.append(contentsOf: [
-            URLQueryItem(name: "client_id", value: configuration.authenticationClientID),
-            URLQueryItem(name: "response_type", value: "code")
-        ])
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
-            throw AuthenticationError.invalidConfiguration
-        }
-        return url
+        return Data(bytes).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private static func topViewController() -> UIViewController? {
@@ -151,6 +157,39 @@ final class RUDNAuthenticationService {
         }
 
         return String(message.prefix(300))
+    }
+}
+
+enum OAuthFlow {
+    static func makeAuthorizationURL(baseURL: URL, clientID: String, state: String) throws -> URL {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AuthenticationError.invalidConfiguration
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { ["client_id", "response_type", "redirect_uri", "state"].contains($0.name) }
+        queryItems.append(contentsOf: [
+            URLQueryItem(name: "client_id", value: clientID),
+            URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "state", value: state)
+        ])
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw AuthenticationError.invalidConfiguration
+        }
+        return url
+    }
+
+    static func authorizationCode(from url: URL, expectedState: String) throws -> String {
+        let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        guard queryItems?.first(where: { $0.name == "state" })?.value == expectedState else {
+            throw AuthenticationError.invalidState
+        }
+        guard let code = queryItems?.first(where: { $0.name == "code" })?.value, !code.isEmpty else {
+            throw AuthenticationError.missingAuthorizationCode
+        }
+        return code
     }
 }
 
@@ -182,6 +221,7 @@ private struct BackendAuthenticationEnvelope: Decodable {
 private final class RUDNAuthorizationViewController: UIViewController, WKNavigationDelegate {
     private let authenticationURL: URL
     private let callbackURL: URL
+    private let expectedState: String
     private let completion: (Result<String, Error>) -> Void
     private var didFinish = false
     private var webView: WKWebView!
@@ -189,10 +229,12 @@ private final class RUDNAuthorizationViewController: UIViewController, WKNavigat
     init(
         authenticationURL: URL,
         callbackURL: URL,
+        expectedState: String,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         self.authenticationURL = authenticationURL
         self.callbackURL = callbackURL
+        self.expectedState = expectedState
         self.completion = completion
         super.init(nibName: nil, bundle: nil)
     }
@@ -235,15 +277,10 @@ private final class RUDNAuthorizationViewController: UIViewController, WKNavigat
 
         decisionHandler(.cancel)
 
-        let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first { $0.name == "code" }?
-            .value
-
-        if let code, !code.isEmpty {
-            finish(with: .success(code))
-        } else {
-            finish(with: .failure(AuthenticationError.missingAuthorizationCode))
+        do {
+            finish(with: .success(try OAuthFlow.authorizationCode(from: url, expectedState: expectedState)))
+        } catch {
+            finish(with: .failure(error))
         }
     }
 

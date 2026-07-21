@@ -16,13 +16,16 @@ final class DashboardViewModel: ObservableObject {
 
     private let provider: any AnalyticsProvider
     private let cache: any DashboardCaching
+    private let onAuthenticationRequired: () -> Void
 
     init(
         provider: any AnalyticsProvider,
-        cache: any DashboardCaching = DashboardCacheFactory.makeCache()
+        cache: any DashboardCaching = DashboardCacheFactory.makeCache(),
+        onAuthenticationRequired: @escaping () -> Void = {}
     ) {
         self.provider = provider
         self.cache = cache
+        self.onAuthenticationRequired = onAuthenticationRequired
     }
 
     var dashboard: Dashboard? {
@@ -55,6 +58,9 @@ final class DashboardViewModel: ObservableObject {
             let dashboard = try await provider.fetchDashboard()
             try? cache.save(dashboard)
             show(dashboard, isCached: false)
+        } catch AnalyticsError.authenticationRequired {
+            state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
+            onAuthenticationRequired()
         } catch {
             if cachedDashboard == nil {
                 state = .failed(error.localizedDescription)
@@ -69,6 +75,9 @@ final class DashboardViewModel: ObservableObject {
             let dashboard = try await provider.fetchDashboard()
             try? cache.save(dashboard)
             show(dashboard, isCached: false)
+        } catch AnalyticsError.authenticationRequired {
+            state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
+            onAuthenticationRequired()
         } catch {
             if dashboard != nil {
                 refreshErrorMessage = error.localizedDescription

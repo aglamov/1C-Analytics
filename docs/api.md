@@ -5,10 +5,10 @@
 Приложение открывает страницу входа без переопределения зарегистрированного redirect:
 
 ```text
-https://id.rudn.ru/sign-in?client_id=ed75cd5e-b477-4f3e-84b6-074608eee315&response_type=code
+https://id.rudn.ru/sign-in?client_id=ed75cd5e-b477-4f3e-84b6-074608eee315&response_type=code&state=<random-state>
 ```
 
-После успешного входа PASSPORT.RUDN направляет браузер на зарегистрированный URL `https://sed.rudn.ru/DGU_DEMO/hs/DGU_APP_Mobile_Client/return_uri?code=...`. Встроенное окно перехватывает этот URL до загрузки `return_uri`, извлекает `code`, отменяет навигацию и закрывается. Затем выполняется:
+После успешного входа PASSPORT.RUDN направляет браузер на зарегистрированный URL `https://sed.rudn.ru/DGU_DEMO/hs/DGU_APP_Mobile_Client/return_uri?code=...&state=...`. Встроенное окно перехватывает этот URL до загрузки `return_uri`, проверяет одноразовый `state`, извлекает `code`, отменяет навигацию и закрывается. Callback без ожидаемого `state` отклоняется. Затем выполняется:
 
 ```http
 POST https://sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/auth/code
@@ -109,7 +109,7 @@ API или модель показателя должны указывать т�
 struct Dashboard: Identifiable, Decodable {
     let id: String
     let title: String
-    let updatedAt: Date?
+    let fetchedAt: Date?
     let indicators: [Indicator]
 }
 
@@ -142,6 +142,8 @@ enum ChartType: String, Decodable {
 Для составных показателей API может возвращать список `subgroup`. Каждая запись
 `subgroup` становится отдельной серией в `IndicatorRow.series`, а `group`
 остаётся общей категорией для stacking.
+
+`fetchedAt` — локальное время успешного получения ответа, а не дата среза данных в 1С. Пока API не возвращает дату среза, интерфейс подписывает это значение как «Получено».
 
 ## Open Questions
 

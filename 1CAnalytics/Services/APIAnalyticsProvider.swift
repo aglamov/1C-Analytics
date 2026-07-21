@@ -4,13 +4,13 @@ import Foundation
 final class APIAnalyticsProvider: AnalyticsProvider {
     private let configuration: AppConfiguration
     private let urlSession: URLSession
-    private let credentialsStore: AuthenticationCredentialsStore
+    private let credentialsStore: any AuthenticationRequestAuthorizing
     private let decoder: JSONDecoder
 
     init(
         configuration: AppConfiguration = .load(),
         urlSession: URLSession = .shared,
-        credentialsStore: AuthenticationCredentialsStore = .shared
+        credentialsStore: any AuthenticationRequestAuthorizing = AuthenticationCredentialsStore.shared
     ) {
         self.configuration = configuration
         self.urlSession = urlSession
@@ -32,17 +32,29 @@ final class APIAnalyticsProvider: AnalyticsProvider {
 
         let (data, response) = try await urlSession.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              200..<300 ~= httpResponse.statusCode else {
-            throw AnalyticsError.invalidResponse
-        }
+        try Self.validate(response)
 
         let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
         return try analyticsResponse.toDashboard()
     }
+
+    static func validate(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AnalyticsError.invalidResponse
+        }
+
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return
+        case 401, 403:
+            throw AnalyticsError.authenticationRequired
+        default:
+            throw AnalyticsError.httpFailure(statusCode: httpResponse.statusCode)
+        }
+    }
 }
 
-private struct AnalyticsAPIResponse: Decodable {
+struct AnalyticsAPIResponse: Decodable {
     let sections: [AnalyticsAPISection]
 
     func toDashboard() throws -> Dashboard {
@@ -53,7 +65,7 @@ private struct AnalyticsAPIResponse: Decodable {
         return Dashboard(
             id: section.name.stableID,
             title: section.name,
-            updatedAt: Date(),
+            fetchedAt: Date(),
             indicators: section.values.enumerated().map { index, indicator in
                 indicator.toIndicator(index: index)
             }
@@ -61,12 +73,12 @@ private struct AnalyticsAPIResponse: Decodable {
     }
 }
 
-private struct AnalyticsAPISection: Decodable {
+struct AnalyticsAPISection: Decodable {
     let name: String
     let values: [AnalyticsAPIIndicator]
 }
 
-private struct AnalyticsAPIIndicator: Decodable {
+struct AnalyticsAPIIndicator: Decodable {
     let name: String
     let values: [AnalyticsAPIValue]
     let type: ChartType
@@ -92,7 +104,7 @@ private struct AnalyticsAPIIndicator: Decodable {
     }
 }
 
-private struct AnalyticsAPIValue: Decodable {
+struct AnalyticsAPIValue: Decodable {
     let group: String
     let value: Double?
     let subgroup: [AnalyticsAPISubgroup]?
@@ -116,7 +128,7 @@ private struct AnalyticsAPIValue: Decodable {
     }
 }
 
-private struct AnalyticsAPISubgroup: Decodable {
+struct AnalyticsAPISubgroup: Decodable {
     let name: String
     let value: Double
 }

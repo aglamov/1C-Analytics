@@ -387,8 +387,8 @@ struct UpdatedAtBar: View {
             return isCached ? "Сохранённые данные · срез не указан" : "Срез не указан"
         }
 
-        let updatedAt = "Обновлено \(date.formatted(date: .abbreviated, time: .shortened))"
-        return isCached ? "Сохранённые данные · \(updatedAt)" : updatedAt
+        let fetchedAt = "Получено \(date.formatted(date: .abbreviated, time: .shortened))"
+        return isCached ? "Сохранённые данные · \(fetchedAt)" : fetchedAt
     }
 }
 
