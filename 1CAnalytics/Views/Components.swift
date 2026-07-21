@@ -55,7 +55,6 @@ enum AppAccent {
 
 enum ChartPaletteScheme: String, CaseIterable, Identifiable {
     case playful
-    case stylish
     case corporate
 
     var id: String {
@@ -66,8 +65,6 @@ enum ChartPaletteScheme: String, CaseIterable, Identifiable {
         switch self {
         case .playful:
             "Веселая"
-        case .stylish:
-            "Стильная"
         case .corporate:
             "Корп."
         }
@@ -77,8 +74,6 @@ enum ChartPaletteScheme: String, CaseIterable, Identifiable {
         switch self {
         case .playful:
             "Веселая цветовая схема"
-        case .stylish:
-            "Стильная цветовая схема"
         case .corporate:
             "Корпоративная цветовая схема"
         }
@@ -109,17 +104,6 @@ enum ChartPalette {
                 Color(red: 0.13, green: 0.75, blue: 0.92),
                 Color(red: 0.69, green: 0.78, blue: 0.14),
                 Color(red: 1.00, green: 0.78, blue: 0.20)
-            ]
-        case .stylish:
-            [
-                Color(red: 0.18, green: 0.27, blue: 0.38),
-                Color(red: 0.53, green: 0.43, blue: 0.32),
-                Color(red: 0.31, green: 0.44, blue: 0.42),
-                Color(red: 0.45, green: 0.37, blue: 0.48),
-                Color(red: 0.66, green: 0.47, blue: 0.37),
-                Color(red: 0.36, green: 0.45, blue: 0.57),
-                Color(red: 0.48, green: 0.52, blue: 0.42),
-                Color(red: 0.57, green: 0.44, blue: 0.45)
             ]
         case .corporate:
             [
