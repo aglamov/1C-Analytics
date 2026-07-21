@@ -37,13 +37,13 @@ struct AnalyticsChart: View {
                     Spacer()
 
                     Text(selectedRowTitle(for: selectedRow))
-                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .font(.subheadline.monospacedDigit().weight(.bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.72)
+                        .minimumScaleFactor(0.65)
                         .allowsTightening(true)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .background(selectedTitleBackground, in: Capsule())
                         .overlay {
@@ -337,7 +337,7 @@ struct AnalyticsChart: View {
                 .fill(.clear)
                 .contentShape(Rectangle())
                 .gesture(
-                    DragGesture(minimumDistance: 0)
+                    SpatialTapGesture()
                         .onEnded { value in
                             guard let plotFrame = proxy.plotFrame else {
                                 return
@@ -365,7 +365,7 @@ struct AnalyticsChart: View {
                 .fill(.clear)
                 .contentShape(Rectangle())
                 .gesture(
-                    DragGesture(minimumDistance: 0)
+                    SpatialTapGesture()
                         .onEnded { value in
                             guard let plotFrame = proxy.plotFrame else {
                                 clearSelection()
@@ -487,28 +487,31 @@ private struct ChartValueLabel: View {
     let selectionColor: Color
     @Environment(\.colorScheme) private var colorScheme
 
+    @ViewBuilder
     var body: some View {
-        Text(valueText)
-            .font(.caption2.monospacedDigit().weight(.bold))
-            .foregroundStyle(isSelected ? selectedForeground : Color.secondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.55)
-            .allowsTightening(true)
-            .frame(maxWidth: isSelected ? 88 : 54)
-            .padding(.horizontal, isSelected ? 8 : 0)
-            .padding(.vertical, isSelected ? 5 : 0)
-            .background(
-                isSelected ? selectedBackground : .clear,
-                in: Capsule()
-            )
-            .overlay {
-                if isSelected {
+        if isSelected {
+            Text(valueText)
+                .font(.title3.monospacedDigit().weight(.bold))
+                .foregroundStyle(selectedForeground)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: true)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(selectedBackground, in: Capsule())
+                .overlay {
                     Capsule()
                         .strokeBorder(selectionColor.opacity(colorScheme == .dark ? 0.46 : 0.26), lineWidth: 1)
                 }
-            }
-            .shadow(color: isSelected ? .black.opacity(colorScheme == .dark ? 0.24 : 0.10) : .clear, radius: 6, x: 0, y: 3)
-            .animation(.spring(response: 0.32, dampingFraction: 0.66), value: isSelected)
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 6, x: 0, y: 3)
+        } else {
+            Text(valueText)
+                .font(.callout.monospacedDigit().weight(.bold))
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
+                .frame(maxWidth: 72)
+        }
     }
 
     private var valueText: String {
