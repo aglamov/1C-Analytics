@@ -82,6 +82,51 @@ ANALYTICS_BASE_URL = https:/$()/sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/a
 
 API key не коммитится в git: файл `Config/Secrets.xcconfig` добавлен в `.gitignore`.
 
+## Авторизация RUDN ID
+
+Перед открытием дашборда приложение открывает страницу RUDN ID во встроенном окне:
+
+```text
+https://id.rudn.ru/sign-in?client_id=ed75cd5e-b477-4f3e-84b6-074608eee315&response_type=code
+```
+
+После успешного входа PASSPORT.RUDN начинает переход на зарегистрированный callback:
+
+```text
+https://sed.rudn.ru/DGU_DEMO/hs/DGU_APP_Mobile_Client/return_uri?code=<authorization-code>
+```
+
+Приложение перехватывает эту навигацию до выполнения GET, извлекает параметр `code`, закрывает окно входа и отправляет code на backend:
+
+```http
+POST /DGU_HTTP/hs/DGU_APP_Mobile_Client/auth/code
+Content-Type: application/json
+Accept: application/json
+
+{"code_analitic":"<authorization-code>"}
+```
+
+Backend возвращает данные сессии:
+
+```json
+{
+  "token": "<token>",
+  "username": "<username>"
+}
+```
+
+`token` и `username` сохраняются в Keychain с режимом `WhenUnlockedThisDeviceOnly` и удаляются при выходе. Все последующие запросы к API, включая `/analitycs/`, содержат заголовки:
+
+```http
+XAuthToken: <token>
+Login: <username>
+X-Auth-Key: <device-identifier>
+```
+
+`X-Auth-Key` содержит `identifierForVendor` текущего устройства в формате UUID.
+
+Дашборд открывается только после ответа backend со статусом `2xx` и успешного сохранения непустых данных сессии. Authorization code не сохраняется на устройстве. В Debug-сборке полученный code выводится в Xcode Console с префиксом `[RUDN ID]`.
+
 ## Документация
 
 Подробное продуктовое описание и зафиксированный состав первого дашборда лежат в [docs/product-brief.md](docs/product-brief.md).

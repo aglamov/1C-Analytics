@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @StateObject var viewModel: DashboardViewModel
+    let onSignOut: () -> Void
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.corporate.rawValue
 
@@ -10,6 +11,10 @@ struct DashboardView: View {
             content
                 .navigationTitle(viewModel.dashboard?.title ?? "Аналитика")
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Выйти", systemImage: "rectangle.portrait.and.arrow.right", action: onSignOut)
+                    }
+
                     ToolbarItem(placement: .topBarTrailing) {
                         RefreshButton {
                             await viewModel.refresh()

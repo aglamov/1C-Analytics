@@ -2,9 +2,20 @@ import SwiftUI
 
 @main
 struct OneCAnalyticsApp: App {
+    @StateObject private var authenticationViewModel = AuthenticationViewModel()
+
     var body: some Scene {
         WindowGroup {
-            DashboardView(viewModel: DashboardViewModel(provider: AnalyticsProviderFactory.makeProvider()))
+            Group {
+                if authenticationViewModel.state == .signedIn {
+                    DashboardView(
+                        viewModel: DashboardViewModel(provider: AnalyticsProviderFactory.makeProvider()),
+                        onSignOut: authenticationViewModel.signOut
+                    )
+                } else {
+                    AuthenticationView(viewModel: authenticationViewModel)
+                }
+            }
         }
     }
 }

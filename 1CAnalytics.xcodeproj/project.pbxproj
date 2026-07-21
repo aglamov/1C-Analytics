@@ -17,6 +17,10 @@
 		A10000000000000000000009 /* IndicatorDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* IndicatorDetailView.swift */; };
 		A10000000000000000000010 /* ChartViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* ChartViews.swift */; };
 		A10000000000000000000011 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* Components.swift */; };
+		A10000000000000000000017 /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* AuthenticationService.swift */; };
+		A10000000000000000000018 /* AuthenticationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* AuthenticationViewModel.swift */; };
+		A10000000000000000000019 /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* AuthenticationView.swift */; };
+		A10000000000000000000020 /* AuthenticationCredentialsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* AuthenticationCredentialsStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +39,10 @@
 		A20000000000000000000014 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		A20000000000000000000015 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 		A20000000000000000000016 /* 1C Analytics.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "1C Analytics.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000017 /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* AuthenticationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationViewModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationView.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* AuthenticationCredentialsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationCredentialsStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +89,8 @@
 		A40000000000000000000004 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000017 /* AuthenticationService.swift */,
+				A20000000000000000000020 /* AuthenticationCredentialsStore.swift */,
 				A20000000000000000000003 /* AppConfiguration.swift */,
 				A20000000000000000000004 /* AnalyticsProvider.swift */,
 				A20000000000000000000005 /* APIAnalyticsProvider.swift */,
@@ -91,6 +101,7 @@
 		A40000000000000000000005 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000018 /* AuthenticationViewModel.swift */,
 				A20000000000000000000007 /* DashboardViewModel.swift */,
 			);
 			path = ViewModels;
@@ -99,6 +110,7 @@
 		A40000000000000000000006 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000019 /* AuthenticationView.swift */,
 				A20000000000000000000008 /* DashboardView.swift */,
 				A20000000000000000000009 /* IndicatorDetailView.swift */,
 				A20000000000000000000010 /* ChartViews.swift */,
@@ -160,7 +172,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A90000000000000000000001 /* Build configuration list for PBXProject "1C Analytics" */;
+			buildConfigurationList = A90000000000000000000001 /* Build configuration list for PBXProject "1CAnalytics" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -203,6 +215,10 @@
 				A10000000000000000000009 /* IndicatorDetailView.swift in Sources */,
 				A10000000000000000000010 /* ChartViews.swift in Sources */,
 				A10000000000000000000011 /* Components.swift in Sources */,
+				A10000000000000000000017 /* AuthenticationService.swift in Sources */,
+				A10000000000000000000018 /* AuthenticationViewModel.swift in Sources */,
+				A10000000000000000000019 /* AuthenticationView.swift in Sources */,
+				A10000000000000000000020 /* AuthenticationCredentialsStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -332,7 +348,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 7U4GTZSW74;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = 1CAnalytics/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "1C Analytics";
@@ -360,7 +376,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 7U4GTZSW74;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = 1CAnalytics/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "1C Analytics";
@@ -383,7 +399,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A90000000000000000000001 /* Build configuration list for PBXProject "1C Analytics" */ = {
+		A90000000000000000000001 /* Build configuration list for PBXProject "1CAnalytics" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A90000000000000000000003 /* Debug */,

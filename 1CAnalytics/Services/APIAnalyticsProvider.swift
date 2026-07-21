@@ -1,16 +1,20 @@
 import Foundation
 
+@MainActor
 final class APIAnalyticsProvider: AnalyticsProvider {
     private let configuration: AppConfiguration
     private let urlSession: URLSession
+    private let credentialsStore: AuthenticationCredentialsStore
     private let decoder: JSONDecoder
 
     init(
         configuration: AppConfiguration = .load(),
-        urlSession: URLSession = .shared
+        urlSession: URLSession = .shared,
+        credentialsStore: AuthenticationCredentialsStore = .shared
     ) {
         self.configuration = configuration
         self.urlSession = urlSession
+        self.credentialsStore = credentialsStore
         self.decoder = JSONDecoder()
         self.decoder.dateDecodingStrategy = .iso8601
     }
@@ -23,6 +27,8 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         if let apiKey = configuration.analyticsAPIKey {
             request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         }
+
+        try credentialsStore.addAuthentication(to: &request)
 
         let (data, response) = try await urlSession.data(for: request)
 

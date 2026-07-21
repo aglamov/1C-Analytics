@@ -1,5 +1,33 @@
 # API Integration
 
+## Authorization
+
+Приложение открывает страницу входа без переопределения зарегистрированного redirect:
+
+```text
+https://id.rudn.ru/sign-in?client_id=ed75cd5e-b477-4f3e-84b6-074608eee315&response_type=code
+```
+
+После успешного входа PASSPORT.RUDN направляет браузер на зарегистрированный URL `https://sed.rudn.ru/DGU_DEMO/hs/DGU_APP_Mobile_Client/return_uri?code=...`. Встроенное окно перехватывает этот URL до загрузки `return_uri`, извлекает `code`, отменяет навигацию и закрывается. Затем выполняется:
+
+```http
+POST https://sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/auth/code
+Content-Type: application/json
+Accept: application/json
+
+{"code_analitic":"<authorization-code>"}
+```
+
+Backend возвращает `token` и `username` в корне JSON либо внутри объекта `data`. Только ответ со статусом `2xx`, содержащий оба непустых значения, завершает вход. Значения сохраняются в Keychain (`WhenUnlockedThisDeviceOnly`). Ответы других классов или некорректный JSON отображаются как ошибка авторизации и не дают открыть дашборд.
+
+Каждый последующий запрос к API получает заголовки из Keychain:
+
+```http
+XAuthToken: <token>
+Login: <username>
+X-Auth-Key: <device-identifier>
+```
+
 ## Base URL
 
 ```text
@@ -7,6 +35,8 @@ https://sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/analitycs/
 ```
 
 Endpoint подготовлен для мобильного клиента аналитики. Текущий API использует ключ как последний компонент пути. Ключ хранится локально в `Config/Secrets.xcconfig` через `ANALYTICS_PATH_TOKEN` и не коммитится в git.
+
+Запрос `/analitycs/` дополнительно требует заголовки `XAuthToken`, `Login` и `X-Auth-Key`. Последний содержит системный `identifierForVendor` устройства в формате UUID.
 
 ## Client Responsibility
 

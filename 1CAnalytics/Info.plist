@@ -8,6 +8,14 @@
 	<string>$(ANALYTICS_BASE_URL)</string>
 	<key>AnalyticsPathToken</key>
 	<string>$(ANALYTICS_PATH_TOKEN)</string>
+	<key>AuthenticationClientID</key>
+	<string>ed75cd5e-b477-4f3e-84b6-074608eee315</string>
+	<key>AuthenticationCallbackURL</key>
+	<string>https://sed.rudn.ru/DGU_DEMO/hs/DGU_APP_Mobile_Client/return_uri</string>
+	<key>AuthenticationURL</key>
+	<string>https://id.rudn.ru/sign-in</string>
+	<key>AuthorizationCodeExchangeURL</key>
+	<string>https://sed2.rudn.ru/DGU_HTTP/hs/DGU_APP_Mobile_Client/auth/code</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
