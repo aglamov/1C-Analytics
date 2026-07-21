@@ -21,6 +21,7 @@
 		A10000000000000000000018 /* AuthenticationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* AuthenticationViewModel.swift */; };
 		A10000000000000000000019 /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* AuthenticationView.swift */; };
 		A10000000000000000000020 /* AuthenticationCredentialsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* AuthenticationCredentialsStore.swift */; };
+		A10000000000000000000021 /* DashboardCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* DashboardCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +44,7 @@
 		A20000000000000000000018 /* AuthenticationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationViewModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000019 /* AuthenticationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationView.swift; sourceTree = "<group>"; };
 		A20000000000000000000020 /* AuthenticationCredentialsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationCredentialsStore.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* DashboardCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +96,7 @@
 				A20000000000000000000003 /* AppConfiguration.swift */,
 				A20000000000000000000004 /* AnalyticsProvider.swift */,
 				A20000000000000000000005 /* APIAnalyticsProvider.swift */,
+				A20000000000000000000021 /* DashboardCache.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -219,6 +222,7 @@
 				A10000000000000000000018 /* AuthenticationViewModel.swift in Sources */,
 				A10000000000000000000019 /* AuthenticationView.swift in Sources */,
 				A10000000000000000000020 /* AuthenticationCredentialsStore.swift in Sources */,
+				A10000000000000000000021 /* DashboardCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

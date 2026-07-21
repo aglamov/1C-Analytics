@@ -10,12 +10,19 @@ final class DashboardViewModel: ObservableObject {
     }
 
     @Published private(set) var state: LoadState = .idle
+    @Published private(set) var isShowingCachedData = false
+    @Published private(set) var refreshErrorMessage: String?
     @Published var selectedIndicatorID: Indicator.ID?
 
     private let provider: any AnalyticsProvider
+    private let cache: any DashboardCaching
 
-    init(provider: any AnalyticsProvider) {
+    init(
+        provider: any AnalyticsProvider,
+        cache: any DashboardCaching = DashboardCacheFactory.makeCache()
+    ) {
         self.provider = provider
+        self.cache = cache
     }
 
     var dashboard: Dashboard? {
@@ -35,18 +42,52 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func load() async {
-        state = .loading
+        refreshErrorMessage = nil
+        let cachedDashboard = try? cache.loadDashboard()
+
+        if let cachedDashboard {
+            show(cachedDashboard, isCached: true)
+        } else {
+            state = .loading
+        }
 
         do {
             let dashboard = try await provider.fetchDashboard()
-            state = .loaded(dashboard)
-            selectedIndicatorID = dashboard.indicators.first?.id
+            try? cache.save(dashboard)
+            show(dashboard, isCached: false)
         } catch {
-            state = .failed(error.localizedDescription)
+            if cachedDashboard == nil {
+                state = .failed(error.localizedDescription)
+            }
         }
     }
 
     func refresh() async {
-        await load()
+        refreshErrorMessage = nil
+
+        do {
+            let dashboard = try await provider.fetchDashboard()
+            try? cache.save(dashboard)
+            show(dashboard, isCached: false)
+        } catch {
+            if dashboard != nil {
+                refreshErrorMessage = error.localizedDescription
+            } else {
+                state = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func dismissRefreshError() {
+        refreshErrorMessage = nil
+    }
+
+    private func show(_ dashboard: Dashboard, isCached: Bool) {
+        state = .loaded(dashboard)
+        isShowingCachedData = isCached
+
+        if !dashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
+            selectedIndicatorID = dashboard.indicators.first?.id
+        }
     }
 }

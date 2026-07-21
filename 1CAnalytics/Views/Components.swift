@@ -367,10 +367,11 @@ struct IndicatorHero: View {
 
 struct UpdatedAtBar: View {
     let date: Date?
+    var isCached = false
 
     var body: some View {
         HStack {
-            Image(systemName: "clock")
+            Image(systemName: isCached ? "externaldrive.fill" : "clock")
             Text(dateText)
             Spacer()
         }
@@ -383,10 +384,11 @@ struct UpdatedAtBar: View {
 
     private var dateText: String {
         guard let date else {
-            return "Срез не указан"
+            return isCached ? "Сохранённые данные · срез не указан" : "Срез не указан"
         }
 
-        return "Обновлено \(date.formatted(date: .abbreviated, time: .shortened))"
+        let updatedAt = "Обновлено \(date.formatted(date: .abbreviated, time: .shortened))"
+        return isCached ? "Сохранённые данные · \(updatedAt)" : updatedAt
     }
 }
 

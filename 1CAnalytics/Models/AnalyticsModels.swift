@@ -1,13 +1,13 @@
 import Foundation
 
-struct Dashboard: Identifiable, Decodable, Equatable {
+struct Dashboard: Identifiable, Codable, Equatable {
     let id: String
     let title: String
     let updatedAt: Date?
     let indicators: [Indicator]
 }
 
-struct Indicator: Identifiable, Decodable, Equatable {
+struct Indicator: Identifiable, Codable, Equatable {
     let id: String
     let title: String
     let value: Decimal?
@@ -17,7 +17,7 @@ struct Indicator: Identifiable, Decodable, Equatable {
     let rows: [IndicatorRow]
 }
 
-struct IndicatorRow: Identifiable, Decodable, Equatable {
+struct IndicatorRow: Identifiable, Codable, Equatable {
     let id: String
     let label: String
     let value: Double
@@ -25,7 +25,7 @@ struct IndicatorRow: Identifiable, Decodable, Equatable {
     let sortOrder: Int?
 }
 
-enum ChartType: String, CaseIterable, Decodable {
+enum ChartType: String, CaseIterable, Codable {
     case bar = "BarMark"
     case horizontalBar = "BarMarkHorizon"
     case stackedBar = "BarMarkStacking"

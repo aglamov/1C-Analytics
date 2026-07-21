@@ -23,6 +23,18 @@ struct DashboardView: View {
                 }
         }
         .environment(\.chartPaletteScheme, chartPaletteScheme)
+        .alert(
+            "Не удалось обновить данные",
+            isPresented: refreshErrorBinding,
+            actions: {
+                Button("ОК", role: .cancel) {
+                    viewModel.dismissRefreshError()
+                }
+            },
+            message: {
+                Text(viewModel.refreshErrorMessage ?? "Проверьте подключение к интернету.")
+            }
+        )
         .task {
             if case .idle = viewModel.state {
                 await viewModel.load()
@@ -72,7 +84,7 @@ struct DashboardView: View {
             }
             .background(AppBackground())
             .safeAreaInset(edge: .bottom) {
-                UpdatedAtBar(date: dashboard.updatedAt)
+                UpdatedAtBar(date: dashboard.updatedAt, isCached: viewModel.isShowingCachedData)
             }
         }
     }
@@ -99,6 +111,16 @@ struct DashboardView: View {
             chartPaletteScheme
         } set: { newValue in
             chartPaletteSchemeRawValue = newValue.rawValue
+        }
+    }
+
+    private var refreshErrorBinding: Binding<Bool> {
+        Binding {
+            viewModel.refreshErrorMessage != nil
+        } set: { isPresented in
+            if !isPresented {
+                viewModel.dismissRefreshError()
+            }
         }
     }
 }
