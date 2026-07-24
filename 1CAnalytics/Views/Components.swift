@@ -129,30 +129,100 @@ enum ChartPalette {
     }
 }
 
+extension Color {
+    init?(apiHex value: String?) {
+        guard var value = value?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+              !value.isEmpty else {
+            return nil
+        }
+
+        if value.hasPrefix("#") {
+            value.removeFirst()
+        } else if value.hasPrefix("0x") {
+            value.removeFirst(2)
+        }
+
+        guard value.count == 6 || value.count == 8,
+              let hex = UInt64(value, radix: 16) else {
+            return nil
+        }
+
+        let red: Double
+        let green: Double
+        let blue: Double
+        let alpha: Double
+
+        if value.count == 8 {
+            red = Double((hex >> 24) & 0xff) / 255
+            green = Double((hex >> 16) & 0xff) / 255
+            blue = Double((hex >> 8) & 0xff) / 255
+            alpha = Double(hex & 0xff) / 255
+        } else {
+            red = Double((hex >> 16) & 0xff) / 255
+            green = Double((hex >> 8) & 0xff) / 255
+            blue = Double(hex & 0xff) / 255
+            alpha = 1
+        }
+
+        self.init(red: red, green: green, blue: blue, opacity: alpha)
+    }
+}
+
 extension Indicator {
     var chartColorDomain: [String] {
         switch chartType {
         case .stackedBar:
             orderedRows.uniqueValues { $0.series ?? "Значение" }
-        case .bar, .horizontalBar, .donut:
+        case .bar, .compactBar, .horizontalBar, .donut:
             orderedRows.uniqueValues(\.label)
+        case .oneValue, .linearProgress:
+            []
         }
     }
 
     func chartColor(for row: IndicatorRow, scheme: ChartPaletteScheme) -> Color {
+        if let apiColor = Color(apiHex: row.colorGraph ?? colorGraph) {
+            return apiColor
+        }
+
         let key: String
         switch chartType {
         case .stackedBar:
             key = row.series ?? "Значение"
-        case .bar, .horizontalBar, .donut:
+        case .bar, .compactBar, .horizontalBar, .donut:
             key = row.label
+        case .oneValue, .linearProgress:
+            return accent.primary
         }
 
         return ChartPalette.color(for: key, in: chartColorDomain, scheme: scheme, fallback: accent.primary)
     }
 
     func chartColor(forGroupLabel label: String, scheme: ChartPaletteScheme) -> Color {
-        ChartPalette.color(for: label, in: orderedRows.uniqueValues(\.label), scheme: scheme, fallback: accent.primary)
+        if let rowColor = orderedRows.first(where: { $0.label == label })?.colorGraph,
+           let apiColor = Color(apiHex: rowColor) {
+            return apiColor
+        }
+        if let apiColor = Color(apiHex: colorGraph) {
+            return apiColor
+        }
+
+        return ChartPalette.color(
+            for: label,
+            in: orderedRows.uniqueValues(\.label),
+            scheme: scheme,
+            fallback: accent.primary
+        )
+    }
+
+    var graphColor: Color {
+        Color(apiHex: colorGraph) ?? accent.primary
+    }
+
+    var valueColor: Color {
+        Color(apiHex: colorValue) ?? .primary
     }
 }
 
@@ -260,7 +330,7 @@ struct IndicatorCard: View {
                     .font(.title3)
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(indicator.accent.primary, in: RoundedRectangle(cornerRadius: 8))
+                    .background(indicator.graphColor, in: RoundedRectangle(cornerRadius: 8))
 
                 Spacer()
             }
@@ -275,7 +345,7 @@ struct IndicatorCard: View {
                     .font(.system(.largeTitle, design: .default).weight(.semibold))
                     .monospacedDigit()
                     .minimumScaleFactor(0.72)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(indicator.valueColor)
             }
 
         }
@@ -294,10 +364,14 @@ struct IndicatorCard: View {
 
     private var iconName: String {
         switch indicator.chartType {
-        case .bar, .horizontalBar, .stackedBar:
+        case .bar, .compactBar, .horizontalBar, .stackedBar:
             "chart.bar.fill"
         case .donut:
             "chart.pie.fill"
+        case .oneValue:
+            "waveform.path.ecg"
+        case .linearProgress:
+            "chart.xyaxis.line"
         }
     }
 
@@ -313,7 +387,7 @@ struct IndicatorHero: View {
                     .font(.title3.weight(.bold))
                     .foregroundStyle(.white)
                     .frame(width: 44, height: 44)
-                    .background(indicator.accent.primary, in: RoundedRectangle(cornerRadius: 8))
+                    .background(indicator.graphColor, in: RoundedRectangle(cornerRadius: 8))
                     .shadow(color: .black.opacity(0.10), radius: 8, x: 0, y: 4)
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -328,6 +402,7 @@ struct IndicatorHero: View {
             if let value = indicator.value {
                 Text("\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")")
                     .font(.system(.largeTitle, design: .default).weight(.semibold))
+                    .foregroundStyle(indicator.valueColor)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .minimumScaleFactor(0.75)
@@ -341,38 +416,125 @@ struct IndicatorHero: View {
 
     private var iconName: String {
         switch indicator.chartType {
-        case .bar, .horizontalBar, .stackedBar:
+        case .bar, .compactBar, .horizontalBar, .stackedBar:
             "chart.bar.fill"
         case .donut:
             "chart.pie.fill"
+        case .oneValue:
+            "waveform.path.ecg"
+        case .linearProgress:
+            "chart.xyaxis.line"
         }
     }
 }
 
-struct UpdatedAtBar: View {
+struct DashboardConnectionBar: View {
     let date: Date?
     var isCached = false
+    var isRefreshing = false
+    var errorMessage: String?
+    let retry: () async -> Void
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        HStack {
-            Image(systemName: isCached ? "externaldrive.fill" : "clock")
+        Group {
+            if isCached {
+                cachedContent
+            } else {
+                currentContent
+            }
+        }
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+        .animation(.easeInOut(duration: 0.2), value: errorMessage)
+        .animation(.easeInOut(duration: 0.2), value: isRefreshing)
+    }
+
+    private var currentContent: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+
             Text(dateText)
+
             Spacer()
+
+            if isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Обновление данных")
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal)
         .padding(.vertical, 10)
-        .background(.bar)
+    }
+
+    private var cachedContent: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: errorMessage == nil ? "externaldrive.badge.wifi" : "wifi.slash")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(errorMessage == nil ? Color.orange : Color.red)
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(isRefreshing ? "Обновляем данные…" : "Офлайн-режим")
+                    .font(.subheadline.weight(.semibold))
+
+                Text(cachedDateText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(.top, 2)
+                    .accessibilityLabel("Проверяем подключение")
+            } else {
+                Button("Повторить") {
+                    Task {
+                        await retry()
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .padding(.top, 1)
+            }
+        }
+        .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .contain)
     }
 
     private var dateText: String {
         guard let date else {
-            return isCached ? "Сохранённые данные · срез не указан" : "Срез не указан"
+            return "Срез не указан"
         }
 
-        let fetchedAt = "Получено \(date.formatted(date: .abbreviated, time: .shortened))"
-        return isCached ? "Сохранённые данные · \(fetchedAt)" : fetchedAt
+        return "Данные актуальны на \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private var cachedDateText: String {
+        guard let date else {
+            return "Показаны последние сохранённые данные"
+        }
+
+        return "Сохранённые данные от \(date.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

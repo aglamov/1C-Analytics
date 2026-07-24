@@ -4,13 +4,26 @@ struct Dashboard: Identifiable, Codable, Equatable {
     let id: String
     let title: String
     let fetchedAt: Date?
-    let indicators: [Indicator]
+    let sections: [DashboardSection]
+
+    var indicators: [Indicator] {
+        sections.flatMap(\.indicators)
+    }
 
     init(id: String, title: String, fetchedAt: Date?, indicators: [Indicator]) {
         self.id = id
         self.title = title
         self.fetchedAt = fetchedAt
-        self.indicators = indicators
+        self.sections = [
+            DashboardSection(id: id, title: title, indicators: indicators)
+        ]
+    }
+
+    init(id: String, title: String, fetchedAt: Date?, sections: [DashboardSection]) {
+        self.id = id
+        self.title = title
+        self.fetchedAt = fetchedAt
+        self.sections = sections
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -18,6 +31,7 @@ struct Dashboard: Identifiable, Codable, Equatable {
         case title
         case fetchedAt
         case legacyUpdatedAt = "updatedAt"
+        case sections
         case indicators
     }
 
@@ -27,7 +41,14 @@ struct Dashboard: Identifiable, Codable, Equatable {
         title = try container.decode(String.self, forKey: .title)
         fetchedAt = try container.decodeIfPresent(Date.self, forKey: .fetchedAt)
             ?? container.decodeIfPresent(Date.self, forKey: .legacyUpdatedAt)
-        indicators = try container.decode([Indicator].self, forKey: .indicators)
+        if let decodedSections = try container.decodeIfPresent([DashboardSection].self, forKey: .sections) {
+            sections = decodedSections
+        } else {
+            let legacyIndicators = try container.decodeIfPresent([Indicator].self, forKey: .indicators) ?? []
+            sections = [
+                DashboardSection(id: id, title: title, indicators: legacyIndicators)
+            ]
+        }
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -35,18 +56,51 @@ struct Dashboard: Identifiable, Codable, Equatable {
         try container.encode(id, forKey: .id)
         try container.encode(title, forKey: .title)
         try container.encodeIfPresent(fetchedAt, forKey: .fetchedAt)
-        try container.encode(indicators, forKey: .indicators)
+        try container.encode(sections, forKey: .sections)
     }
+}
+
+struct DashboardSection: Identifiable, Codable, Equatable {
+    let id: String
+    let title: String
+    let indicators: [Indicator]
 }
 
 struct Indicator: Identifiable, Codable, Equatable {
     let id: String
     let title: String
     let value: Decimal?
+    let valueMax: Double?
     let unit: String?
     let chartType: ChartType
     let source: String?
+    let colorGraph: String?
+    let colorValue: String?
     let rows: [IndicatorRow]
+
+    init(
+        id: String,
+        title: String,
+        value: Decimal?,
+        valueMax: Double? = nil,
+        unit: String?,
+        chartType: ChartType,
+        source: String?,
+        colorGraph: String? = nil,
+        colorValue: String? = nil,
+        rows: [IndicatorRow]
+    ) {
+        self.id = id
+        self.title = title
+        self.value = value
+        self.valueMax = valueMax
+        self.unit = unit
+        self.chartType = chartType
+        self.source = source
+        self.colorGraph = colorGraph
+        self.colorValue = colorValue
+        self.rows = rows
+    }
 }
 
 struct IndicatorRow: Identifiable, Codable, Equatable {
@@ -55,24 +109,53 @@ struct IndicatorRow: Identifiable, Codable, Equatable {
     let value: Double
     let series: String?
     let sortOrder: Int?
+    let colorGraph: String?
+    let colorValue: String?
+
+    init(
+        id: String,
+        label: String,
+        value: Double,
+        series: String?,
+        sortOrder: Int?,
+        colorGraph: String? = nil,
+        colorValue: String? = nil
+    ) {
+        self.id = id
+        self.label = label
+        self.value = value
+        self.series = series
+        self.sortOrder = sortOrder
+        self.colorGraph = colorGraph
+        self.colorValue = colorValue
+    }
 }
 
 enum ChartType: String, CaseIterable, Codable {
     case bar = "BarMark"
+    case compactBar = "BarMarkCompact"
     case horizontalBar = "BarMarkHorizon"
     case stackedBar = "BarMarkStacking"
     case donut = "SectorMarkInnerRadius"
+    case oneValue = "OneValue"
+    case linearProgress = "LinearProgressIndicator"
 
     var title: String {
         switch self {
         case .bar:
             "BarMark"
+        case .compactBar:
+            "BarMarkCompact"
         case .horizontalBar:
             "BarMarkHorizon"
         case .stackedBar:
             "BarMarkStacking"
         case .donut:
             "SectorMarkInnerRadius"
+        case .oneValue:
+            "OneValue"
+        case .linearProgress:
+            "LinearProgressIndicator"
         }
     }
 }
@@ -94,7 +177,7 @@ extension Indicator {
             .orange
         default:
             switch chartType {
-            case .bar:
+            case .bar, .compactBar:
                 .blue
             case .horizontalBar:
                 .green
@@ -102,7 +185,20 @@ extension Indicator {
                 .violet
             case .donut:
                 .orange
+            case .oneValue:
+                .orange
+            case .linearProgress:
+                .blue
             }
+        }
+    }
+
+    var supportsDetail: Bool {
+        switch chartType {
+        case .oneValue, .linearProgress:
+            false
+        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut:
+            true
         }
     }
 

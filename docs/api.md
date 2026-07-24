@@ -63,6 +63,25 @@ API или модель показателя должны указывать т�
 | `BarMarkHorizon` | `BarMark` с горизонтальной ориентацией осей | Сравнение категорий с длинными подписями |
 | `BarMarkStacking` | `BarMark` с группировкой/stacking | Состав показателя внутри категории |
 | `SectorMarkInnerRadius` | `SectorMark` с `innerRadius` | Кольцевая диаграмма долей |
+| `OneValue` | Заголовок и одно значение | KPI без графика и детализации |
+| `LinearProgressIndicator` | Линейный progress bar | Текущее `value` относительно `valueMax` |
+| `BarMarkCompact` | Вертикальный `BarMark` | Компактное сравнение с отдельным экраном детализации |
+
+Запрос аналитики имеет таймаут 30 секунд.
+
+Новые поля цвета принимаются в hex-формате (`#RRGGBB` или `#RRGGBBAA`):
+
+- `colorGraph` задаёт цвет графика; у строк `values` он может отличаться;
+- `colorValue` задаёт цвет числового значения;
+- если поле отсутствует или некорректно, используется встроенная палитра.
+
+Для `LinearProgressIndicator` фон показывает весь диапазон `valueMax` приглушённым
+`colorGraph`, а заполненная часть соответствует отношению `value / valueMax`.
+
+Для `BarMarkCompact` элементы `subgroup` сохраняются даже при пустом `group` и
+выводятся как самостоятельные столбцы с подписями из `subgroup.name`.
+Поле `group` может быть строкой или числом (например, год `2026`); числовое
+значение преобразуется в строковую подпись оси.
 
 ## API Response Shape
 
@@ -110,6 +129,12 @@ struct Dashboard: Identifiable, Decodable {
     let id: String
     let title: String
     let fetchedAt: Date?
+    let sections: [DashboardSection]
+}
+
+struct DashboardSection: Identifiable, Decodable {
+    let id: String
+    let title: String
     let indicators: [Indicator]
 }
 
@@ -133,11 +158,18 @@ struct IndicatorRow: Identifiable, Decodable {
 
 enum ChartType: String, Decodable {
     case bar = "BarMark"
+    case compactBar = "BarMarkCompact"
     case horizontalBar = "BarMarkHorizon"
     case stackedBar = "BarMarkStacking"
     case donut = "SectorMarkInnerRadius"
+    case oneValue = "OneValue"
+    case linearProgress = "LinearProgressIndicator"
 }
 ```
+
+Все элементы корневого массива `sections` сохраняются в исходном порядке и
+выводятся отдельными блоками с заголовками. Старый кэш, содержащий только
+`Dashboard.indicators`, преобразуется в один раздел при чтении.
 
 Для составных показателей API может возвращать список `subgroup`. Каждая запись
 `subgroup` становится отдельной серией в `IndicatorRow.series`, а `group`

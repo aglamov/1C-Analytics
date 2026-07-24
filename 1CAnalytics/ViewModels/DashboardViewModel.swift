@@ -12,6 +12,7 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var state: LoadState = .idle
     @Published private(set) var isShowingCachedData = false
     @Published private(set) var refreshErrorMessage: String?
+    @Published private(set) var isRefreshing = false
     @Published var selectedIndicatorID: Indicator.ID?
 
     private let provider: any AnalyticsProvider
@@ -54,6 +55,9 @@ final class DashboardViewModel: ObservableObject {
             state = .loading
         }
 
+        isRefreshing = true
+        defer { isRefreshing = false }
+
         do {
             let dashboard = try await provider.fetchDashboard()
             try? cache.save(dashboard)
@@ -64,12 +68,16 @@ final class DashboardViewModel: ObservableObject {
         } catch {
             if cachedDashboard == nil {
                 state = .failed(error.localizedDescription)
+            } else {
+                refreshErrorMessage = Self.offlineMessage(for: error)
             }
         }
     }
 
     func refresh() async {
         refreshErrorMessage = nil
+        isRefreshing = true
+        defer { isRefreshing = false }
 
         do {
             let dashboard = try await provider.fetchDashboard()
@@ -80,15 +88,12 @@ final class DashboardViewModel: ObservableObject {
             onAuthenticationRequired()
         } catch {
             if dashboard != nil {
-                refreshErrorMessage = error.localizedDescription
+                isShowingCachedData = true
+                refreshErrorMessage = Self.offlineMessage(for: error)
             } else {
                 state = .failed(error.localizedDescription)
             }
         }
-    }
-
-    func dismissRefreshError() {
-        refreshErrorMessage = nil
     }
 
     private func show(_ dashboard: Dashboard, isCached: Bool) {
@@ -97,6 +102,23 @@ final class DashboardViewModel: ObservableObject {
 
         if !dashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
             selectedIndicatorID = dashboard.indicators.first?.id
+        }
+    }
+
+    private static func offlineMessage(for error: Error) -> String {
+        guard let urlError = error as? URLError else {
+            return error.localizedDescription
+        }
+
+        switch urlError.code {
+        case .notConnectedToInternet:
+            return "Нет подключения к интернету. Показаны последние сохранённые данные."
+        case .timedOut:
+            return "Сервер не успел ответить. Подождите немного и повторите обновление."
+        case .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost:
+            return "Не удалось связаться с сервером. Показаны последние сохранённые данные."
+        default:
+            return urlError.localizedDescription
         }
     }
 }

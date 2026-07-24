@@ -55,7 +55,7 @@ struct AnalyticsChart: View {
             }
 
             switch indicator.chartType {
-            case .bar:
+            case .bar, .compactBar:
                 verticalBars
             case .horizontalBar:
                 horizontalBars
@@ -63,9 +63,11 @@ struct AnalyticsChart: View {
                 stackedBars
             case .donut:
                 donut
+            case .oneValue, .linearProgress:
+                EmptyView()
             }
 
-            if showsLegend {
+            if showsLegend, !indicator.orderedRows.isEmpty {
                 interactiveLegend
             }
         }
@@ -93,7 +95,7 @@ struct AnalyticsChart: View {
                 x: .value("Группа", row.label),
                 y: .value("Значение", animatedValue(for: row))
             )
-            .foregroundStyle(by: .value("Группа", row.label))
+            .foregroundStyle(chartColor(for: row))
             .opacity(opacity(for: row))
             .cornerRadius(3)
             .annotation(position: .top, alignment: .center) {
@@ -132,7 +134,7 @@ struct AnalyticsChart: View {
                 x: .value("Значение", animatedValue(for: row)),
                 y: .value("Группа", row.label)
             )
-            .foregroundStyle(by: .value("Группа", row.label))
+            .foregroundStyle(chartColor(for: row))
             .opacity(opacity(for: row))
             .cornerRadius(3)
             .annotation(position: .trailing, alignment: .center) {
@@ -171,7 +173,7 @@ struct AnalyticsChart: View {
                 x: .value("Группа", row.label),
                 y: .value("Значение", animatedValue(for: row))
             )
-            .foregroundStyle(by: .value("Серия", row.series ?? "Значение"))
+            .foregroundStyle(chartColor(for: row))
             .opacity(opacity(for: row))
             .cornerRadius(3)
             .annotation(position: .overlay, alignment: .center) {
@@ -213,7 +215,7 @@ struct AnalyticsChart: View {
                 angularInset: 1.5
             )
             .cornerRadius(3)
-            .foregroundStyle(by: .value("Группа", row.label))
+            .foregroundStyle(chartColor(for: row))
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
                 if showsValueLabels {
@@ -311,7 +313,8 @@ struct AnalyticsChart: View {
         ChartValueLabel(
             value: row.value,
             isSelected: selectedRowID == row.id,
-            selectionColor: chartColor(for: row)
+            selectionColor: chartColor(for: row),
+            valueColor: Color(apiHex: row.colorValue ?? indicator.colorValue)
         )
     }
 
@@ -485,6 +488,7 @@ private struct ChartValueLabel: View {
     let value: Double
     let isSelected: Bool
     let selectionColor: Color
+    let valueColor: Color?
     @Environment(\.colorScheme) private var colorScheme
 
     @ViewBuilder
@@ -506,7 +510,7 @@ private struct ChartValueLabel: View {
         } else {
             Text(valueText)
                 .font(.callout.monospacedDigit().weight(.bold))
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(valueColor ?? Color.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .allowsTightening(true)
