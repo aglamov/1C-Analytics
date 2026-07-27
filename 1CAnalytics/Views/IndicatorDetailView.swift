@@ -101,7 +101,7 @@ struct IndicatorDetailView: View {
                     Text("Детализация")
                         .font(.title3.weight(.bold))
 
-                    Text("Ранжирование групп по значению")
+                    Text("В порядке значений на графике")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -116,7 +116,7 @@ struct IndicatorDetailView: View {
             }
 
             VStack(spacing: 0) {
-                ForEach(rankedGroups) { group in
+                ForEach(orderedGroups) { group in
                     DetailGroupRowView(
                         group: group,
                         maxValue: maxValue,
@@ -126,7 +126,7 @@ struct IndicatorDetailView: View {
                         onSelect: selectRow
                     )
 
-                    if group.id != rankedGroups.last?.id {
+                    if group.id != orderedGroups.last?.id {
                         Divider()
                             .padding(.leading, 2)
                     }
@@ -146,26 +146,23 @@ struct IndicatorDetailView: View {
         colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.44) : Color(.systemBackground).opacity(0.56)
     }
 
-    private var rankedGroups: [IndicatorRowGroup] {
-        Dictionary(grouping: indicator.orderedRows, by: \.label)
-            .map { label, rows in
-                IndicatorRowGroup(label: label, rows: rows.sortedByOrder())
+    private var orderedGroups: [IndicatorRowGroup] {
+        indicator.orderedRows.reduce(into: [IndicatorRowGroup]()) { groups, row in
+            if let index = groups.firstIndex(where: { $0.label == row.label }) {
+                let group = groups[index]
+                groups[index] = IndicatorRowGroup(label: group.label, rows: group.rows + [row])
+            } else {
+                groups.append(IndicatorRowGroup(label: row.label, rows: [row]))
             }
-            .sorted {
-                if $0.totalValue == $1.totalValue {
-                    return $0.label < $1.label
-                }
-
-                return $0.totalValue > $1.totalValue
-            }
+        }
     }
 
     private var maxValue: Double {
-        rankedGroups.map(\.totalValue).max() ?? 0
+        orderedGroups.map(\.totalValue).max() ?? 0
     }
 
     private var totalValue: Double {
-        rankedGroups.reduce(0) { $0 + $1.totalValue }
+        orderedGroups.reduce(0) { $0 + $1.totalValue }
     }
 
     private var totalText: String {

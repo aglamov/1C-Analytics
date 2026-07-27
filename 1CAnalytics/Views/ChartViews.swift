@@ -90,41 +90,39 @@ struct AnalyticsChart: View {
     }
 
     private var verticalBars: some View {
-        Chart(indicator.orderedRows) { row in
-            BarMark(
-                x: .value("Группа", row.label),
-                y: .value("Значение", animatedValue(for: row))
-            )
-            .foregroundStyle(chartColor(for: row))
-            .opacity(opacity(for: row))
-            .cornerRadius(3)
-            .annotation(position: .top, alignment: .center) {
-                if showsValueLabels {
-                    valueLabel(for: row)
+        GeometryReader { geometry in
+            Chart(indicator.orderedRows) { row in
+                BarMark(
+                    x: .value("Группа", row.label),
+                    y: .value("Значение", animatedValue(for: row))
+                )
+                .foregroundStyle(chartColor(for: row))
+                .opacity(opacity(for: row))
+                .cornerRadius(3)
+                .annotation(position: .top, alignment: .center) {
+                    if showsValueLabels {
+                        valueLabel(for: row)
+                    }
                 }
             }
-        }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
-                    .foregroundStyle(Color.secondary.opacity(0.16))
-                AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
-                    .foregroundStyle(Color.secondary.opacity(0.26))
-                AxisValueLabel()
-                    .foregroundStyle(Color.secondary)
-                    .font(.caption2)
+            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                        .foregroundStyle(Color.secondary.opacity(0.16))
+                    AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
+                        .foregroundStyle(Color.secondary.opacity(0.26))
+                    AxisValueLabel()
+                        .foregroundStyle(Color.secondary)
+                        .font(.caption2)
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks { _ in
-                AxisValueLabel()
-                    .foregroundStyle(Color.secondary)
-                    .font(.caption2)
+            .chartXAxis {
+                responsiveCategoryAxis(availableWidth: geometry.size.width)
             }
-        }
-        .chartOverlay { proxy in
-            chartTapOverlay(proxy: proxy, mode: .verticalBar)
+            .chartOverlay { proxy in
+                chartTapOverlay(proxy: proxy, mode: .verticalBar)
+            }
         }
     }
 
@@ -168,41 +166,39 @@ struct AnalyticsChart: View {
     }
 
     private var stackedBars: some View {
-        Chart(indicator.orderedRows) { row in
-            BarMark(
-                x: .value("Группа", row.label),
-                y: .value("Значение", animatedValue(for: row))
-            )
-            .foregroundStyle(chartColor(for: row))
-            .opacity(opacity(for: row))
-            .cornerRadius(3)
-            .annotation(position: .overlay, alignment: .center) {
-                if showsValueLabels {
-                    valueLabel(for: row)
+        GeometryReader { geometry in
+            Chart(indicator.orderedRows) { row in
+                BarMark(
+                    x: .value("Группа", row.label),
+                    y: .value("Значение", animatedValue(for: row))
+                )
+                .foregroundStyle(chartColor(for: row))
+                .opacity(opacity(for: row))
+                .cornerRadius(3)
+                .annotation(position: .overlay, alignment: .center) {
+                    if showsValueLabels {
+                        valueLabel(for: row)
+                    }
                 }
             }
-        }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
-                    .foregroundStyle(Color.secondary.opacity(0.16))
-                AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
-                    .foregroundStyle(Color.secondary.opacity(0.26))
-                AxisValueLabel()
-                    .foregroundStyle(Color.secondary)
-                    .font(.caption2)
+            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                        .foregroundStyle(Color.secondary.opacity(0.16))
+                    AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
+                        .foregroundStyle(Color.secondary.opacity(0.26))
+                    AxisValueLabel()
+                        .foregroundStyle(Color.secondary)
+                        .font(.caption2)
+                }
             }
-        }
-        .chartXAxis {
-            AxisMarks { _ in
-                AxisValueLabel()
-                    .foregroundStyle(Color.secondary)
-                    .font(.caption2)
+            .chartXAxis {
+                responsiveCategoryAxis(availableWidth: geometry.size.width)
             }
-        }
-        .chartOverlay { proxy in
-            chartTapOverlay(proxy: proxy, mode: .stackedBar)
+            .chartOverlay { proxy in
+                chartTapOverlay(proxy: proxy, mode: .stackedBar)
+            }
         }
     }
 
@@ -316,6 +312,50 @@ struct AnalyticsChart: View {
             selectionColor: chartColor(for: row),
             valueColor: Color(apiHex: row.colorValue ?? indicator.colorValue)
         )
+    }
+
+    private func responsiveCategoryAxis(availableWidth: CGFloat) -> some AxisContent {
+        let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
+        let plotWidth = max(availableWidth - 52, 0)
+        let labelWidth = min(120, max(40, plotWidth / CGFloat(categoryCount) - 4))
+
+        return AxisMarks { value in
+            AxisValueLabel(centered: true, collisionResolution: .truncate) {
+                if let label = value.as(String.self) {
+                    Text(wrappedAxisLabel(label))
+                        .font(.caption2)
+                        .foregroundStyle(Color.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                        .allowsTightening(true)
+                        .frame(width: labelWidth)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func wrappedAxisLabel(_ label: String) -> String {
+        let words = label.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.count > 1 else {
+            return label
+        }
+
+        let breakIndex = (1..<words.count).min { leftIndex, rightIndex in
+            axisLineLengthDifference(words: words, breakIndex: leftIndex)
+                < axisLineLengthDifference(words: words, breakIndex: rightIndex)
+        } ?? 1
+
+        return words[..<breakIndex].joined(separator: " ")
+            + "\n"
+            + words[breakIndex...].joined(separator: " ")
+    }
+
+    private func axisLineLengthDifference(words: [String], breakIndex: Int) -> Int {
+        let firstLineLength = words[..<breakIndex].joined(separator: " ").count
+        let secondLineLength = words[breakIndex...].joined(separator: " ").count
+        return abs(firstLineLength - secondLineLength)
     }
 
     private func toggleSelection(_ rowID: IndicatorRow.ID) {
