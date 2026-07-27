@@ -434,9 +434,6 @@ struct DashboardConnectionBar: View {
     let date: Date?
     var isCached = false
     var isRefreshing = false
-    var errorMessage: String?
-    let retry: () async -> Void
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Group {
@@ -450,7 +447,6 @@ struct DashboardConnectionBar: View {
         .overlay(alignment: .top) {
             Divider()
         }
-        .animation(.easeInOut(duration: 0.2), value: errorMessage)
         .animation(.easeInOut(duration: 0.2), value: isRefreshing)
     }
 
@@ -476,51 +472,18 @@ struct DashboardConnectionBar: View {
     }
 
     private var cachedContent: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: errorMessage == nil ? "externaldrive.badge.wifi" : "wifi.slash")
-                .font(.body.weight(.semibold))
-                .foregroundStyle(errorMessage == nil ? Color.orange : Color.red)
-                .frame(width: 24, height: 24)
-                .accessibilityHidden(true)
+        HStack(spacing: 8) {
+            Image(systemName: "icloud.slash.fill")
+                .foregroundStyle(.orange)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(isRefreshing ? "Обновляем данные…" : "Офлайн-режим")
-                    .font(.subheadline.weight(.semibold))
+            Text(cachedDateText)
 
-                Text(cachedDateText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 2)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            if isRefreshing {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 2)
-                    .accessibilityLabel("Проверяем подключение")
-            } else {
-                Button("Повторить") {
-                    Task {
-                        await retry()
-                    }
-                }
-                .font(.subheadline.weight(.semibold))
-                .buttonStyle(.borderless)
-                .padding(.top, 1)
-            }
+            Spacer()
         }
-        .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-        .padding(.vertical, 12)
-        .accessibilityElement(children: .contain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal)
+        .padding(.vertical, 10)
     }
 
     private var dateText: String {
@@ -533,10 +496,10 @@ struct DashboardConnectionBar: View {
 
     private var cachedDateText: String {
         guard let date else {
-            return "Показаны последние сохранённые данные"
+            return "Дата последнего обновления неизвестна"
         }
 
-        return "Сохранённые данные от \(date.formatted(date: .abbreviated, time: .shortened))"
+        return "Последнее обновление: \(date.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

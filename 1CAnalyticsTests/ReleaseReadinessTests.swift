@@ -49,7 +49,7 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testResponseMappingUsesFetchTimeAndMapsSubgroupsWithoutInventingSummary() throws {
+    func testResponseMappingUsesFetchTimeAndCalculatesSubgroupSummary() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Контингент","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":10},{"name":"ИГ","value":2}]}],"type":"BarMarkStacking"}]}]}"#.utf8
         )
@@ -57,8 +57,9 @@ final class ReleaseReadinessTests: XCTestCase {
         let dashboard = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data).toDashboard()
 
         XCTAssertNotNil(dashboard.fetchedAt)
-        XCTAssertNil(dashboard.indicators.first?.value)
+        XCTAssertEqual(dashboard.indicators.first?.value, 12)
         XCTAssertEqual(dashboard.indicators.first?.rows.count, 2)
+        XCTAssertEqual(dashboard.indicators.first?.showsAggregateValue, true)
     }
 
     func testGroupedValuesDoNotPopulateMissingSummaryValue() throws {
@@ -236,6 +237,8 @@ final class ReleaseReadinessTests: XCTestCase {
 
         XCTAssertEqual(indicator.rows.map(\.label), ["2024", "2025", "2026"])
         XCTAssertEqual(indicator.rows.map(\.value), [728, 666, 462])
+        XCTAssertEqual(indicator.value, 1_856)
+        XCTAssertTrue(indicator.showsAggregateValue)
     }
 
     func testDashboardDecodesLegacyCachedTimestamp() throws {

@@ -131,7 +131,12 @@ struct AnalyticsAPIIndicator: Decodable {
             .flatMap { rowIndex, value in
                 value.toRows(index: rowIndex, chartType: type)
             }
-        let scalarValue = value ?? totalRow?.value
+        let calculatedTotal = rows.isEmpty
+            ? nil
+            : rows.reduce(0) { $0 + $1.value }
+        let scalarValue = value
+            ?? totalRow?.value
+            ?? (name.isPlanFactIndicatorTitle ? nil : calculatedTotal)
         let primaryValue = values.first
 
         return Indicator(

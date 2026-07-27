@@ -162,18 +162,7 @@ enum ChartType: String, CaseIterable, Codable {
 
 extension Indicator {
     var showsAggregateValue: Bool {
-        guard chartType != .compactBar else {
-            return false
-        }
-
-        let normalizedTitle = title
-            .lowercased()
-            .replacingOccurrences(of: "‑", with: "-")
-            .replacingOccurrences(of: "–", with: "-")
-            .replacingOccurrences(of: "—", with: "-")
-
-        return !normalizedTitle.contains("план-факт")
-            && !normalizedTitle.contains("план факт")
+        !title.isPlanFactIndicatorTitle
     }
 
     var orderedRows: [IndicatorRow] {
@@ -217,6 +206,18 @@ extension Indicator {
         }
     }
 
+}
+
+extension String {
+    var isPlanFactIndicatorTitle: Bool {
+        let normalized = lowercased()
+            .replacingOccurrences(of: "‑", with: "-")
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
+
+        return normalized.contains("план-факт")
+            || normalized.contains("план факт")
+    }
 }
 
 extension Array where Element == IndicatorRow {

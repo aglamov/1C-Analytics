@@ -117,11 +117,8 @@ struct DashboardView: View {
                 DashboardConnectionBar(
                     date: dashboard.fetchedAt,
                     isCached: viewModel.isShowingCachedData,
-                    isRefreshing: viewModel.isRefreshing,
-                    errorMessage: viewModel.refreshErrorMessage
-                ) {
-                    await viewModel.refresh()
-                }
+                    isRefreshing: viewModel.isRefreshing
+                )
             }
         }
     }
