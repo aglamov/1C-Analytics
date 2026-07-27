@@ -88,6 +88,23 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertNil(indicator.value)
+        XCTAssertFalse(indicator.showsAggregateValue)
+    }
+
+    func testPlanFactTitlesNeverShowMisleadingAggregateValue() {
+        for title in ["План-факт", "План‑факт доходов", "План факт"] {
+            let indicator = Indicator(
+                id: title,
+                title: title,
+                value: nil,
+                unit: nil,
+                chartType: .bar,
+                source: nil,
+                rows: []
+            )
+
+            XCTAssertFalse(indicator.showsAggregateValue, title)
+        }
     }
 
     func testResponseMappingSupportsNewCompactIndicatorTypesAndColors() throws {

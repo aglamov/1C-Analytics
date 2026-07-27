@@ -341,11 +341,13 @@ struct IndicatorCard: View {
                     .foregroundStyle(.primary)
                     .lineLimit(2)
 
-                Text(valueText)
-                    .font(.system(.largeTitle, design: .default).weight(.semibold))
-                    .monospacedDigit()
-                    .minimumScaleFactor(0.72)
-                    .foregroundStyle(indicator.valueColor)
+                if indicator.showsAggregateValue {
+                    Text(valueText)
+                        .font(.system(.largeTitle, design: .default).weight(.semibold))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.72)
+                        .foregroundStyle(indicator.valueColor)
+                }
             }
 
         }
@@ -399,7 +401,7 @@ struct IndicatorHero: View {
                 Spacer(minLength: 0)
             }
 
-            if let value = indicator.value {
+            if indicator.showsAggregateValue, let value = indicator.value {
                 Text("\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")")
                     .font(.system(.largeTitle, design: .default).weight(.semibold))
                     .foregroundStyle(indicator.valueColor)

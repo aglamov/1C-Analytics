@@ -108,9 +108,11 @@ struct IndicatorDetailView: View {
 
                 Spacer()
 
-                Text(totalText)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if indicator.showsAggregateValue {
+                    Text(totalText)
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             VStack(spacing: 0) {

@@ -338,9 +338,13 @@ private struct IndicatorDashboardCard: View {
         case .linearProgress:
             LinearProgressIndicatorView(indicator: indicator)
         case .compactBar:
-            AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false, showsLegend: false)
-                .frame(minHeight: 180, idealHeight: 220, maxHeight: 260)
-                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 12) {
+                AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false, showsLegend: false)
+                    .frame(minHeight: 180, idealHeight: 220, maxHeight: 260)
+                    .padding(.top, 2)
+
+                CompactBarValues(indicator: indicator)
+            }
         case .bar, .horizontalBar, .stackedBar, .donut:
             AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false, showsLegend: false)
                 .frame(minHeight: 220, idealHeight: 260, maxHeight: 320)
@@ -367,7 +371,7 @@ private struct IndicatorDashboardCard: View {
                 Spacer(minLength: 0)
             }
 
-            if indicator.chartType != .compactBar {
+            if indicator.showsAggregateValue {
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     Text(valueText)
                         .font(.system(.title, design: .default).weight(.semibold))
@@ -402,6 +406,41 @@ private struct IndicatorDashboardCard: View {
             "waveform.path.ecg"
         case .linearProgress:
             "chart.xyaxis.line"
+        }
+    }
+}
+
+private struct CompactBarValues: View {
+    let indicator: Indicator
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 132), spacing: 10)],
+            alignment: .leading,
+            spacing: 10
+        ) {
+            ForEach(indicator.orderedRows) { row in
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(indicator.chartColor(for: row, scheme: chartPaletteScheme))
+                        .frame(width: 8, height: 8)
+
+                    Text(row.label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 4)
+
+                    Text(row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0))))
+                        .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(Color(apiHex: row.colorValue ?? indicator.colorValue) ?? .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+                .accessibilityElement(children: .combine)
+            }
         }
     }
 }
