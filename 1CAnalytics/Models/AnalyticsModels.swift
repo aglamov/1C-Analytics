@@ -131,6 +131,37 @@ struct IndicatorRow: Identifiable, Codable, Equatable {
     }
 }
 
+struct IndicatorRowGroup: Identifiable, Equatable {
+    let label: String
+    let rows: [IndicatorRow]
+
+    var id: String {
+        label
+    }
+
+    var totalValue: Double {
+        rows.reduce(0) { $0 + $1.value }
+    }
+
+    var selectedFallbackRowID: IndicatorRow.ID? {
+        rows.first?.id
+    }
+}
+
+enum BarChartDataShape: Equatable {
+    case singleValuePerGroup
+    case multipleValuesPerGroup(series: [String])
+
+    var series: [String] {
+        switch self {
+        case .singleValuePerGroup:
+            []
+        case .multipleValuesPerGroup(let series):
+            series
+        }
+    }
+}
+
 enum ChartType: String, CaseIterable, Codable {
     case bar = "BarMark"
     case compactBar = "BarMarkCompact"
@@ -167,6 +198,30 @@ extension Indicator {
 
     var orderedRows: [IndicatorRow] {
         rows.sortedByOrder()
+    }
+
+    var rowGroups: [IndicatorRowGroup] {
+        orderedRows.reduce(into: [IndicatorRowGroup]()) { groups, row in
+            if let index = groups.firstIndex(where: { $0.label == row.label }) {
+                let group = groups[index]
+                groups[index] = IndicatorRowGroup(label: group.label, rows: group.rows + [row])
+            } else {
+                groups.append(IndicatorRowGroup(label: row.label, rows: [row]))
+            }
+        }
+    }
+
+    var barDataShape: BarChartDataShape {
+        let series = orderedRows.reduce(into: [String]()) { result, row in
+            guard let series = row.series, !result.contains(series) else {
+                return
+            }
+            result.append(series)
+        }
+
+        return series.isEmpty
+            ? .singleValuePerGroup
+            : .multipleValuesPerGroup(series: series)
     }
 
     var accent: AppAccent {

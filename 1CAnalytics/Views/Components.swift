@@ -175,6 +175,8 @@ extension Indicator {
         switch chartType {
         case .stackedBar:
             orderedRows.uniqueValues { $0.series ?? "Значение" }
+        case .bar, .horizontalBar where !barDataShape.series.isEmpty:
+            barDataShape.series
         case .bar, .compactBar, .horizontalBar, .donut:
             orderedRows.uniqueValues(\.label)
         case .oneValue, .linearProgress:
@@ -190,6 +192,8 @@ extension Indicator {
         let key: String
         switch chartType {
         case .stackedBar:
+            key = row.series ?? "Значение"
+        case .bar, .horizontalBar where !barDataShape.series.isEmpty:
             key = row.series ?? "Значение"
         case .bar, .compactBar, .horizontalBar, .donut:
             key = row.label

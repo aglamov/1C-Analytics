@@ -62,6 +62,65 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(dashboard.indicators.first?.showsAggregateValue, true)
     }
 
+    func testVerticalAndHorizontalBarsKeepMultipleValuesInsideMainGroups() throws {
+        for chartType in ["BarMark", "BarMarkHorizon"] {
+            let data = Data(
+                """
+                {
+                  "sections": [{
+                    "name": "Образование",
+                    "values": [{
+                      "name": "План-факт по уровням",
+                      "values": [
+                        {
+                          "group": "БАК",
+                          "subgroup": [
+                            {"name": "План прошлый год", "value": 412755},
+                            {"name": "Опл. прошлый год", "value": 899359},
+                            {"name": "План текущий год", "value": 483360},
+                            {"name": "Опл. текущий год", "value": 242167}
+                          ]
+                        },
+                        {
+                          "group": "СПЕЦ",
+                          "subgroup": [
+                            {"name": "План прошлый год", "value": 209445},
+                            {"name": "Опл. прошлый год", "value": 457850},
+                            {"name": "План текущий год", "value": 234387},
+                            {"name": "Опл. текущий год", "value": 124083}
+                          ]
+                        }
+                      ],
+                      "type": "\(chartType)"
+                    }]
+                  }]
+                }
+                """.utf8
+            )
+
+            let indicator = try XCTUnwrap(
+                JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                    .toDashboard()
+                    .indicators
+                    .first
+            )
+
+            XCTAssertEqual(indicator.rowGroups.map(\.label), ["БАК", "СПЕЦ"])
+            XCTAssertEqual(indicator.rowGroups.map { $0.rows.count }, [4, 4])
+            XCTAssertEqual(
+                indicator.barDataShape,
+                .multipleValuesPerGroup(
+                    series: [
+                        "План прошлый год",
+                        "Опл. прошлый год",
+                        "План текущий год",
+                        "Опл. текущий год"
+                    ]
+                )
+            )
+        }
+    }
+
     func testGroupedValuesDoNotPopulateMissingSummaryValue() throws {
         let data = Data(
             #"""

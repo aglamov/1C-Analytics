@@ -147,18 +147,15 @@ struct IndicatorDetailView: View {
     }
 
     private var orderedGroups: [IndicatorRowGroup] {
-        indicator.orderedRows.reduce(into: [IndicatorRowGroup]()) { groups, row in
-            if let index = groups.firstIndex(where: { $0.label == row.label }) {
-                let group = groups[index]
-                groups[index] = IndicatorRowGroup(label: group.label, rows: group.rows + [row])
-            } else {
-                groups.append(IndicatorRowGroup(label: row.label, rows: [row]))
-            }
-        }
+        indicator.rowGroups
     }
 
     private var maxValue: Double {
-        orderedGroups.map(\.totalValue).max() ?? 0
+        orderedGroups
+            .flatMap { group in
+                group.rows.count > 1 ? group.rows.map(\.value) : [group.totalValue]
+            }
+            .max() ?? 0
     }
 
     private var totalValue: Double {
@@ -176,23 +173,6 @@ struct IndicatorDetailView: View {
     }
 }
 
-private struct IndicatorRowGroup: Identifiable {
-    let label: String
-    let rows: [IndicatorRow]
-
-    var id: String {
-        label
-    }
-
-    var totalValue: Double {
-        rows.reduce(0) { $0 + $1.value }
-    }
-
-    var selectedFallbackRowID: IndicatorRow.ID? {
-        rows.first?.id
-    }
-}
-
 private struct DetailGroupRowView: View {
     let group: IndicatorRowGroup
     let maxValue: Double
@@ -204,66 +184,19 @@ private struct DetailGroupRowView: View {
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(groupColor)
-                            .frame(width: 7, height: 7)
+        VStack(alignment: .leading, spacing: group.rows.count > 1 ? 14 : 8) {
+            if group.rows.count > 1 {
+                Text(group.label)
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
-                        Text(group.label)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                    }
-
-                    if group.rows.count > 1 {
-                        Text(seriesSummary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                ForEach(group.rows) { row in
+                    groupedSeriesRow(row)
                 }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(group.totalValue.formatted(.number.precision(.fractionLength(0))))
-                        .font(.body.monospacedDigit().weight(.bold))
-                        .foregroundStyle(.primary)
-                        .contentTransition(.numericText())
-
-                    Text(shareText)
-                        .font(.caption2.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
+            } else if let row = group.rows.first {
+                singleValueRow(row)
             }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color(.tertiarySystemGroupedBackground))
-
-                    HStack(spacing: 2) {
-                        ForEach(group.rows) { row in
-                            let width = segmentWidth(for: row, availableWidth: proxy.size.width)
-
-                            Button {
-                                onSelect(row.id)
-                            } label: {
-                                segmentView(for: row, showsInlineLabel: width > 76)
-                            }
-                            .buttonStyle(.plain)
-                            .frame(width: width)
-                            .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "")")
-                        }
-                    }
-                    .frame(width: proxy.size.width * progress, alignment: .leading)
-                    .clipShape(Capsule())
-                }
-            }
-            .frame(height: group.rows.count > 1 ? 22 : 10)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
@@ -292,67 +225,99 @@ private struct DetailGroupRowView: View {
         indicator.chartColor(forGroupLabel: group.label, scheme: chartPaletteScheme)
     }
 
-    private var progress: Double {
-        guard maxValue > 0, hasAppeared else {
-            return 0
-        }
-
-        return group.totalValue / maxValue
-    }
-
-    private var shareText: String {
+    private func shareText(for value: Double) -> String {
         guard totalValue > 0 else {
             return "0%"
         }
 
-        return (group.totalValue / totalValue).formatted(.percent.precision(.fractionLength(0)))
+        return (value / totalValue).formatted(.percent.precision(.fractionLength(0)))
     }
 
-    private var seriesSummary: String {
-        group.rows
-            .map { row in
-                "\(row.series ?? "Значение") \(row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0))))"
-            }
-            .joined(separator: " / ")
-    }
-
-    private func segmentWidth(for row: IndicatorRow, availableWidth: CGFloat) -> CGFloat {
-        guard group.totalValue > 0 else {
+    private func progress(for value: Double) -> Double {
+        guard maxValue > 0, hasAppeared else {
             return 0
         }
 
-        return availableWidth * progress * (row.value / group.totalValue)
+        return value / maxValue
     }
 
-    private func segmentView(for row: IndicatorRow, showsInlineLabel: Bool) -> some View {
-        let isSegmentSelected = selectedRowID == row.id
+    private func groupedSeriesRow(_ row: IndicatorRow) -> some View {
+        Button {
+            onSelect(row.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                valueHeader(
+                    title: row.series ?? "Значение",
+                    value: row.value,
+                    color: segmentColor(for: row)
+                )
 
-        return ZStack {
-            Rectangle()
-                .fill(segmentColor(for: row).opacity(isSegmentSelected ? 1 : 0.78))
+                progressBar(value: row.value, color: segmentColor(for: row))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                selectedRowID == row.id ? segmentColor(for: row).opacity(0.08) : .clear,
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "Значение")")
+    }
 
-            if group.rows.count > 1, showsInlineLabel {
-                HStack(spacing: 4) {
-                    Text(row.series ?? "Значение")
-                        .lineLimit(1)
-
-                    Text(row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0))))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                }
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.white)
-                .minimumScaleFactor(0.65)
-                .padding(.horizontal, 5)
+    private func singleValueRow(_ row: IndicatorRow) -> some View {
+        Button {
+            onSelect(row.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                valueHeader(title: group.label, value: group.totalValue, color: groupColor)
+                progressBar(value: group.totalValue, color: groupColor)
             }
         }
-        .overlay {
-            if isSegmentSelected {
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(.white.opacity(0.85), lineWidth: 1.5)
-                    .padding(1)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Выбрать \(group.label)")
+    }
+
+    private func valueHeader(title: String, value: Double, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 7, height: 7)
+
+                Text(title)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value.formatted(.number.precision(.fractionLength(0))))
+                    .font(.body.monospacedDigit().weight(.bold))
+                    .foregroundStyle(.primary)
+                    .contentTransition(.numericText())
+
+                Text(shareText(for: value))
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func progressBar(value: Double, color: Color) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color(.tertiarySystemGroupedBackground))
+
+                Capsule()
+                    .fill(color)
+                    .frame(width: proxy.size.width * progress(for: value))
+            }
+        }
+        .frame(height: 6)
     }
 
     private func segmentColor(for row: IndicatorRow) -> Color {

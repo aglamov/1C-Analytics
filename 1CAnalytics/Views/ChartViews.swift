@@ -96,6 +96,7 @@ struct AnalyticsChart: View {
                     x: .value("Группа", row.label),
                     y: .value("Значение", animatedValue(for: row))
                 )
+                .position(by: .value("Серия", row.series ?? "Значение"), axis: .horizontal)
                 .foregroundStyle(chartColor(for: row))
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
@@ -132,6 +133,7 @@ struct AnalyticsChart: View {
                 x: .value("Значение", animatedValue(for: row)),
                 y: .value("Группа", row.label)
             )
+            .position(by: .value("Серия", row.series ?? "Значение"), axis: .vertical)
             .foregroundStyle(chartColor(for: row))
             .opacity(opacity(for: row))
             .cornerRadius(3)
@@ -227,7 +229,7 @@ struct AnalyticsChart: View {
 
     private var interactiveLegend: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
-            ForEach(indicator.orderedRows.prefix(8)) { row in
+            ForEach(legendRows.prefix(8)) { row in
                 Button {
                     toggleSelection(row.id)
                 } label: {
@@ -236,7 +238,7 @@ struct AnalyticsChart: View {
                             .fill(chartColor(for: row).opacity(selectedRowID == row.id ? 1 : 0.72))
                             .frame(width: 7, height: 7)
 
-                        Text(row.label)
+                        Text(legendTitle(for: row))
                             .font(.caption2.weight(.semibold))
                             .lineLimit(1)
 
@@ -255,9 +257,29 @@ struct AnalyticsChart: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Выбрать \(row.label)")
+                .accessibilityLabel("Выбрать \(legendTitle(for: row))")
             }
         }
+    }
+
+    private var legendRows: [IndicatorRow] {
+        guard !indicator.barDataShape.series.isEmpty,
+              indicator.chartType == .bar || indicator.chartType == .horizontalBar else {
+            return indicator.orderedRows
+        }
+
+        return indicator.barDataShape.series.compactMap { series in
+            indicator.orderedRows.first { $0.series == series }
+        }
+    }
+
+    private func legendTitle(for row: IndicatorRow) -> String {
+        if !indicator.barDataShape.series.isEmpty,
+           indicator.chartType == .bar || indicator.chartType == .horizontalBar {
+            return row.series ?? "Значение"
+        }
+
+        return row.label
     }
 
     private var selectedRow: IndicatorRow? {
