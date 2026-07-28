@@ -175,11 +175,12 @@ extension Indicator {
         switch chartType {
         case .stackedBar:
             orderedRows.uniqueValues { $0.series ?? "Значение" }
-        case .bar, .horizontalBar where !barDataShape.series.isEmpty:
+        case .bar where !barDataShape.series.isEmpty,
+             .horizontalBar where !barDataShape.series.isEmpty:
             barDataShape.series
         case .bar, .compactBar, .horizontalBar, .donut:
             orderedRows.uniqueValues(\.label)
-        case .oneValue, .linearProgress:
+        case .oneValue, .linearProgress, .gauge, .geoMap:
             []
         }
     }
@@ -193,11 +194,12 @@ extension Indicator {
         switch chartType {
         case .stackedBar:
             key = row.series ?? "Значение"
-        case .bar, .horizontalBar where !barDataShape.series.isEmpty:
+        case .bar where !barDataShape.series.isEmpty,
+             .horizontalBar where !barDataShape.series.isEmpty:
             key = row.series ?? "Значение"
         case .bar, .compactBar, .horizontalBar, .donut:
             key = row.label
-        case .oneValue, .linearProgress:
+        case .oneValue, .linearProgress, .gauge, .geoMap:
             return accent.primary
         }
 
@@ -378,6 +380,10 @@ struct IndicatorCard: View {
             "waveform.path.ecg"
         case .linearProgress:
             "chart.xyaxis.line"
+        case .gauge:
+            "gauge.with.dots.needle.67percent"
+        case .geoMap:
+            "map.fill"
         }
     }
 
@@ -430,6 +436,10 @@ struct IndicatorHero: View {
             "waveform.path.ecg"
         case .linearProgress:
             "chart.xyaxis.line"
+        case .gauge:
+            "gauge.with.dots.needle.67percent"
+        case .geoMap:
+            "map.fill"
         }
     }
 }

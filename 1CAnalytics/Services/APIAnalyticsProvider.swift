@@ -97,6 +97,10 @@ struct AnalyticsAPIIndicator: Decodable {
     let unit: String?
     let colorGraph: String?
     let colorValue: String?
+    let showLegend: Bool?
+    let showTotal: Bool?
+    let showDetails: Bool?
+    let widthPercent: Double?
 
     private enum CodingKeys: String, CodingKey {
         case name
@@ -107,6 +111,10 @@ struct AnalyticsAPIIndicator: Decodable {
         case unit
         case colorGraph
         case colorValue
+        case showLegend
+        case showTotal
+        case showDetails
+        case widthPercent
     }
 
     init(from decoder: any Decoder) throws {
@@ -119,6 +127,10 @@ struct AnalyticsAPIIndicator: Decodable {
         unit = try container.decodeIfPresent(String.self, forKey: .unit)
         colorGraph = try container.decodeIfPresent(String.self, forKey: .colorGraph)
         colorValue = try container.decodeIfPresent(String.self, forKey: .colorValue)
+        showLegend = try container.decodeIfPresent(Bool.self, forKey: .showLegend)
+        showTotal = try container.decodeIfPresent(Bool.self, forKey: .showTotal)
+        showDetails = try container.decodeIfPresent(Bool.self, forKey: .showDetails)
+        widthPercent = try container.decodeIfPresent(Double.self, forKey: .widthPercent)
     }
 
     func toIndicator(index: Int, sectionID: String) -> Indicator {
@@ -149,13 +161,17 @@ struct AnalyticsAPIIndicator: Decodable {
             source: "DGU_APP_Mobile_Client/analitycs",
             colorGraph: colorGraph ?? totalRow?.colorGraph ?? primaryValue?.colorGraph,
             colorValue: colorValue ?? totalRow?.colorValue ?? primaryValue?.colorValue,
+            showLegend: showLegend,
+            showTotal: showTotal,
+            showDetails: showDetails,
+            widthPercent: widthPercent,
             rows: rows
         )
     }
 
     private var defaultUnit: String? {
         switch type {
-        case .oneValue, .linearProgress, .compactBar:
+        case .oneValue, .linearProgress, .gauge, .geoMap, .compactBar:
             nil
         case .bar, .horizontalBar, .stackedBar, .donut:
             "чел."

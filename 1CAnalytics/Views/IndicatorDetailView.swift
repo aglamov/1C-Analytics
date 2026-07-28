@@ -82,15 +82,22 @@ struct IndicatorDetailView: View {
 
     @ViewBuilder
     private func chartSection(fillsAvailableHeight: Bool, aspectRatio: CGFloat = 1.0) -> some View {
-        let chart = AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
-            .frame(maxWidth: .infinity)
-
-        if fillsAvailableHeight {
-            chart
-                .frame(maxHeight: .infinity)
+        if indicator.chartType == .geoMap {
+            GeoMapIndicatorView(indicator: indicator)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: fillsAvailableHeight ? nil : 360, maxHeight: fillsAvailableHeight ? .infinity : 420)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
-            chart
-                .aspectRatio(aspectRatio, contentMode: .fit)
+            let chart = AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
+                .frame(maxWidth: .infinity)
+
+            if fillsAvailableHeight {
+                chart
+                    .frame(maxHeight: .infinity)
+            } else {
+                chart
+                    .aspectRatio(aspectRatio, contentMode: .fit)
+            }
         }
     }
 

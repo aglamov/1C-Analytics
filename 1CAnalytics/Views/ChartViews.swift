@@ -63,7 +63,7 @@ struct AnalyticsChart: View {
                 stackedBars
             case .donut:
                 donut
-            case .oneValue, .linearProgress:
+            case .oneValue, .linearProgress, .gauge, .geoMap:
                 EmptyView()
             }
 

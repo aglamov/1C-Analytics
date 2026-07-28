@@ -300,6 +300,61 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(indicator.showsAggregateValue)
     }
 
+    func testResponseMappingSupportsGaugeGeoMapAndServerDisplayOptions() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [
+                {
+                  "name": "Финансы",
+                  "values": [{
+                    "name": "Факт доходов, тыс. руб",
+                    "values": [{
+                      "value": 13591215,
+                      "valueMax": 24009730,
+                      "colorGraph": "#0089fe",
+                      "colorValue": "#6ba547"
+                    }],
+                    "widthPercent": 50,
+                    "type": "Gauge"
+                  }]
+                },
+                {
+                  "name": "Международная деятельность",
+                  "values": [{
+                    "name": "ИГ по регионам мира, чел",
+                    "values": [
+                      {"group": "КИТАЙ", "value": 1757},
+                      {"group": "ТУРКМЕНИСТАН", "value": 1009}
+                    ],
+                    "showLegend": false,
+                    "showTotal": false,
+                    "type": "GeoMap"
+                  }]
+                }
+              ]
+            }
+            """#.utf8
+        )
+
+        let dashboard = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data).toDashboard()
+        let gauge = dashboard.sections[0].indicators[0]
+        let geoMap = dashboard.sections[1].indicators[0]
+
+        XCTAssertEqual(gauge.chartType, .gauge)
+        XCTAssertEqual(gauge.value, 13_591_215)
+        XCTAssertEqual(gauge.valueMax, 24_009_730)
+        XCTAssertEqual(gauge.widthPercent, 50)
+        XCTAssertFalse(gauge.supportsDetail)
+
+        XCTAssertEqual(geoMap.chartType, .geoMap)
+        XCTAssertEqual(geoMap.rows.map(\.label), ["КИТАЙ", "ТУРКМЕНИСТАН"])
+        XCTAssertEqual(geoMap.value, 2_766)
+        XCTAssertFalse(geoMap.showsLegend)
+        XCTAssertFalse(geoMap.showsAggregateValue)
+        XCTAssertTrue(geoMap.supportsDetail)
+    }
+
     func testDashboardDecodesLegacyCachedTimestamp() throws {
         let data = Data(
             #"{"id":"cached","title":"Cached","updatedAt":"2026-07-21T10:00:00Z","indicators":[]}"#.utf8

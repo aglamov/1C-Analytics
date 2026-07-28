@@ -76,6 +76,10 @@ struct Indicator: Identifiable, Codable, Equatable {
     let source: String?
     let colorGraph: String?
     let colorValue: String?
+    let showLegend: Bool?
+    let showTotal: Bool?
+    let showDetails: Bool?
+    let widthPercent: Double?
     let rows: [IndicatorRow]
 
     init(
@@ -88,6 +92,10 @@ struct Indicator: Identifiable, Codable, Equatable {
         source: String?,
         colorGraph: String? = nil,
         colorValue: String? = nil,
+        showLegend: Bool? = nil,
+        showTotal: Bool? = nil,
+        showDetails: Bool? = nil,
+        widthPercent: Double? = nil,
         rows: [IndicatorRow]
     ) {
         self.id = id
@@ -99,6 +107,10 @@ struct Indicator: Identifiable, Codable, Equatable {
         self.source = source
         self.colorGraph = colorGraph
         self.colorValue = colorValue
+        self.showLegend = showLegend
+        self.showTotal = showTotal
+        self.showDetails = showDetails
+        self.widthPercent = widthPercent
         self.rows = rows
     }
 }
@@ -170,6 +182,8 @@ enum ChartType: String, CaseIterable, Codable {
     case donut = "SectorMarkInnerRadius"
     case oneValue = "OneValue"
     case linearProgress = "LinearProgressIndicator"
+    case gauge = "Gauge"
+    case geoMap = "GeoMap"
 
     var title: String {
         switch self {
@@ -187,13 +201,21 @@ enum ChartType: String, CaseIterable, Codable {
             "OneValue"
         case .linearProgress:
             "LinearProgressIndicator"
+        case .gauge:
+            "Gauge"
+        case .geoMap:
+            "GeoMap"
         }
     }
 }
 
 extension Indicator {
     var showsAggregateValue: Bool {
-        !title.isPlanFactIndicatorTitle
+        showTotal ?? !title.isPlanFactIndicatorTitle
+    }
+
+    var showsLegend: Bool {
+        showLegend ?? false
     }
 
     var orderedRows: [IndicatorRow] {
@@ -246,18 +268,20 @@ extension Indicator {
                 .orange
             case .oneValue:
                 .orange
-            case .linearProgress:
+            case .linearProgress, .gauge:
                 .blue
+            case .geoMap:
+                .green
             }
         }
     }
 
     var supportsDetail: Bool {
         switch chartType {
-        case .oneValue, .linearProgress:
+        case .oneValue, .linearProgress, .gauge:
             false
-        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut:
-            true
+        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .geoMap:
+            showDetails ?? true
         }
     }
 

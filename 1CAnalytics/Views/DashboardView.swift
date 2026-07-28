@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 struct DashboardView: View {
@@ -334,16 +335,33 @@ private struct IndicatorDashboardCard: View {
             EmptyView()
         case .linearProgress:
             LinearProgressIndicatorView(indicator: indicator)
+        case .gauge:
+            GaugeIndicatorView(indicator: indicator)
+                .frame(minHeight: 190, idealHeight: 220, maxHeight: 240)
+        case .geoMap:
+            GeoMapIndicatorView(indicator: indicator)
+                .frame(minHeight: 280, idealHeight: 320, maxHeight: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
         case .compactBar:
             VStack(alignment: .leading, spacing: 12) {
-                AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false, showsLegend: false)
+                AnalyticsChart(
+                    indicator: indicator,
+                    showsTitle: false,
+                    usesCardBackground: false,
+                    showsLegend: indicator.showsLegend
+                )
                     .frame(minHeight: 180, idealHeight: 220, maxHeight: 260)
                     .padding(.top, 2)
 
                 CompactBarValues(indicator: indicator)
             }
         case .bar, .horizontalBar, .stackedBar, .donut:
-            AnalyticsChart(indicator: indicator, showsTitle: false, usesCardBackground: false, showsLegend: false)
+            AnalyticsChart(
+                indicator: indicator,
+                showsTitle: false,
+                usesCardBackground: false,
+                showsLegend: indicator.showsLegend
+            )
                 .frame(minHeight: 220, idealHeight: 260, maxHeight: 320)
                 .padding(.top, 2)
         }
@@ -403,6 +421,10 @@ private struct IndicatorDashboardCard: View {
             "waveform.path.ecg"
         case .linearProgress:
             "chart.xyaxis.line"
+        case .gauge:
+            "gauge.with.dots.needle.67percent"
+        case .geoMap:
+            "map.fill"
         }
     }
 }
@@ -543,4 +565,185 @@ private struct LinearProgressIndicatorView: View {
 
         return "\(value.formatted(.number.grouping(.automatic))) из \(valueMax.formatted(.number.grouping(.automatic)))"
     }
+}
+
+private struct GaugeIndicatorView: View {
+    let indicator: Indicator
+    @State private var hasAppeared = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(indicator.graphColor.opacity(0.16), lineWidth: 18)
+
+            Circle()
+                .trim(from: 0, to: hasAppeared ? progress : 0)
+                .stroke(
+                    indicator.graphColor,
+                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            VStack(spacing: 5) {
+                Text(progress.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.system(.title, design: .rounded).weight(.bold))
+                    .foregroundStyle(indicator.valueColor)
+                    .monospacedDigit()
+
+                if let value = indicator.value, let valueMax = indicator.valueMax {
+                    Text(
+                        "\(value.formatted(.number.notation(.compactName))) из "
+                            + valueMax.formatted(.number.notation(.compactName))
+                    )
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(indicator.title)
+        .accessibilityValue(accessibilityValue)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.8)) {
+                hasAppeared = true
+            }
+        }
+    }
+
+    private var progress: Double {
+        guard let valueMax = indicator.valueMax, valueMax > 0, let value = indicator.value else {
+            return 0
+        }
+
+        return min(max(NSDecimalNumber(decimal: value).doubleValue / valueMax, 0), 1)
+    }
+
+    private var accessibilityValue: String {
+        guard let value = indicator.value, let valueMax = indicator.valueMax else {
+            return "Нет данных"
+        }
+
+        return "\(value.formatted(.number.grouping(.automatic))) из \(valueMax.formatted(.number.grouping(.automatic)))"
+    }
+}
+
+struct GeoMapIndicatorView: View {
+    let indicator: Indicator
+
+    var body: some View {
+        Map(
+            initialPosition: .region(
+                MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 24, longitude: 45),
+                    span: MKCoordinateSpan(latitudeDelta: 125, longitudeDelta: 300)
+                )
+            ),
+            interactionModes: [.pan, .zoom]
+        ) {
+            ForEach(mapRows) { item in
+                Annotation(item.row.label, coordinate: item.coordinate, anchor: .center) {
+                    ZStack {
+                        Circle()
+                            .fill(indicator.graphColor.opacity(0.82))
+                        Circle()
+                            .strokeBorder(.white.opacity(0.88), lineWidth: 1)
+
+                        if item.row.value >= labelThreshold {
+                            Text(item.row.value.formatted(.number.notation(.compactName)))
+                                .font(.caption2.monospacedDigit().weight(.bold))
+                                .foregroundStyle(.white)
+                                .minimumScaleFactor(0.6)
+                                .lineLimit(1)
+                        }
+                    }
+                    .frame(width: markerSize(for: item.row.value), height: markerSize(for: item.row.value))
+                    .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(item.row.label)
+                    .accessibilityValue(item.row.value.formatted(.number.grouping(.automatic)))
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
+        .accessibilityLabel("Карта распределения по странам")
+    }
+
+    private var mapRows: [GeoMapItem] {
+        indicator.rows
+            .sorted { $0.value > $1.value }
+            .prefix(40)
+            .compactMap { row in
+                GeoMapCountryCatalog.coordinates[row.label].map {
+                    GeoMapItem(row: row, coordinate: $0)
+                }
+            }
+    }
+
+    private var maximumValue: Double {
+        mapRows.map(\.row.value).max() ?? 1
+    }
+
+    private var labelThreshold: Double {
+        maximumValue * 0.18
+    }
+
+    private func markerSize(for value: Double) -> CGFloat {
+        let ratio = sqrt(max(value, 0) / max(maximumValue, 1))
+        return 14 + 28 * ratio
+    }
+}
+
+private struct GeoMapItem: Identifiable {
+    let row: IndicatorRow
+    let coordinate: CLLocationCoordinate2D
+
+    var id: IndicatorRow.ID {
+        row.id
+    }
+}
+
+private enum GeoMapCountryCatalog {
+    static let coordinates: [String: CLLocationCoordinate2D] = [
+        "КИТАЙ": CLLocationCoordinate2D(latitude: 35.000, longitude: 103.000),
+        "ТУРКМЕНИСТАН": CLLocationCoordinate2D(latitude: 39.100, longitude: 59.400),
+        "ИРАН (ИСЛАМСКАЯ РЕСПУБЛИКА)": CLLocationCoordinate2D(latitude: 32.166, longitude: 54.931),
+        "УЗБЕКИСТАН": CLLocationCoordinate2D(latitude: 41.694, longitude: 64.005),
+        "ТАДЖИКИСТАН": CLLocationCoordinate2D(latitude: 38.200, longitude: 72.587),
+        "КАЗАХСТАН": CLLocationCoordinate2D(latitude: 49.054, longitude: 68.686),
+        "КИРГИЗИЯ": CLLocationCoordinate2D(latitude: 41.669, longitude: 74.533),
+        "НИГЕРИЯ": CLLocationCoordinate2D(latitude: 9.440, longitude: 7.503),
+        "БЕЛАРУСЬ": CLLocationCoordinate2D(latitude: 53.700, longitude: 27.900),
+        "ВЬЕТНАМ": CLLocationCoordinate2D(latitude: 21.715, longitude: 105.387),
+        "ТУРЦИЯ": CLLocationCoordinate2D(latitude: 39.345, longitude: 34.508),
+        "СИРИЙСКАЯ АРАБСКАЯ РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: 35.007, longitude: 38.278),
+        "ГАНА": CLLocationCoordinate2D(latitude: 7.718, longitude: -1.037),
+        "АЗЕРБАЙДЖАН": CLLocationCoordinate2D(latitude: 40.402, longitude: 47.211),
+        "ЛИВАН": CLLocationCoordinate2D(latitude: 34.133, longitude: 35.993),
+        "АФГАНИСТАН": CLLocationCoordinate2D(latitude: 34.164, longitude: 66.497),
+        "МОЛДОВА, РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: 47.200, longitude: 28.500),
+        "БАНГЛАДЕШ": CLLocationCoordinate2D(latitude: 24.215, longitude: 89.685),
+        "КАМЕРУН": CLLocationCoordinate2D(latitude: 4.585, longitude: 12.473),
+        "ЧАД": CLLocationCoordinate2D(latitude: 15.143, longitude: 18.645),
+        "ЗАМБИЯ": CLLocationCoordinate2D(latitude: -14.661, longitude: 26.395),
+        "ЭКВАДОР": CLLocationCoordinate2D(latitude: -1.259, longitude: -78.188),
+        "МОНГОЛИЯ": CLLocationCoordinate2D(latitude: 45.997, longitude: 104.150),
+        "АЛЖИР": CLLocationCoordinate2D(latitude: 27.397, longitude: 2.808),
+        "ЕГИПЕТ": CLLocationCoordinate2D(latitude: 26.186, longitude: 29.446),
+        "АНГОЛА": CLLocationCoordinate2D(latitude: -12.183, longitude: 17.984),
+        "ИНДИЯ": CLLocationCoordinate2D(latitude: 22.687, longitude: 79.358),
+        "ЙЕМЕН": CLLocationCoordinate2D(latitude: 15.328, longitude: 45.874),
+        "АРМЕНИЯ": CLLocationCoordinate2D(latitude: 40.459, longitude: 44.801),
+        "ПАКИСТАН": CLLocationCoordinate2D(latitude: 29.328, longitude: 68.546),
+        "ИОРДАНИЯ": CLLocationCoordinate2D(latitude: 30.805, longitude: 36.376),
+        "ИРАК": CLLocationCoordinate2D(latitude: 33.094, longitude: 43.262),
+        "КОНГО, ДЕМОКРАТИЧЕСКАЯ РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: -1.858, longitude: 23.459),
+        "ГВИНЕЯ": CLLocationCoordinate2D(latitude: 10.619, longitude: -10.016),
+        "СЬЕРРА-ЛЕОНЕ": CLLocationCoordinate2D(latitude: 8.617, longitude: -11.764),
+        "МАДАГАСКАР": CLLocationCoordinate2D(latitude: -18.628, longitude: 46.704),
+        "ТАНЗАНИЯ, ОБЪЕДИНЕННАЯ РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: -6.052, longitude: 34.959),
+        "ИНДОНЕЗИЯ": CLLocationCoordinate2D(latitude: -0.954, longitude: 101.893),
+        "МАЛИ": CLLocationCoordinate2D(latitude: 18.693, longitude: -2.038),
+        "КОНГО": CLLocationCoordinate2D(latitude: -0.700, longitude: 15.200)
+    ]
 }
