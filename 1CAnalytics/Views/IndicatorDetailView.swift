@@ -42,7 +42,12 @@ struct IndicatorDetailView: View {
 
             HStack(alignment: .top, spacing: 16) {
                 chartSection(fillsAvailableHeight: true)
-                    .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: lowerHeight,
+                        maxHeight: lowerHeight,
+                        alignment: .top
+                    )
 
                 rowsSection
                     .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
@@ -84,8 +89,7 @@ struct IndicatorDetailView: View {
     private func chartSection(fillsAvailableHeight: Bool, aspectRatio: CGFloat = 1.0) -> some View {
         if indicator.chartType == .geoMap {
             GeoMapIndicatorView(indicator: indicator)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: fillsAvailableHeight ? nil : 360, maxHeight: fillsAvailableHeight ? .infinity : 420)
+                .frame(maxWidth: .infinity, alignment: .top)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
             let chart = AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
@@ -102,7 +106,15 @@ struct IndicatorDetailView: View {
     }
 
     private var rowsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let groups = detailGroups
+        let maximumValue = groups
+            .flatMap { group in
+                group.rows.count > 1 ? group.rows.map(\.value) : [group.totalValue]
+            }
+            .max() ?? 0
+        let totalValue = groups.reduce(0) { $0 + $1.totalValue }
+
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Детализация")
@@ -116,30 +128,35 @@ struct IndicatorDetailView: View {
                 Spacer()
 
                 if indicator.showsAggregateValue {
-                    Text(totalText)
+                    Text(totalText(for: totalValue))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
             }
 
-            VStack(spacing: 0) {
-                ForEach(orderedGroups) { group in
+            LazyVStack(spacing: 0) {
+                ForEach(groups) { group in
                     DetailGroupRowView(
                         group: group,
-                        maxValue: maxValue,
+                        maxValue: maximumValue,
                         totalValue: totalValue,
                         indicator: indicator,
                         selectedRowID: selectedRowID,
+                        animatesOnAppear: indicator.chartType != .geoMap,
+                        selectionEnabled: indicator.chartType != .geoMap,
                         onSelect: selectRow
                     )
 
-                    if group.id != orderedGroups.last?.id {
+                    if group.id != groups.last?.id {
                         Divider()
                             .padding(.leading, 2)
                     }
                 }
             }
-            .background(rowsBackgroundColor, in: RoundedRectangle(cornerRadius: 8))
+            .background {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(rowsBackgroundColor)
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
@@ -149,27 +166,29 @@ struct IndicatorDetailView: View {
         .premiumPanel()
     }
 
+    private var detailGroups: [IndicatorRowGroup] {
+        let groups = indicator.rowGroups
+        guard indicator.chartType == .geoMap else {
+            return groups
+        }
+
+        return groups
+            .enumerated()
+            .sorted { left, right in
+                if left.element.totalValue == right.element.totalValue {
+                    return left.offset < right.offset
+                }
+
+                return left.element.totalValue > right.element.totalValue
+            }
+            .map(\.element)
+    }
+
     private var rowsBackgroundColor: Color {
         colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.44) : Color(.systemBackground).opacity(0.56)
     }
 
-    private var orderedGroups: [IndicatorRowGroup] {
-        indicator.rowGroups
-    }
-
-    private var maxValue: Double {
-        orderedGroups
-            .flatMap { group in
-                group.rows.count > 1 ? group.rows.map(\.value) : [group.totalValue]
-            }
-            .max() ?? 0
-    }
-
-    private var totalValue: Double {
-        orderedGroups.reduce(0) { $0 + $1.totalValue }
-    }
-
-    private var totalText: String {
+    private func totalText(for totalValue: Double) -> String {
         "Итого \(totalValue.formatted(.number.precision(.fractionLength(0))))"
     }
 
@@ -186,6 +205,8 @@ private struct DetailGroupRowView: View {
     let totalValue: Double
     let indicator: Indicator
     let selectedRowID: IndicatorRow.ID?
+    let animatesOnAppear: Bool
+    let selectionEnabled: Bool
     let onSelect: (IndicatorRow.ID) -> Void
     @State private var hasAppeared = false
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
@@ -214,6 +235,10 @@ private struct DetailGroupRowView: View {
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isSelected)
         .onAppear {
+            guard animatesOnAppear else {
+                return
+            }
+
             withAnimation(.easeOut(duration: 0.65)) {
                 hasAppeared = true
             }
@@ -241,48 +266,66 @@ private struct DetailGroupRowView: View {
     }
 
     private func progress(for value: Double) -> Double {
-        guard maxValue > 0, hasAppeared else {
+        guard maxValue > 0, !animatesOnAppear || hasAppeared else {
             return 0
         }
 
         return value / maxValue
     }
 
+    @ViewBuilder
     private func groupedSeriesRow(_ row: IndicatorRow) -> some View {
-        Button {
-            onSelect(row.id)
-        } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                valueHeader(
-                    title: row.series ?? "Значение",
-                    value: row.value,
-                    color: segmentColor(for: row)
-                )
-
-                progressBar(value: row.value, color: segmentColor(for: row))
+        if selectionEnabled {
+            Button {
+                onSelect(row.id)
+            } label: {
+                groupedSeriesRowContent(row)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(
-                selectedRowID == row.id ? segmentColor(for: row).opacity(0.08) : .clear,
-                in: RoundedRectangle(cornerRadius: 8)
-            )
+            .buttonStyle(.plain)
+            .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "Значение")")
+        } else {
+            groupedSeriesRowContent(row)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "Значение")")
     }
 
+    @ViewBuilder
     private func singleValueRow(_ row: IndicatorRow) -> some View {
-        Button {
-            onSelect(row.id)
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                valueHeader(title: group.label, value: group.totalValue, color: groupColor)
-                progressBar(value: group.totalValue, color: groupColor)
+        if selectionEnabled {
+            Button {
+                onSelect(row.id)
+            } label: {
+                singleValueRowContent
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Выбрать \(group.label)")
+        } else {
+            singleValueRowContent
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Выбрать \(group.label)")
+    }
+
+    private func groupedSeriesRowContent(_ row: IndicatorRow) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            valueHeader(
+                title: row.series ?? "Значение",
+                value: row.value,
+                color: segmentColor(for: row)
+            )
+
+            progressBar(value: row.value, color: segmentColor(for: row))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            selectedRowID == row.id ? segmentColor(for: row).opacity(0.08) : .clear,
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+    }
+
+    private var singleValueRowContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            valueHeader(title: group.label, value: group.totalValue, color: groupColor)
+            progressBar(value: group.totalValue, color: groupColor)
+        }
     }
 
     private func valueHeader(title: String, value: Double, color: Color) -> some View {

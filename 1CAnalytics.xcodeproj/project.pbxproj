@@ -23,6 +23,7 @@
 		A10000000000000000000020 /* AuthenticationCredentialsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* AuthenticationCredentialsStore.swift */; };
 		A10000000000000000000021 /* DashboardCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* DashboardCache.swift */; };
 		A10000000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* Assets.xcassets */; };
+		A10000000000000000000023 /* world-countries-110m.geojson in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* world-countries-110m.geojson */; };
 		B10000000000000000000001 /* ReleaseReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* ReleaseReadinessTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +59,7 @@
 		A20000000000000000000020 /* AuthenticationCredentialsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationCredentialsStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000021 /* DashboardCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCache.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20000000000000000000023 /* world-countries-110m.geojson */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "world-countries-110m.geojson"; sourceTree = "<group>"; };
 		B20000000000000000000001 /* 1C AnalyticsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "1C AnalyticsTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000002 /* ReleaseReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseReadinessTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -96,6 +98,7 @@
 				A20000000000000000000001 /* 1CAnalyticsApp.swift */,
 				A20000000000000000000012 /* Info.plist */,
 				A20000000000000000000022 /* Assets.xcassets */,
+				A40000000000000000000009 /* Resources */,
 				A40000000000000000000003 /* Models */,
 				A40000000000000000000004 /* Services */,
 				A40000000000000000000005 /* ViewModels */,
@@ -163,6 +166,14 @@
 				B20000000000000000000001 /* 1C AnalyticsTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000009 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000023 /* world-countries-110m.geojson */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		B40000000000000000000001 /* 1CAnalyticsTests */ = {
@@ -255,6 +266,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000000000000000000022 /* Assets.xcassets in Resources */,
+				A10000000000000000000023 /* world-countries-110m.geojson in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

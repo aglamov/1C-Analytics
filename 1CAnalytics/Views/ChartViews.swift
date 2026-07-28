@@ -7,6 +7,7 @@ struct AnalyticsChart: View {
     var usesCardBackground = true
     var showsLegend = true
     var showsValueLabels = true
+    var animatesOnAppear = true
     private var externalSelection: Binding<IndicatorRow.ID?>?
     @State private var internalSelectedRowID: IndicatorRow.ID?
     @State private var hasAppeared = false
@@ -20,6 +21,7 @@ struct AnalyticsChart: View {
         usesCardBackground: Bool = true,
         showsLegend: Bool = true,
         showsValueLabels: Bool = true,
+        animatesOnAppear: Bool = true,
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
         self.indicator = indicator
@@ -27,6 +29,7 @@ struct AnalyticsChart: View {
         self.usesCardBackground = usesCardBackground
         self.showsLegend = showsLegend
         self.showsValueLabels = showsValueLabels
+        self.animatesOnAppear = animatesOnAppear
         self.externalSelection = selectedRowID
     }
 
@@ -74,6 +77,9 @@ struct AnalyticsChart: View {
         .modifier(ChartChromeModifier(isEnabled: usesCardBackground))
         .chartLegend(.hidden)
         .onAppear {
+            guard animatesOnAppear else {
+                return
+            }
             withAnimation(.easeOut(duration: 0.7)) {
                 hasAppeared = true
             }
@@ -316,7 +322,7 @@ struct AnalyticsChart: View {
     }
 
     private func animatedValue(for row: IndicatorRow) -> Double {
-        hasAppeared ? row.value : 0
+        !animatesOnAppear || hasAppeared ? row.value : 0
     }
 
     private func opacity(for row: IndicatorRow) -> Double {

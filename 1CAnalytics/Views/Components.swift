@@ -450,17 +450,37 @@ struct DashboardConnectionBar: View {
     var isRefreshing = false
 
     var body: some View {
-        Group {
+        HStack(spacing: 8) {
             if isCached {
                 cachedContent
             } else {
                 currentContent
             }
+
+            Spacer(minLength: 8)
+
+            Color.clear
+                .frame(width: 16, height: 16)
+                .overlay {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Обновление данных")
+                    }
+                }
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.78)
+        .padding(.horizontal)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
         .background(.bar)
         .overlay(alignment: .top) {
             Divider()
         }
+        .frame(minHeight: 44)
         .animation(.easeInOut(duration: 0.2), value: isRefreshing)
     }
 
@@ -470,19 +490,7 @@ struct DashboardConnectionBar: View {
                 .foregroundStyle(.green)
 
             Text(dateText)
-
-            Spacer()
-
-            if isRefreshing {
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityLabel("Обновление данных")
-            }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
     }
 
     private var cachedContent: some View {
@@ -491,13 +499,7 @@ struct DashboardConnectionBar: View {
                 .foregroundStyle(.orange)
 
             Text(cachedDateText)
-
-            Spacer()
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
     }
 
     private var dateText: String {

@@ -114,12 +114,13 @@ struct DashboardView: View {
                 .padding(.vertical, 16)
             }
             .background(AppBackground())
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 DashboardConnectionBar(
                     date: dashboard.fetchedAt,
                     isCached: viewModel.isShowingCachedData,
                     isRefreshing: viewModel.isRefreshing
                 )
+                .ignoresSafeArea(edges: .bottom)
             }
         }
     }
@@ -282,7 +283,6 @@ private struct ChartThemePreview: View {
 
 private struct IndicatorDashboardCard: View {
     let indicator: Indicator
-    @State private var isVisible = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -309,13 +309,6 @@ private struct IndicatorDashboardCard: View {
                     .accessibilityHidden(true)
             }
         }
-        .scaleEffect(isVisible ? 1 : 0.98)
-        .opacity(isVisible ? 1 : 0)
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.86)) {
-                isVisible = true
-            }
-        }
     }
 
     @ViewBuilder
@@ -340,7 +333,7 @@ private struct IndicatorDashboardCard: View {
                 .frame(minHeight: 190, idealHeight: 220, maxHeight: 240)
         case .geoMap:
             GeoMapIndicatorView(indicator: indicator)
-                .frame(minHeight: 280, idealHeight: 320, maxHeight: 360)
+                .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case .compactBar:
             VStack(alignment: .leading, spacing: 12) {
@@ -348,7 +341,8 @@ private struct IndicatorDashboardCard: View {
                     indicator: indicator,
                     showsTitle: false,
                     usesCardBackground: false,
-                    showsLegend: indicator.showsLegend
+                    showsLegend: indicator.showsLegend,
+                    animatesOnAppear: false
                 )
                     .frame(minHeight: 180, idealHeight: 220, maxHeight: 260)
                     .padding(.top, 2)
@@ -360,7 +354,8 @@ private struct IndicatorDashboardCard: View {
                 indicator: indicator,
                 showsTitle: false,
                 usesCardBackground: false,
-                showsLegend: indicator.showsLegend
+                showsLegend: indicator.showsLegend,
+                animatesOnAppear: false
             )
                 .frame(minHeight: 220, idealHeight: 260, maxHeight: 320)
                 .padding(.top, 2)
@@ -526,7 +521,6 @@ private struct OneValueDashboardContent: View {
 
 private struct LinearProgressIndicatorView: View {
     let indicator: Indicator
-    @State private var hasAppeared = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -536,18 +530,13 @@ private struct LinearProgressIndicatorView: View {
 
                 Capsule()
                     .fill(indicator.graphColor)
-                    .frame(width: proxy.size.width * (hasAppeared ? progress : 0))
+                    .frame(width: proxy.size.width * progress)
             }
         }
         .frame(height: 10)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(indicator.title)
         .accessibilityValue(accessibilityValue)
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.7)) {
-                hasAppeared = true
-            }
-        }
     }
 
     private var progress: Double {
@@ -569,46 +558,85 @@ private struct LinearProgressIndicatorView: View {
 
 private struct GaugeIndicatorView: View {
     let indicator: Indicator
-    @State private var hasAppeared = false
 
     var body: some View {
-        ZStack {
-            Circle()
-                .stroke(indicator.graphColor.opacity(0.16), lineWidth: 18)
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            let lineWidth = max(14, size * 0.09)
 
-            Circle()
-                .trim(from: 0, to: hasAppeared ? progress : 0)
-                .stroke(
-                    indicator.graphColor,
-                    style: StrokeStyle(lineWidth: 18, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-
-            VStack(spacing: 5) {
-                Text(progress.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.system(.title, design: .rounded).weight(.bold))
-                    .foregroundStyle(indicator.valueColor)
-                    .monospacedDigit()
-
-                if let value = indicator.value, let valueMax = indicator.valueMax {
-                    Text(
-                        "\(value.formatted(.number.notation(.compactName))) из "
-                            + valueMax.formatted(.number.notation(.compactName))
+            ZStack {
+                Circle()
+                    .trim(from: 0.125, to: 0.875)
+                    .stroke(
+                        indicator.graphColor.opacity(0.13),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(90))
+
+                Circle()
+                    .trim(from: 0.125, to: 0.125 + 0.75 * progress)
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                indicator.graphColor.opacity(0.52),
+                                indicator.graphColor
+                            ],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(90))
+
+                ForEach(0..<11, id: \.self) { tick in
+                    Capsule()
+                        .fill(tick <= Int(progress * 10) ? indicator.graphColor : Color.secondary.opacity(0.22))
+                        .frame(width: 2, height: tick.isMultiple(of: 5) ? 9 : 5)
+                        .offset(y: -(size * 0.38))
+                        .rotationEffect(.degrees(-135 + Double(tick) * 27))
                 }
+
+                Capsule()
+                    .fill(indicator.valueColor)
+                    .frame(width: 4, height: size * 0.29)
+                    .offset(y: -(size * 0.145))
+                    .rotationEffect(.degrees(-135 + 270 * progress))
+                    .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
+
+                Circle()
+                    .fill(indicator.graphColor)
+                    .frame(width: 15, height: 15)
+                    .overlay {
+                        Circle()
+                            .fill(Color(.systemBackground))
+                            .frame(width: 5, height: 5)
+                    }
+
+                VStack(spacing: 4) {
+                    Spacer()
+
+                    Text(progress.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                        .foregroundStyle(indicator.valueColor)
+                        .monospacedDigit()
+
+                    if let value = indicator.value, let valueMax = indicator.valueMax {
+                        Text(
+                            "\(value.formatted(.number.notation(.compactName))) из "
+                                + valueMax.formatted(.number.notation(.compactName))
+                        )
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.bottom, max(2, size * 0.02))
             }
+            .frame(width: size, height: size)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(12)
+        .padding(.horizontal, 8)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(indicator.title)
         .accessibilityValue(accessibilityValue)
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.8)) {
-                hasAppeared = true
-            }
-        }
     }
 
     private var progress: Double {
@@ -630,120 +658,301 @@ private struct GaugeIndicatorView: View {
 
 struct GeoMapIndicatorView: View {
     let indicator: Indicator
+    private let valuesByCountryKey: [String: Double]
+    private let maximumValue: Double
+    private let minimumValue: Double
+    @State private var geometry = GeoMapGeometry.empty
 
-    var body: some View {
-        Map(
-            initialPosition: .region(
-                MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 24, longitude: 45),
-                    span: MKCoordinateSpan(latitudeDelta: 125, longitudeDelta: 300)
-                )
-            ),
-            interactionModes: [.pan, .zoom]
-        ) {
-            ForEach(mapRows) { item in
-                Annotation(item.row.label, coordinate: item.coordinate, anchor: .center) {
-                    ZStack {
-                        Circle()
-                            .fill(indicator.graphColor.opacity(0.82))
-                        Circle()
-                            .strokeBorder(.white.opacity(0.88), lineWidth: 1)
+    init(indicator: Indicator) {
+        self.indicator = indicator
+        self.maximumValue = indicator.rows.map(\.value).max() ?? 1
+        self.minimumValue = indicator.rows.map(\.value).filter { $0 > 0 }.min() ?? 0
+        self.valuesByCountryKey = indicator.rows.reduce(into: [:]) { values, row in
+            let key = row.label.geoCountryKey
+            values[key] = row.value
 
-                        if item.row.value >= labelThreshold {
-                            Text(item.row.value.formatted(.number.notation(.compactName)))
-                                .font(.caption2.monospacedDigit().weight(.bold))
-                                .foregroundStyle(.white)
-                                .minimumScaleFactor(0.6)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(width: markerSize(for: item.row.value), height: markerSize(for: item.row.value))
-                    .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(item.row.label)
-                    .accessibilityValue(item.row.value.formatted(.number.grouping(.automatic)))
-                }
+            if let isoCode = GeoCountryAliases.isoCodeByAPIName[key] {
+                values[isoCode] = row.value
             }
         }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            Canvas(opaque: false, colorMode: .linear, rendersAsynchronously: true) { context, size in
+                let plotRect = CGRect(origin: .zero, size: size)
+
+                for shape in geometry.shapes {
+                    let path = mapPath(for: shape, in: plotRect, bounds: geometry.bounds)
+                    context.fill(path, with: .color(fillColor(for: shape)))
+                    context.stroke(
+                        path,
+                        with: .color(Color.secondary.opacity(0.38)),
+                        style: StrokeStyle(lineWidth: 0.55, lineJoin: .round)
+                    )
+                }
+            }
+            .aspectRatio(geometry.aspectRatio, contentMode: .fit)
+            .padding(.horizontal, 4)
+            .accessibilityHidden(true)
+
+            mapLegend
+        }
+        .task {
+            if geometry.shapes.isEmpty {
+                geometry = GeoMapWorldGeometry.load()
+            }
+        }
         .accessibilityLabel("Карта распределения по странам")
     }
 
-    private var mapRows: [GeoMapItem] {
-        indicator.rows
-            .sorted { $0.value > $1.value }
-            .prefix(40)
-            .compactMap { row in
-                GeoMapCountryCatalog.coordinates[row.label].map {
-                    GeoMapItem(row: row, coordinate: $0)
+    private func value(for shape: GeoCountryShape) -> Double? {
+        shape.lookupKeys.compactMap { valuesByCountryKey[$0] }.first
+    }
+
+    private func fillColor(for shape: GeoCountryShape) -> Color {
+        guard let value = value(for: shape) else {
+            return Color.secondary.opacity(0.075)
+        }
+
+        let intensity = sqrt(max(value, 0) / max(maximumValue, 1))
+        return indicator.graphColor.opacity(0.20 + 0.76 * intensity)
+    }
+
+    private func mapPath(for shape: GeoCountryShape, in rect: CGRect, bounds: CGRect) -> Path {
+        var path = Path()
+        var previousPoint: CGPoint?
+
+        for normalizedPoint in shape.points {
+            let point = CGPoint(
+                x: rect.minX + ((normalizedPoint.x - bounds.minX) / bounds.width) * rect.width,
+                y: rect.minY + ((normalizedPoint.y - bounds.minY) / bounds.height) * rect.height
+            )
+
+            if let previousPoint,
+               abs(point.x - previousPoint.x) <= rect.width * 0.5 {
+                path.addLine(to: point)
+            } else {
+                if previousPoint != nil {
+                    path.closeSubpath()
+                }
+                path.move(to: point)
+            }
+
+            previousPoint = point
+        }
+
+        path.closeSubpath()
+        return path
+    }
+
+    private var mapLegend: some View {
+        VStack(alignment: .trailing, spacing: 5) {
+            Text(indicator.unit ?? "чел.")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 6) {
+                Text(minimumValue.formatted(.number.notation(.compactName)))
+                LinearGradient(
+                    colors: [
+                        indicator.graphColor.opacity(0.18),
+                        indicator.graphColor.opacity(0.92)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 72, height: 8)
+                .clipShape(Capsule())
+                Text(maximumValue.formatted(.number.notation(.compactName)))
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.primary)
+        }
+        .padding(9)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "Шкала от \(minimumValue.formatted(.number.grouping(.automatic))) "
+                + "до \(maximumValue.formatted(.number.grouping(.automatic)))"
+        )
+    }
+}
+
+private struct GeoCountryShape: Identifiable {
+    let id: String
+    let points: [CGPoint]
+    let lookupKeys: [String]
+}
+
+private struct GeoMapGeometry {
+    let shapes: [GeoCountryShape]
+    let bounds: CGRect
+
+    static let empty = GeoMapGeometry(
+        shapes: [],
+        bounds: CGRect(x: 0, y: 0, width: 1, height: 1)
+    )
+
+    var aspectRatio: CGFloat {
+        guard !shapes.isEmpty, bounds.height > 0 else {
+            return 2.07
+        }
+
+        return 2 * bounds.width / bounds.height
+    }
+}
+
+@MainActor
+private enum GeoMapWorldGeometry {
+    private static var cachedGeometry: GeoMapGeometry?
+
+    static func load() -> GeoMapGeometry {
+        if let cachedGeometry {
+            return cachedGeometry
+        }
+
+        guard let url = Bundle.main.url(
+            forResource: "world-countries-110m",
+            withExtension: "geojson"
+        ),
+        let data = try? Data(contentsOf: url),
+        let objects = try? MKGeoJSONDecoder().decode(data) else {
+            return .empty
+        }
+
+        var shapes: [GeoCountryShape] = []
+        var minimumX = CGFloat.greatestFiniteMagnitude
+        var minimumY = CGFloat.greatestFiniteMagnitude
+        var maximumX = -CGFloat.greatestFiniteMagnitude
+        var maximumY = -CGFloat.greatestFiniteMagnitude
+
+        for (featureIndex, object) in objects.enumerated() {
+            guard let feature = object as? MKGeoJSONFeature else {
+                continue
+            }
+
+            let properties = feature.properties.flatMap {
+                try? JSONDecoder().decode(GeoCountryProperties.self, from: $0)
+            }
+            let lookupKeys = [
+                properties?.nameRU?.geoCountryKey,
+                properties?.admin?.geoCountryKey,
+                properties?.isoA3?.geoCountryKey
+            ].compactMap(\.self)
+
+            var polygonIndex = 0
+            for geometry in feature.geometry {
+                let polygons: [MKPolygon]
+
+                if let polygon = geometry as? MKPolygon {
+                    polygons = [polygon]
+                } else if let multiPolygon = geometry as? MKMultiPolygon {
+                    polygons = multiPolygon.polygons
+                } else {
+                    continue
+                }
+
+                for polygon in polygons {
+                    let mapPoints = polygon.points()
+                    let normalizedPoints = (0..<polygon.pointCount).map { pointIndex in
+                        let coordinate = mapPoints[pointIndex].coordinate
+                        let point = CGPoint(
+                            x: (coordinate.longitude + 180) / 360,
+                            y: (90 - coordinate.latitude) / 180
+                        )
+
+                        minimumX = min(minimumX, point.x)
+                        minimumY = min(minimumY, point.y)
+                        maximumX = max(maximumX, point.x)
+                        maximumY = max(maximumY, point.y)
+                        return point
+                    }
+
+                    shapes.append(
+                        GeoCountryShape(
+                            id: "\(featureIndex)-\(polygonIndex)",
+                            points: normalizedPoints,
+                            lookupKeys: lookupKeys
+                        )
+                    )
+                    polygonIndex += 1
                 }
             }
-    }
+        }
 
-    private var maximumValue: Double {
-        mapRows.map(\.row.value).max() ?? 1
-    }
+        guard !shapes.isEmpty else {
+            return .empty
+        }
 
-    private var labelThreshold: Double {
-        maximumValue * 0.18
-    }
-
-    private func markerSize(for value: Double) -> CGFloat {
-        let ratio = sqrt(max(value, 0) / max(maximumValue, 1))
-        return 14 + 28 * ratio
-    }
-}
-
-private struct GeoMapItem: Identifiable {
-    let row: IndicatorRow
-    let coordinate: CLLocationCoordinate2D
-
-    var id: IndicatorRow.ID {
-        row.id
+        let geometry = GeoMapGeometry(
+            shapes: shapes,
+            bounds: CGRect(
+                x: minimumX,
+                y: minimumY,
+                width: maximumX - minimumX,
+                height: maximumY - minimumY
+            )
+        )
+        cachedGeometry = geometry
+        return geometry
     }
 }
 
-private enum GeoMapCountryCatalog {
-    static let coordinates: [String: CLLocationCoordinate2D] = [
-        "КИТАЙ": CLLocationCoordinate2D(latitude: 35.000, longitude: 103.000),
-        "ТУРКМЕНИСТАН": CLLocationCoordinate2D(latitude: 39.100, longitude: 59.400),
-        "ИРАН (ИСЛАМСКАЯ РЕСПУБЛИКА)": CLLocationCoordinate2D(latitude: 32.166, longitude: 54.931),
-        "УЗБЕКИСТАН": CLLocationCoordinate2D(latitude: 41.694, longitude: 64.005),
-        "ТАДЖИКИСТАН": CLLocationCoordinate2D(latitude: 38.200, longitude: 72.587),
-        "КАЗАХСТАН": CLLocationCoordinate2D(latitude: 49.054, longitude: 68.686),
-        "КИРГИЗИЯ": CLLocationCoordinate2D(latitude: 41.669, longitude: 74.533),
-        "НИГЕРИЯ": CLLocationCoordinate2D(latitude: 9.440, longitude: 7.503),
-        "БЕЛАРУСЬ": CLLocationCoordinate2D(latitude: 53.700, longitude: 27.900),
-        "ВЬЕТНАМ": CLLocationCoordinate2D(latitude: 21.715, longitude: 105.387),
-        "ТУРЦИЯ": CLLocationCoordinate2D(latitude: 39.345, longitude: 34.508),
-        "СИРИЙСКАЯ АРАБСКАЯ РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: 35.007, longitude: 38.278),
-        "ГАНА": CLLocationCoordinate2D(latitude: 7.718, longitude: -1.037),
-        "АЗЕРБАЙДЖАН": CLLocationCoordinate2D(latitude: 40.402, longitude: 47.211),
-        "ЛИВАН": CLLocationCoordinate2D(latitude: 34.133, longitude: 35.993),
-        "АФГАНИСТАН": CLLocationCoordinate2D(latitude: 34.164, longitude: 66.497),
-        "МОЛДОВА, РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: 47.200, longitude: 28.500),
-        "БАНГЛАДЕШ": CLLocationCoordinate2D(latitude: 24.215, longitude: 89.685),
-        "КАМЕРУН": CLLocationCoordinate2D(latitude: 4.585, longitude: 12.473),
-        "ЧАД": CLLocationCoordinate2D(latitude: 15.143, longitude: 18.645),
-        "ЗАМБИЯ": CLLocationCoordinate2D(latitude: -14.661, longitude: 26.395),
-        "ЭКВАДОР": CLLocationCoordinate2D(latitude: -1.259, longitude: -78.188),
-        "МОНГОЛИЯ": CLLocationCoordinate2D(latitude: 45.997, longitude: 104.150),
-        "АЛЖИР": CLLocationCoordinate2D(latitude: 27.397, longitude: 2.808),
-        "ЕГИПЕТ": CLLocationCoordinate2D(latitude: 26.186, longitude: 29.446),
-        "АНГОЛА": CLLocationCoordinate2D(latitude: -12.183, longitude: 17.984),
-        "ИНДИЯ": CLLocationCoordinate2D(latitude: 22.687, longitude: 79.358),
-        "ЙЕМЕН": CLLocationCoordinate2D(latitude: 15.328, longitude: 45.874),
-        "АРМЕНИЯ": CLLocationCoordinate2D(latitude: 40.459, longitude: 44.801),
-        "ПАКИСТАН": CLLocationCoordinate2D(latitude: 29.328, longitude: 68.546),
-        "ИОРДАНИЯ": CLLocationCoordinate2D(latitude: 30.805, longitude: 36.376),
-        "ИРАК": CLLocationCoordinate2D(latitude: 33.094, longitude: 43.262),
-        "КОНГО, ДЕМОКРАТИЧЕСКАЯ РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: -1.858, longitude: 23.459),
-        "ГВИНЕЯ": CLLocationCoordinate2D(latitude: 10.619, longitude: -10.016),
-        "СЬЕРРА-ЛЕОНЕ": CLLocationCoordinate2D(latitude: 8.617, longitude: -11.764),
-        "МАДАГАСКАР": CLLocationCoordinate2D(latitude: -18.628, longitude: 46.704),
-        "ТАНЗАНИЯ, ОБЪЕДИНЕННАЯ РЕСПУБЛИКА": CLLocationCoordinate2D(latitude: -6.052, longitude: 34.959),
-        "ИНДОНЕЗИЯ": CLLocationCoordinate2D(latitude: -0.954, longitude: 101.893),
-        "МАЛИ": CLLocationCoordinate2D(latitude: 18.693, longitude: -2.038),
-        "КОНГО": CLLocationCoordinate2D(latitude: -0.700, longitude: 15.200)
+private struct GeoCountryProperties: Decodable {
+    let nameRU: String?
+    let admin: String?
+    let isoA3: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case nameRU = "NAME_RU"
+        case admin = "ADMIN"
+        case isoA3 = "ISO_A3"
+    }
+}
+
+private enum GeoCountryAliases {
+    static let isoCodeByAPIName: [String: String] = [
+        "АБХАЗИЯ".geoCountryKey: "ABH",
+        "БАХРЕЙН".geoCountryKey: "BHR",
+        "БЕЛАРУСЬ".geoCountryKey: "BLR",
+        "БОЛИВИЯ, МНОГОНАЦИОНАЛЬНОЕ ГОСУДАРСТВО".geoCountryKey: "BOL",
+        "БРУНЕЙ-ДАРУССАЛАМ".geoCountryKey: "BRN",
+        "ВЕНЕСУЭЛА (БОЛИВАРИАНСКАЯ РЕСПУБЛИКА)".geoCountryKey: "VEN",
+        "ГАИТИ".geoCountryKey: "HTI",
+        "ГРЕНАДА".geoCountryKey: "GRD",
+        "ДОМИНИКА".geoCountryKey: "DMA",
+        "ИРАН (ИСЛАМСКАЯ РЕСПУБЛИКА)".geoCountryKey: "IRN",
+        "КАБО-ВЕРДЕ".geoCountryKey: "CPV",
+        "КИТАЙ".geoCountryKey: "CHN",
+        "КОМОРЫ".geoCountryKey: "COM",
+        "КОНГО".geoCountryKey: "COG",
+        "КОНГО, ДЕМОКРАТИЧЕСКАЯ РЕСПУБЛИКА".geoCountryKey: "COD",
+        "КОРЕЯ, НАРОДНО-ДЕМОКРАТИЧЕСКАЯ РЕСПУБЛИКА".geoCountryKey: "PRK",
+        "КОРЕЯ, РЕСПУБЛИКА".geoCountryKey: "KOR",
+        "ЛАОССКАЯ НАРОДНО-ДЕМОКРАТИЧЕСКАЯ РЕСПУБЛИКА".geoCountryKey: "LAO",
+        "МАВРИКИЙ".geoCountryKey: "MUS",
+        "МАЛЬТА".geoCountryKey: "MLT",
+        "МОЛДОВА, РЕСПУБЛИКА".geoCountryKey: "MDA",
+        "ПАЛЕСТИНА, ГОСУДАРСТВО".geoCountryKey: "PSX",
+        "САН-ТОМЕ И ПРИНСИПИ".geoCountryKey: "STP",
+        "СИНГАПУР".geoCountryKey: "SGP",
+        "СИРИЙСКАЯ АРАБСКАЯ РЕСПУБЛИКА".geoCountryKey: "SYR",
+        "СОЕДИНЕННОЕ КОРОЛЕВСТВО ВЕЛИКОБРИТАНИИ И СЕВЕРНОЙ ИРЛАНДИИ".geoCountryKey: "GBR",
+        "СОЕДИНЕННЫЕ ШТАТЫ".geoCountryKey: "USA",
+        "ТАЙВАНЬ (КИТАЙ)".geoCountryKey: "TWN",
+        "ТАНЗАНИЯ, ОБЪЕДИНЕННАЯ РЕСПУБЛИКА".geoCountryKey: "TZA",
+        "ТУРКМЕНИСТАН".geoCountryKey: "TKM",
+        "ЭЛЬ-САЛЬВАДОР".geoCountryKey: "SLV",
+        "ЮЖНАЯ АФРИКА".geoCountryKey: "ZAF"
     ]
+}
+
+private extension String {
+    var geoCountryKey: String {
+        folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "ru_RU"))
+            .uppercased()
+            .replacingOccurrences(of: "Ё", with: "Е")
+            .filter { $0.isLetter || $0.isNumber }
+    }
 }
