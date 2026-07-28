@@ -61,65 +61,73 @@ struct DashboardView: View {
                 .disabled(viewModel.isRefreshing)
             }
         case let .loaded(dashboard):
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    ForEach(dashboard.sections) { section in
-                        DisclosureGroup(isExpanded: sectionExpandedBinding(for: section.id)) {
-                            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                                ForEach(section.indicators) { indicator in
-                                    IndicatorDashboardCard(indicator: indicator)
-                                        .overlay(alignment: .topTrailing) {
-                                            if indicator.supportsDetail {
-                                                NavigationLink {
-                                                    IndicatorDetailView(indicator: indicator)
-                                                } label: {
-                                                    Image(systemName: "arrow.up.right")
-                                                        .font(.caption.weight(.bold))
-                                                        .foregroundStyle(indicator.graphColor)
-                                                        .frame(width: 30, height: 30)
-                                                        .background(
-                                                            Color(.systemBackground).opacity(0.94),
-                                                            in: RoundedRectangle(cornerRadius: 8)
-                                                        )
-                                                        .overlay {
-                                                            RoundedRectangle(cornerRadius: 8)
-                                                                .strokeBorder(Color.secondary.opacity(0.12), lineWidth: 1)
+            GeometryReader { geometry in
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            ForEach(dashboard.sections) { section in
+                                DisclosureGroup(isExpanded: sectionExpandedBinding(for: section.id)) {
+                                    LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                                        ForEach(section.indicators) { indicator in
+                                            IndicatorDashboardCard(indicator: indicator)
+                                                .overlay(alignment: .topTrailing) {
+                                                    if indicator.supportsDetail {
+                                                        NavigationLink {
+                                                            IndicatorDetailView(indicator: indicator)
+                                                        } label: {
+                                                            Image(systemName: "arrow.up.right")
+                                                                .font(.caption.weight(.bold))
+                                                                .foregroundStyle(indicator.graphColor)
+                                                                .frame(width: 30, height: 30)
+                                                                .background(
+                                                                    Color(.systemBackground).opacity(0.94),
+                                                                    in: RoundedRectangle(cornerRadius: 8)
+                                                                )
+                                                                .overlay {
+                                                                    RoundedRectangle(cornerRadius: 8)
+                                                                        .strokeBorder(
+                                                                            Color.secondary.opacity(0.12),
+                                                                            lineWidth: 1
+                                                                        )
+                                                                }
                                                         }
+                                                        .buttonStyle(.plain)
+                                                        .accessibilityLabel("Открыть детализацию")
+                                                        .padding(14)
+                                                    }
                                                 }
-                                                .buttonStyle(.plain)
-                                                .accessibilityLabel("Открыть детализацию")
-                                                .padding(14)
                                         }
                                     }
-                                }
-                            }
-                            .padding(.top, 12)
-                        } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(section.title)
-                                    .font(.title2.weight(.bold))
+                                    .padding(.top, 12)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(section.title)
+                                            .font(.title2.weight(.bold))
 
-                                Text(sectionCountText(section.indicators.count))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                        Text(sectionCountText(section.indicators.count))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .accessibilityAddTraits(.isHeader)
+                                }
+                                .tint(.primary)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .accessibilityAddTraits(.isHeader)
                         }
-                        .tint(.primary)
+                        .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
+                        .padding(.vertical, 16)
                     }
+                    .background(AppBackground())
+
+                    DashboardConnectionBar(
+                        date: dashboard.fetchedAt,
+                        isCached: viewModel.isShowingCachedData,
+                        isRefreshing: viewModel.isRefreshing
+                    )
+                    .padding(.bottom, geometry.safeAreaInsets.bottom)
+                    .background(.bar)
                 }
-                .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-                .padding(.vertical, 16)
-            }
-            .background(AppBackground())
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                DashboardConnectionBar(
-                    date: dashboard.fetchedAt,
-                    isCached: viewModel.isShowingCachedData,
-                    isRefreshing: viewModel.isRefreshing
-                )
                 .ignoresSafeArea(edges: .bottom)
             }
         }
