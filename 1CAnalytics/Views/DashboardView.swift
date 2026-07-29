@@ -1,12 +1,16 @@
 import MapKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DashboardView: View {
     @StateObject var viewModel: DashboardViewModel
+    @StateObject private var layoutStore = DashboardLayoutStore()
     let onSignOut: () -> Void
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.corporate.rawValue
     @State private var collapsedSectionIDs: Set<DashboardSection.ID> = []
+    @State private var isEditingLayout = false
+    @State private var draggedIndicator: DashboardDraggedIndicator?
 
     var body: some View {
         NavigationStack {
@@ -17,6 +21,7 @@ struct DashboardView: View {
                         NavigationLink {
                             DashboardSettingsView(
                                 chartPalette: chartPaletteBinding,
+                                layoutStore: layoutStore,
                                 onSignOut: onSignOut
                             )
                         } label: {
@@ -25,10 +30,25 @@ struct DashboardView: View {
                         .accessibilityLabel("Настройки")
                     }
 
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        if viewModel.dashboard != nil {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    isEditingLayout.toggle()
+                                    if !isEditingLayout {
+                                        draggedIndicator = nil
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: isEditingLayout ? "checkmark" : "arrow.up.arrow.down.square")
+                            }
+                            .accessibilityLabel(isEditingLayout ? "Завершить настройку" : "Изменить расположение")
+                        }
+
                         RefreshButton {
                             await viewModel.refresh()
                         }
+                        .disabled(isEditingLayout)
                     }
                 }
         }
@@ -68,10 +88,12 @@ struct DashboardView: View {
                             ForEach(dashboard.sections) { section in
                                 DisclosureGroup(isExpanded: sectionExpandedBinding(for: section.id)) {
                                     LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                                        ForEach(section.indicators) { indicator in
+                                        ForEach(layoutStore.orderedIndicators(in: section)) { indicator in
                                             IndicatorDashboardCard(indicator: indicator)
                                                 .overlay(alignment: .topTrailing) {
-                                                    if indicator.supportsDetail {
+                                                    if isEditingLayout {
+                                                        reorderHandle(for: indicator, in: section)
+                                                    } else if indicator.supportsDetail {
                                                         NavigationLink {
                                                             IndicatorDetailView(indicator: indicator)
                                                         } label: {
@@ -96,6 +118,21 @@ struct DashboardView: View {
                                                         .padding(14)
                                                     }
                                                 }
+                                                .opacity(draggedIndicator?.indicatorID == indicator.id ? 0.68 : 1)
+                                                .animation(
+                                                    .easeInOut(duration: 0.16),
+                                                    value: draggedIndicator?.indicatorID
+                                                )
+                                                .onDrop(
+                                                    of: [UTType.plainText],
+                                                    delegate: DashboardIndicatorDropDelegate(
+                                                        section: section,
+                                                        targetIndicatorID: indicator.id,
+                                                        isEditing: isEditingLayout,
+                                                        draggedIndicator: $draggedIndicator,
+                                                        layoutStore: layoutStore
+                                                    )
+                                                )
                                         }
                                     }
                                     .padding(.top, 12)
@@ -131,6 +168,39 @@ struct DashboardView: View {
                 .ignoresSafeArea(edges: .bottom)
             }
         }
+    }
+
+    private func reorderHandle(
+        for indicator: Indicator,
+        in section: DashboardSection
+    ) -> some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .frame(width: 44, height: 44)
+            .background(
+                Color(.systemBackground).opacity(0.96),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.secondary.opacity(0.16), lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+            .onDrag {
+                draggedIndicator = DashboardDraggedIndicator(
+                    sectionID: section.id,
+                    indicatorID: indicator.id
+                )
+                return NSItemProvider(object: indicator.id as NSString)
+            } preview: {
+                Label(indicator.title, systemImage: "chart.bar.fill")
+                    .font(.headline)
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .accessibilityLabel("Переместить \(indicator.title)")
+            .padding(12)
     }
 
     private var columns: [GridItem] {
@@ -190,6 +260,148 @@ struct DashboardView: View {
 
 }
 
+final class DashboardLayoutStore: ObservableObject {
+    static let defaultStorageKey = "dashboardIndicatorOrder.v1"
+
+    @Published private var orderBySection: [DashboardSection.ID: [Indicator.ID]]
+
+    private let defaults: UserDefaults
+    private let storageKey: String
+
+    init(
+        defaults: UserDefaults = .standard,
+        storageKey: String = DashboardLayoutStore.defaultStorageKey
+    ) {
+        self.defaults = defaults
+        self.storageKey = storageKey
+
+        guard let data = defaults.data(forKey: storageKey),
+              let storedOrder = try? JSONDecoder().decode(
+                  [DashboardSection.ID: [Indicator.ID]].self,
+                  from: data
+              ) else {
+            orderBySection = [:]
+            return
+        }
+
+        orderBySection = storedOrder
+    }
+
+    func orderedIndicators(in section: DashboardSection) -> [Indicator] {
+        let indicatorByID = Dictionary(
+            uniqueKeysWithValues: section.indicators.map { ($0.id, $0) }
+        )
+        return Self.reconciledOrder(
+            savedOrder: orderBySection[section.id] ?? [],
+            availableIDs: section.indicators.map(\.id)
+        ).compactMap { indicatorByID[$0] }
+    }
+
+    func moveIndicator(
+        in section: DashboardSection,
+        draggedID: Indicator.ID,
+        over targetID: Indicator.ID
+    ) {
+        guard draggedID != targetID else {
+            return
+        }
+
+        var order = Self.reconciledOrder(
+            savedOrder: orderBySection[section.id] ?? [],
+            availableIDs: section.indicators.map(\.id)
+        )
+        guard let sourceIndex = order.firstIndex(of: draggedID),
+              let targetIndex = order.firstIndex(of: targetID) else {
+            return
+        }
+
+        order.move(
+            fromOffsets: IndexSet(integer: sourceIndex),
+            toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
+        )
+        orderBySection[section.id] = order
+        persist()
+    }
+
+    static func reconciledOrder(
+        savedOrder: [Indicator.ID],
+        availableIDs: [Indicator.ID]
+    ) -> [Indicator.ID] {
+        let availableIDSet = Set(availableIDs)
+        var seenIDs = Set<Indicator.ID>()
+        let retainedIDs = savedOrder.filter {
+            availableIDSet.contains($0) && seenIDs.insert($0).inserted
+        }
+        let newIDs = availableIDs.filter {
+            seenIDs.insert($0).inserted
+        }
+        return retainedIDs + newIDs
+    }
+
+    var hasCustomLayout: Bool {
+        !orderBySection.isEmpty
+    }
+
+    func reset() {
+        orderBySection = [:]
+        defaults.removeObject(forKey: storageKey)
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(orderBySection) else {
+            return
+        }
+        defaults.set(data, forKey: storageKey)
+    }
+}
+
+private struct DashboardDraggedIndicator: Equatable {
+    let sectionID: DashboardSection.ID
+    let indicatorID: Indicator.ID
+}
+
+private struct DashboardIndicatorDropDelegate: DropDelegate {
+    let section: DashboardSection
+    let targetIndicatorID: Indicator.ID
+    let isEditing: Bool
+    @Binding var draggedIndicator: DashboardDraggedIndicator?
+    let layoutStore: DashboardLayoutStore
+
+    func validateDrop(info: DropInfo) -> Bool {
+        isEditing
+            && draggedIndicator?.sectionID == section.id
+            && info.hasItemsConforming(to: [UTType.plainText])
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard isEditing,
+              let draggedIndicator,
+              draggedIndicator.sectionID == section.id else {
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            layoutStore.moveIndicator(
+                in: section,
+                draggedID: draggedIndicator.indicatorID,
+                over: targetIndicatorID
+            )
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard validateDrop(info: info) else {
+            return false
+        }
+        draggedIndicator = nil
+        return true
+    }
+}
+
 private struct ChartPalettePicker: View {
     @Binding var selection: ChartPaletteScheme
 
@@ -208,7 +420,9 @@ private struct ChartPalettePicker: View {
 
 private struct DashboardSettingsView: View {
     @Binding var chartPalette: ChartPaletteScheme
+    @ObservedObject var layoutStore: DashboardLayoutStore
     let onSignOut: () -> Void
+    @State private var showsLayoutResetConfirmation = false
 
     var body: some View {
         Form {
@@ -227,6 +441,19 @@ private struct DashboardSettingsView: View {
             }
 
             Section {
+                Button(role: .destructive) {
+                    showsLayoutResetConfirmation = true
+                } label: {
+                    Label("Сбросить расположение графиков", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(!layoutStore.hasCustomLayout)
+            } header: {
+                Text("Расположение")
+            } footer: {
+                Text("Графики вернутся к порядку, полученному от сервера.")
+            }
+
+            Section {
                 Button(role: .destructive, action: onSignOut) {
                     Label("Выйти из аккаунта", systemImage: "rectangle.portrait.and.arrow.right")
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -235,6 +462,20 @@ private struct DashboardSettingsView: View {
         }
         .navigationTitle("Настройки")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "Сбросить расположение графиков?",
+            isPresented: $showsLayoutResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Сбросить", role: .destructive) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    layoutStore.reset()
+                }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Карточки во всех группах вернутся к исходному порядку.")
+        }
     }
 }
 

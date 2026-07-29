@@ -3,6 +3,52 @@ import XCTest
 
 @MainActor
 final class ReleaseReadinessTests: XCTestCase {
+    func testDashboardLayoutReconcilesSavedOrderWithFreshIndicators() {
+        XCTAssertEqual(
+            DashboardLayoutStore.reconciledOrder(
+                savedOrder: ["section-c", "removed", "section-a", "section-c"],
+                availableIDs: ["section-a", "section-b", "section-c", "section-new"]
+            ),
+            ["section-c", "section-a", "section-b", "section-new"]
+        )
+    }
+
+    func testDashboardLayoutPersistsReorderedIndicators() throws {
+        let suiteName = "DashboardLayoutStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        let storageKey = "testDashboardOrder"
+        let section = DashboardSection(
+            id: "education",
+            title: "Образование",
+            indicators: ["a", "b", "c"].map { id in
+                Indicator(
+                    id: id,
+                    title: id,
+                    value: nil,
+                    unit: nil,
+                    chartType: .oneValue,
+                    source: nil,
+                    rows: []
+                )
+            }
+        )
+
+        let store = DashboardLayoutStore(defaults: defaults, storageKey: storageKey)
+        store.moveIndicator(in: section, draggedID: "a", over: "b")
+
+        let restoredStore = DashboardLayoutStore(defaults: defaults, storageKey: storageKey)
+        XCTAssertEqual(restoredStore.orderedIndicators(in: section).map(\.id), ["b", "a", "c"])
+
+        restoredStore.reset()
+
+        let resetStore = DashboardLayoutStore(defaults: defaults, storageKey: storageKey)
+        XCTAssertFalse(resetStore.hasCustomLayout)
+        XCTAssertEqual(resetStore.orderedIndicators(in: section).map(\.id), ["a", "b", "c"])
+    }
+
     func testAuthorizationURLContainsFreshState() throws {
         let url = try OAuthFlow.makeAuthorizationURL(
             baseURL: try XCTUnwrap(URL(string: "https://id.example/sign-in?state=stale")),
