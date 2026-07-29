@@ -1,6 +1,6 @@
 import Foundation
 
-struct Dashboard: Identifiable, Codable, Equatable {
+struct Dashboard: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let title: String
     let fetchedAt: Date?
@@ -60,13 +60,13 @@ struct Dashboard: Identifiable, Codable, Equatable {
     }
 }
 
-struct DashboardSection: Identifiable, Codable, Equatable {
+struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let title: String
     let indicators: [Indicator]
 }
 
-struct Indicator: Identifiable, Codable, Equatable {
+struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let title: String
     let value: Decimal?
@@ -115,7 +115,7 @@ struct Indicator: Identifiable, Codable, Equatable {
     }
 }
 
-struct IndicatorRow: Identifiable, Codable, Equatable {
+struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let label: String
     let value: Double
@@ -143,7 +143,7 @@ struct IndicatorRow: Identifiable, Codable, Equatable {
     }
 }
 
-struct IndicatorRowGroup: Identifiable, Equatable {
+struct IndicatorRowGroup: Identifiable, Equatable, Sendable {
     let label: String
     let rows: [IndicatorRow]
 
@@ -160,7 +160,7 @@ struct IndicatorRowGroup: Identifiable, Equatable {
     }
 }
 
-enum BarChartDataShape: Equatable {
+enum BarChartDataShape: Equatable, Sendable {
     case singleValuePerGroup
     case multipleValuesPerGroup(series: [String])
 
@@ -174,7 +174,7 @@ enum BarChartDataShape: Equatable {
     }
 }
 
-enum ChartType: String, CaseIterable, Codable {
+enum ChartType: String, CaseIterable, Codable, Sendable {
     case bar = "BarMark"
     case compactBar = "BarMarkCompact"
     case horizontalBar = "BarMarkHorizon"
@@ -184,6 +184,39 @@ enum ChartType: String, CaseIterable, Codable {
     case linearProgress = "LinearProgressIndicator"
     case gauge = "Gauge"
     case geoMap = "GeoMap"
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = (try? container.decode(String.self)) ?? ""
+
+        switch value {
+        case Self.oneValue.rawValue:
+            self = .oneValue
+        case Self.linearProgress.rawValue:
+            self = .linearProgress
+        case "Gauge", "GaugeIndicator", "Speedometer", "CircularProgressIndicator":
+            self = .gauge
+        case Self.compactBar.rawValue:
+            self = .compactBar
+        case Self.bar.rawValue:
+            self = .bar
+        case Self.donut.rawValue:
+            self = .donut
+        case Self.stackedBar.rawValue:
+            self = .stackedBar
+        case Self.horizontalBar.rawValue:
+            self = .horizontalBar
+        case "GeoMap", "WorldMap", "Map", "GeoChoropleth":
+            self = .geoMap
+        default:
+            self = .bar
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 
     var title: String {
         switch self {

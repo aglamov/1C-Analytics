@@ -83,6 +83,7 @@ final class RUDNAuthenticationService {
     private func exchangeAuthorizationCode(_ code: String) async throws -> AuthenticationCredentials {
         var request = URLRequest(url: configuration.authorizationCodeExchangeURL)
         request.httpMethod = "POST"
+        request.timeoutInterval = 60
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(AuthorizationCodeRequest(codeAnalitic: code))

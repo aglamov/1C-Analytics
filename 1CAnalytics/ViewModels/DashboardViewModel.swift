@@ -59,14 +59,17 @@ final class DashboardViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            let dashboard = try await provider.fetchDashboard()
+            let dashboard = try await provider.fetchDashboard { [weak self] section in
+                guard let self else { return }
+                mergeFreshSection(section)
+            }
             try? cache.save(dashboard)
             show(dashboard, isCached: false)
         } catch AnalyticsError.authenticationRequired {
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
             onAuthenticationRequired()
         } catch {
-            if cachedDashboard == nil {
+            if dashboard == nil {
                 state = .failed(error.localizedDescription)
             } else {
                 refreshErrorMessage = Self.offlineMessage(for: error)
@@ -79,8 +82,12 @@ final class DashboardViewModel: ObservableObject {
         isRefreshing = true
         defer { isRefreshing = false }
 
+        let dashboardBeforeRefresh = dashboard
         do {
-            let dashboard = try await provider.fetchDashboard()
+            let dashboard = try await provider.fetchDashboard { [weak self] section in
+                guard let self else { return }
+                mergeFreshSection(section)
+            }
             try? cache.save(dashboard)
             show(dashboard, isCached: false)
         } catch AnalyticsError.authenticationRequired {
@@ -88,12 +95,41 @@ final class DashboardViewModel: ObservableObject {
             onAuthenticationRequired()
         } catch {
             if dashboard != nil {
-                isShowingCachedData = true
+                isShowingCachedData = dashboard == dashboardBeforeRefresh
                 refreshErrorMessage = Self.offlineMessage(for: error)
             } else {
                 state = .failed(error.localizedDescription)
             }
         }
+    }
+
+    private func mergeFreshSection(_ section: DashboardSection) {
+        var sections = dashboard?.sections ?? []
+        if let index = sections.firstIndex(where: {
+            $0.id == section.id
+                || AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(section.title)
+        }) {
+            sections[index] = section
+        } else {
+            sections.append(section)
+        }
+        sections.sort {
+            let lhsOrder = AnalyticsAPIContract.order(of: $0.title)
+            let rhsOrder = AnalyticsAPIContract.order(of: $1.title)
+            if lhsOrder == rhsOrder {
+                return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+            }
+            return lhsOrder < rhsOrder
+        }
+
+        let partialDashboard = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: Date(),
+            sections: sections
+        )
+        try? cache.save(partialDashboard)
+        show(partialDashboard, isCached: false)
     }
 
     private func show(_ dashboard: Dashboard, isCached: Bool) {

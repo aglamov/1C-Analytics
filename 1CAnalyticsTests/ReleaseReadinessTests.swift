@@ -49,6 +49,34 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testAnalyticsRequestUsesFixedIDSectionAndSixtySecondTimeout() throws {
+        let configuration = AppConfiguration(
+            analyticsBaseURL: try XCTUnwrap(
+                URL(string: "https://service.example/DGU_APP_Mobile_Client/analitycs/")
+            ),
+            analyticsAPIKey: nil,
+            authenticationURL: try XCTUnwrap(URL(string: "https://id.example/sign-in")),
+            authenticationClientID: "client-id",
+            authenticationCallbackURL: try XCTUnwrap(URL(string: "https://service.example/callback")),
+            authorizationCodeExchangeURL: try XCTUnwrap(URL(string: "https://service.example/auth/code"))
+        )
+        let provider = APIAnalyticsProvider(
+            configuration: configuration,
+            credentialsStore: StubRequestAuthorizer()
+        )
+
+        let request = try provider.makeRequest(for: AnalyticsAPIContract.sections[3])
+        let queryItems = try XCTUnwrap(
+            URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
+        )
+
+        XCTAssertEqual(queryItems.first { $0.name == "id" }?.value, "test_analitycs_med")
+        XCTAssertEqual(queryItems.first { $0.name == "section" }?.value, "Приемная_кампания")
+        XCTAssertEqual(request.timeoutInterval, 60)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "X-Test-Authorization"), "attached")
+    }
+
     func testResponseMappingUsesFetchTimeAndCalculatesSubgroupSummary() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Контингент","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":10},{"name":"ИГ","value":2}]}],"type":"BarMarkStacking"}]}]}"#.utf8
@@ -355,6 +383,97 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(geoMap.supportsDetail)
     }
 
+    func testAndroidContractAliasesFlexibleNumbersNestedValuesAndStableIDs() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [{
+                "name": "Финансы",
+                "values": [
+                  {
+                    "id": "stable-chart",
+                    "name": "Исполнение",
+                    "type": "GaugeIndicator",
+                    "width": "70",
+                    "values": {
+                      "value": "1 234,5",
+                      "valueMax": "2 000"
+                    }
+                  },
+                  {
+                    "id": "stable-chart",
+                    "name": "География",
+                    "type": "WorldMap",
+                    "halfWidth": "true",
+                    "values": [{"group": "РОССИЯ", "value": "1 000"}]
+                  },
+                  {
+                    "identifier": "fallback-identifier",
+                    "name": "Новый серверный тип",
+                    "type": "UnknownChart",
+                    "values": {"group": 2026, "value": "12,5"}
+                  },
+                  {
+                    "name": "Вложенные серии",
+                    "type": "BarMarkCompact",
+                    "values": {
+                      "group": "",
+                      "values": [
+                        {"name": "План", "value": "1 200"},
+                        {"name": "Факт", "value": 950}
+                      ]
+                    }
+                  }
+                ]
+              }]
+            }
+            """#.utf8
+        )
+
+        let indicators = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+
+        XCTAssertEqual(indicators.map(\.chartType), [.gauge, .geoMap, .bar, .compactBar])
+        XCTAssertEqual(indicators[0].value, Decimal(string: "1234.5"))
+        XCTAssertEqual(indicators[0].valueMax, 2_000)
+        XCTAssertEqual(indicators[0].widthPercent, 100)
+        XCTAssertEqual(indicators[1].widthPercent, 50)
+        XCTAssertEqual(indicators[1].rows.first?.value, 1_000)
+        XCTAssertEqual(indicators[2].rows.first?.label, "2026")
+        XCTAssertEqual(indicators[2].rows.first?.value, 12.5)
+        XCTAssertEqual(indicators[3].rows.map(\.label), ["План", "Факт"])
+        XCTAssertEqual(indicators[3].rows.map(\.value), [1_200, 950])
+        XCTAssertEqual(Set(indicators.map(\.id)).count, indicators.count)
+        XCTAssertTrue(indicators[0].id.hasSuffix("-stable-chart"))
+        XCTAssertTrue(indicators[1].id.hasSuffix("-stable-chart#2"))
+        XCTAssertTrue(indicators[2].id.hasSuffix("-fallback-identifier"))
+        XCTAssertTrue(indicators[3].id.hasSuffix("-3"))
+    }
+
+    func testSectionCanContainSingleIndicatorObject() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": {
+                "name": "Кадры",
+                "values": {
+                  "name": "Сотрудники",
+                  "type": "OneValue",
+                  "value": "12 345"
+                }
+              }
+            }
+            """#.utf8
+        )
+
+        let dashboard = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data).toDashboard()
+
+        XCTAssertEqual(dashboard.sections.map(\.title), ["Кадры"])
+        XCTAssertEqual(dashboard.indicators.first?.chartType, .oneValue)
+        XCTAssertEqual(dashboard.indicators.first?.value, 12_345)
+    }
+
     func testDashboardDecodesLegacyCachedTimestamp() throws {
         let data = Data(
             #"{"id":"cached","title":"Cached","updatedAt":"2026-07-21T10:00:00Z","indicators":[]}"#.utf8
@@ -419,6 +538,45 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(viewModel.isShowingCachedData)
         XCTAssertNotNil(viewModel.refreshErrorMessage)
     }
+
+    func testPartialRefreshPublishesFreshSectionAndKeepsOtherCachedSections() async {
+        let cachedSection = DashboardSection(
+            id: "финансы",
+            title: "Финансы",
+            indicators: []
+        )
+        let freshSection = DashboardSection(
+            id: "образование",
+            title: "Образование",
+            indicators: []
+        )
+        let cached = Dashboard(
+            id: "cached",
+            title: "Cached",
+            fetchedAt: .distantPast,
+            sections: [cachedSection]
+        )
+        let viewModel = DashboardViewModel(
+            provider: PartiallyFailingProvider(section: freshSection),
+            cache: StubDashboardCache(dashboard: cached)
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование", "Финансы"])
+        XCTAssertFalse(viewModel.isShowingCachedData)
+        XCTAssertEqual(
+            viewModel.refreshErrorMessage,
+            "Не удалось обновить разделы: Кадры. Уже полученные данные сохранены."
+        )
+    }
+}
+
+@MainActor
+private struct StubRequestAuthorizer: AuthenticationRequestAuthorizing {
+    func addAuthentication(to request: inout URLRequest) throws {
+        request.setValue("attached", forHTTPHeaderField: "X-Test-Authorization")
+    }
 }
 
 @MainActor
@@ -453,6 +611,22 @@ private final class SucceedingThenFailingProvider: AnalyticsProvider {
         }
 
         throw URLError(.networkConnectionLost)
+    }
+}
+
+@MainActor
+private struct PartiallyFailingProvider: AnalyticsProvider {
+    let section: DashboardSection
+
+    func fetchDashboard() async throws -> Dashboard {
+        throw AnalyticsError.partialFailure(sections: ["Кадры"])
+    }
+
+    func fetchDashboard(
+        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+    ) async throws -> Dashboard {
+        onSectionReceived(section)
+        throw AnalyticsError.partialFailure(sections: ["Кадры"])
     }
 }
 

@@ -5,7 +5,6 @@ final class APIAnalyticsProvider: AnalyticsProvider {
     private let configuration: AppConfiguration
     private let urlSession: URLSession
     private let credentialsStore: any AuthenticationRequestAuthorizing
-    private let decoder: JSONDecoder
 
     init(
         configuration: AppConfiguration = .load(),
@@ -15,14 +14,92 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         self.configuration = configuration
         self.urlSession = urlSession
         self.credentialsStore = credentialsStore
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
     }
 
     func fetchDashboard() async throws -> Dashboard {
-        var request = URLRequest(url: configuration.analyticsBaseURL)
+        try await fetchDashboard { _ in }
+    }
+
+    func fetchDashboard(
+        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+    ) async throws -> Dashboard {
+        let preparedRequests: [(Int, AnalyticsAPIContract.Section, URLRequest)]
+        do {
+            preparedRequests = try AnalyticsAPIContract.sections.enumerated().map { index, section in
+                (index, section, try makeRequest(for: section))
+            }
+        } catch AuthenticationError.missingCredentials {
+            throw AnalyticsError.authenticationRequired
+        }
+
+        let session = urlSession
+        var receivedSections = [Int: DashboardSection]()
+        var failedSections = [(index: Int, name: String)]()
+        var authenticationFailed = false
+
+        await withTaskGroup(of: SectionFetchOutcome.self) { group in
+            for (index, section, request) in preparedRequests {
+                group.addTask {
+                    await Self.fetchSection(
+                        index: index,
+                        contract: section,
+                        request: request,
+                        session: session
+                    )
+                }
+            }
+
+            for await outcome in group {
+                if let section = outcome.section {
+                    receivedSections[outcome.index] = section
+                    onSectionReceived(section)
+                } else {
+                    failedSections.append((outcome.index, outcome.displayName))
+                    authenticationFailed = authenticationFailed || outcome.authenticationFailed
+                }
+            }
+        }
+
+        if authenticationFailed {
+            throw AnalyticsError.authenticationRequired
+        }
+
+        if !failedSections.isEmpty {
+            let sectionNames = failedSections
+                .sorted { $0.index < $1.index }
+                .map(\.name)
+            throw AnalyticsError.partialFailure(sections: sectionNames)
+        }
+
+        let sections = receivedSections
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+        return Self.makeDashboard(sections: sections)
+    }
+
+    func makeRequest(for section: AnalyticsAPIContract.Section) throws -> URLRequest {
+        guard var components = URLComponents(
+            url: configuration.analyticsBaseURL,
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw AnalyticsError.invalidResponse
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name == "id" || $0.name == "section" }
+        queryItems.append(contentsOf: [
+            URLQueryItem(name: "id", value: AnalyticsAPIContract.requestID),
+            URLQueryItem(name: "section", value: section.queryValue)
+        ])
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw AnalyticsError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 30
+        request.timeoutInterval = 60
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         if let apiKey = configuration.analyticsAPIKey {
@@ -30,16 +107,47 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         }
 
         try credentialsStore.addAuthentication(to: &request)
-
-        let (data, response) = try await urlSession.data(for: request)
-
-        try Self.validate(response)
-
-        let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
-        return try analyticsResponse.toDashboard()
+        return request
     }
 
-    static func validate(_ response: URLResponse) throws {
+    private nonisolated static func fetchSection(
+        index: Int,
+        contract: AnalyticsAPIContract.Section,
+        request: URLRequest,
+        session: URLSession
+    ) async -> SectionFetchOutcome {
+        do {
+            let (data, response) = try await session.data(for: request)
+            try validate(response)
+
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
+            let section = try analyticsResponse.dashboardSection(preferredTitle: contract.displayName)
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: section,
+                authenticationFailed: false
+            )
+        } catch AnalyticsError.authenticationRequired {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                authenticationFailed: true
+            )
+        } catch {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                authenticationFailed: false
+            )
+        }
+    }
+
+    nonisolated static func validate(_ response: URLResponse) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AnalyticsError.invalidResponse
         }
@@ -53,25 +161,47 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             throw AnalyticsError.httpFailure(statusCode: httpResponse.statusCode)
         }
     }
+
+    private nonisolated static func makeDashboard(sections: [DashboardSection]) -> Dashboard {
+        Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: Date(),
+            sections: sections
+        )
+    }
 }
 
-struct AnalyticsAPIResponse: Decodable {
+private struct SectionFetchOutcome: Sendable {
+    let index: Int
+    let displayName: String
+    let section: DashboardSection?
+    let authenticationFailed: Bool
+}
+
+struct AnalyticsAPIResponse: Decodable, Sendable {
     let sections: [AnalyticsAPISection]
+
+    private enum CodingKeys: String, CodingKey {
+        case sections
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sections = container.decodeFlexibleArray(AnalyticsAPISection.self, forKey: .sections)
+    }
 
     func toDashboard() throws -> Dashboard {
         guard !sections.isEmpty else {
             throw AnalyticsError.invalidResponse
         }
 
-        let dashboardSections = sections.enumerated().map { sectionIndex, section in
-            let sectionID = "\(sectionIndex)-\(section.name.stableID)"
-            return DashboardSection(
-                id: sectionID,
-                title: section.name,
-                indicators: section.values.enumerated().map { indicatorIndex, indicator in
-                    indicator.toIndicator(index: indicatorIndex, sectionID: sectionID)
-                }
-            )
+        var sectionIDCounts = [String: Int]()
+        let dashboardSections = sections.enumerated().map { index, section in
+            let title = section.normalizedName.isEmpty ? "Раздел \(index + 1)" : section.normalizedName
+            let baseID = title.stableID.isEmpty ? "section-\(index)" : title.stableID
+            let sectionID = Self.uniqueID(baseID, counts: &sectionIDCounts)
+            return section.toDashboardSection(title: title, sectionID: sectionID)
         }
 
         return Dashboard(
@@ -81,14 +211,69 @@ struct AnalyticsAPIResponse: Decodable {
             sections: dashboardSections
         )
     }
+
+    func dashboardSection(preferredTitle: String) throws -> DashboardSection {
+        guard !sections.isEmpty else {
+            throw AnalyticsError.invalidResponse
+        }
+
+        let preferredName = AnalyticsAPIContract.normalize(preferredTitle)
+        let section = sections.first {
+            AnalyticsAPIContract.normalize($0.name) == preferredName
+        } ?? sections[0]
+        let rawTitle = section.normalizedName
+        let title = rawTitle.isEmpty || AnalyticsAPIContract.normalize(rawTitle) == preferredName
+            ? preferredTitle
+            : rawTitle
+        let sectionID = title.stableID.isEmpty ? preferredTitle.stableID : title.stableID
+        return section.toDashboardSection(title: title, sectionID: sectionID)
+    }
+
+    private static func uniqueID(_ baseID: String, counts: inout [String: Int]) -> String {
+        let occurrence = counts[baseID, default: 0]
+        counts[baseID] = occurrence + 1
+        return occurrence == 0 ? baseID : "\(baseID)#\(occurrence + 1)"
+    }
 }
 
-struct AnalyticsAPISection: Decodable {
+struct AnalyticsAPISection: Decodable, Sendable {
     let name: String
     let values: [AnalyticsAPIIndicator]
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case values
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = container.decodeFlexibleString(forKey: .name) ?? ""
+        values = container.decodeFlexibleArray(AnalyticsAPIIndicator.self, forKey: .values)
+    }
+
+    var normalizedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func toDashboardSection(title: String, sectionID: String) -> DashboardSection {
+        var layoutIDCounts = [String: Int]()
+        let indicators = values.enumerated().map { index, indicator in
+            let baseLayoutID = indicator.layoutIdentifier(index: index)
+            let occurrence = layoutIDCounts[baseLayoutID, default: 0]
+            layoutIDCounts[baseLayoutID] = occurrence + 1
+            let uniqueLayoutID = occurrence == 0
+                ? baseLayoutID
+                : "\(baseLayoutID)#\(occurrence + 1)"
+            return indicator.toIndicator(layoutID: uniqueLayoutID, sectionID: sectionID)
+        }
+
+        return DashboardSection(id: sectionID, title: title, indicators: indicators)
+    }
 }
 
-struct AnalyticsAPIIndicator: Decodable {
+struct AnalyticsAPIIndicator: Decodable, Sendable {
+    let id: String?
+    let identifier: String?
     let name: String
     let values: [AnalyticsAPIValue]
     let type: ChartType
@@ -103,6 +288,8 @@ struct AnalyticsAPIIndicator: Decodable {
     let widthPercent: Double?
 
     private enum CodingKeys: String, CodingKey {
+        case id
+        case identifier
         case name
         case values
         case type
@@ -115,25 +302,49 @@ struct AnalyticsAPIIndicator: Decodable {
         case showTotal
         case showDetails
         case widthPercent
+        case width
+        case halfWidth
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = try container.decode(String.self, forKey: .name)
-        values = try container.decodeIfPresent([AnalyticsAPIValue].self, forKey: .values) ?? []
-        type = try container.decode(ChartType.self, forKey: .type)
-        value = try container.decodeIfPresent(Double.self, forKey: .value)
-        valueMax = try container.decodeIfPresent(Double.self, forKey: .valueMax)
-        unit = try container.decodeIfPresent(String.self, forKey: .unit)
-        colorGraph = try container.decodeIfPresent(String.self, forKey: .colorGraph)
-        colorValue = try container.decodeIfPresent(String.self, forKey: .colorValue)
-        showLegend = try container.decodeIfPresent(Bool.self, forKey: .showLegend)
-        showTotal = try container.decodeIfPresent(Bool.self, forKey: .showTotal)
-        showDetails = try container.decodeIfPresent(Bool.self, forKey: .showDetails)
-        widthPercent = try container.decodeIfPresent(Double.self, forKey: .widthPercent)
+        id = container.decodeFlexibleString(forKey: .id)
+        identifier = container.decodeFlexibleString(forKey: .identifier)
+        name = container.decodeFlexibleString(forKey: .name) ?? ""
+        values = container.decodeFlexibleArray(AnalyticsAPIValue.self, forKey: .values)
+        type = (try? container.decode(ChartType.self, forKey: .type)) ?? .bar
+        value = container.decodeFlexibleDouble(forKey: .value)
+        valueMax = container.decodeFlexibleDouble(forKey: .valueMax)
+        unit = container.decodeFlexibleString(forKey: .unit)
+        colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = container.decodeFlexibleString(forKey: .colorValue)
+        showLegend = container.decodeFlexibleBool(forKey: .showLegend)
+        showTotal = container.decodeFlexibleBool(forKey: .showTotal)
+        showDetails = container.decodeFlexibleBool(forKey: .showDetails)
+
+        let rawWidth = container.decodeFlexibleDouble(forKey: .widthPercent)
+            ?? container.decodeFlexibleDouble(forKey: .width)
+        let halfWidth = container.decodeFlexibleBool(forKey: .halfWidth)
+        if let rawWidth {
+            widthPercent = rawWidth <= 50 ? 50 : 100
+        } else if let halfWidth {
+            widthPercent = halfWidth ? 50 : 100
+        } else {
+            widthPercent = nil
+        }
     }
 
-    func toIndicator(index: Int, sectionID: String) -> Indicator {
+    func layoutIdentifier(index: Int) -> String {
+        for candidate in [id, identifier] {
+            if let candidate = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !candidate.isEmpty {
+                return candidate
+            }
+        }
+        return String(index)
+    }
+
+    func toIndicator(layoutID: String, sectionID: String) -> Indicator {
         let totalRow = values.first { $0.normalizedGroup.isEmpty }
         let rowValues = type == .compactBar
             ? values.filter(\.hasCompactBarValues)
@@ -152,7 +363,7 @@ struct AnalyticsAPIIndicator: Decodable {
         let primaryValue = values.first
 
         return Indicator(
-            id: "\(sectionID)-\(index)-\(name.stableID)",
+            id: "\(sectionID)-\(layoutID)",
             title: name,
             value: scalarValue.map { Decimal($0) },
             valueMax: valueMax ?? totalRow?.valueMax ?? primaryValue?.valueMax,
@@ -179,7 +390,7 @@ struct AnalyticsAPIIndicator: Decodable {
     }
 }
 
-struct AnalyticsAPIValue: Decodable {
+struct AnalyticsAPIValue: Decodable, Sendable {
     let name: String?
     let group: String?
     let value: Double?
@@ -198,24 +409,23 @@ struct AnalyticsAPIValue: Decodable {
         case colorGraph
         case colorValue
         case subgroup
+        case values
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = try container.decodeIfPresent(String.self, forKey: .name)
-        if let textGroup = try? container.decode(String.self, forKey: .group) {
-            group = textGroup
-        } else if let numericGroup = try? container.decode(Decimal.self, forKey: .group) {
-            group = NSDecimalNumber(decimal: numericGroup).stringValue
-        } else {
-            group = nil
-        }
-        value = try container.decodeIfPresent(Double.self, forKey: .value)
-        valueMax = try container.decodeIfPresent(Double.self, forKey: .valueMax)
-        unit = try container.decodeIfPresent(String.self, forKey: .unit)
-        colorGraph = try container.decodeIfPresent(String.self, forKey: .colorGraph)
-        colorValue = try container.decodeIfPresent(String.self, forKey: .colorValue)
-        subgroup = try container.decodeIfPresent([AnalyticsAPISubgroup].self, forKey: .subgroup)
+        name = container.decodeFlexibleString(forKey: .name)
+        group = container.decodeFlexibleString(forKey: .group)
+        value = container.decodeFlexibleDouble(forKey: .value)
+        valueMax = container.decodeFlexibleDouble(forKey: .valueMax)
+        unit = container.decodeFlexibleString(forKey: .unit)
+        colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = container.decodeFlexibleString(forKey: .colorValue)
+
+        let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
+        let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
+        let combinedValues = subgroupValues.isEmpty ? nestedValues : subgroupValues
+        subgroup = combinedValues.isEmpty ? nil : combinedValues
     }
 
     var normalizedGroup: String {
@@ -247,10 +457,11 @@ struct AnalyticsAPIValue: Decodable {
                 }
             }
 
+            let groupLabel = normalizedGroup.isEmpty ? preferredLabel(index: index) : normalizedGroup
             return subgroup.enumerated().map { subgroupIndex, subgroup in
                 IndicatorRow(
-                    id: "\(normalizedGroup.stableID)-\(subgroup.name.stableID)",
-                    label: normalizedGroup,
+                    id: "\(groupLabel.stableID)-\(subgroupIndex)-\(subgroup.name.stableID)",
+                    label: groupLabel,
                     value: subgroup.value,
                     series: subgroup.name,
                     sortOrder: index * 100 + subgroupIndex,
@@ -289,11 +500,91 @@ struct AnalyticsAPIValue: Decodable {
     }
 }
 
-struct AnalyticsAPISubgroup: Decodable {
+struct AnalyticsAPISubgroup: Decodable, Sendable {
     let name: String
     let value: Double
     let colorGraph: String?
     let colorValue: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case group
+        case value
+        case colorGraph
+        case colorValue
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = container.decodeFlexibleString(forKey: .name)
+            ?? container.decodeFlexibleString(forKey: .group)
+            ?? ""
+        value = container.decodeFlexibleDouble(forKey: .value) ?? 0
+        colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = container.decodeFlexibleString(forKey: .colorValue)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func decodeFlexibleArray<T: Decodable>(_ type: T.Type, forKey key: Key) -> [T] {
+        if let values = try? decode([T].self, forKey: key) {
+            return values
+        }
+        if let value = try? decode(T.self, forKey: key) {
+            return [value]
+        }
+        return []
+    }
+
+    func decodeFlexibleString(forKey key: Key) -> String? {
+        if let value = try? decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(Decimal.self, forKey: key) {
+            return NSDecimalNumber(decimal: value).stringValue
+        }
+        if let value = try? decode(Bool.self, forKey: key) {
+            return value ? "true" : "false"
+        }
+        return nil
+    }
+
+    func decodeFlexibleDouble(forKey key: Key) -> Double? {
+        if let value = try? decode(Double.self, forKey: key) {
+            return value
+        }
+        guard let text = try? decode(String.self, forKey: key) else {
+            return nil
+        }
+
+        let normalized = text
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\u{00a0}", with: "")
+            .replacingOccurrences(of: "\u{202f}", with: "")
+            .replacingOccurrences(of: "%", with: "")
+            .replacingOccurrences(of: ",", with: ".")
+        return Double(normalized)
+    }
+
+    func decodeFlexibleBool(forKey key: Key) -> Bool? {
+        if let value = try? decode(Bool.self, forKey: key) {
+            return value
+        }
+        if let value = try? decode(Int.self, forKey: key) {
+            return value != 0
+        }
+        guard let value = try? decode(String.self, forKey: key) else {
+            return nil
+        }
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true", "1", "yes":
+            return true
+        case "false", "0", "no":
+            return false
+        default:
+            return nil
+        }
+    }
 }
 
 private extension String {
