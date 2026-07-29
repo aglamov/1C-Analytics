@@ -407,7 +407,7 @@ struct AnalyticsChart: View {
             Rectangle()
                 .fill(.clear)
                 .contentShape(Rectangle())
-                .gesture(
+                .simultaneousGesture(
                     SpatialTapGesture()
                         .onEnded { value in
                             guard let plotFrame = proxy.plotFrame else {
@@ -435,7 +435,7 @@ struct AnalyticsChart: View {
             Rectangle()
                 .fill(.clear)
                 .contentShape(Rectangle())
-                .gesture(
+                .simultaneousGesture(
                     SpatialTapGesture()
                         .onEnded { value in
                             guard let plotFrame = proxy.plotFrame else {

@@ -17,11 +17,13 @@ struct IndicatorDetailView: View {
                     .padding(.horizontal, horizontalPadding)
                     .padding(.vertical, verticalPadding)
             } else {
-                ScrollView {
+                ScrollView(.vertical) {
                     compactDetailContent(availableSize: proxy.size)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                         .padding(.horizontal, horizontalPadding)
                         .padding(.vertical, verticalPadding)
                 }
+                .scrollBounceBehavior(.always)
             }
         }
         .background(AppBackground())
@@ -49,8 +51,12 @@ struct IndicatorDetailView: View {
                         alignment: .top
                     )
 
-                rowsSection
-                    .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
+                ScrollView(.vertical) {
+                    rowsSection
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
+                .scrollBounceBehavior(.basedOnSize)
             }
 
             Spacer(minLength: 0)
