@@ -80,6 +80,11 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let widthPercent: Double?
+    let useCompactNumbers: Bool?
+    let valueSpacing: Double?
+    let barLayout: BarLayout?
+    let lineStyle: ChartLineStyle?
+    let forecastFromIndex: Int?
     let rows: [IndicatorRow]
 
     init(
@@ -96,6 +101,11 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showTotal: Bool? = nil,
         showDetails: Bool? = nil,
         widthPercent: Double? = nil,
+        useCompactNumbers: Bool? = nil,
+        valueSpacing: Double? = nil,
+        barLayout: BarLayout? = nil,
+        lineStyle: ChartLineStyle? = nil,
+        forecastFromIndex: Int? = nil,
         rows: [IndicatorRow]
     ) {
         self.id = id
@@ -111,6 +121,11 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showTotal = showTotal
         self.showDetails = showDetails
         self.widthPercent = widthPercent
+        self.useCompactNumbers = useCompactNumbers
+        self.valueSpacing = valueSpacing
+        self.barLayout = barLayout
+        self.lineStyle = lineStyle
+        self.forecastFromIndex = forecastFromIndex
         self.rows = rows
     }
 }
@@ -123,6 +138,7 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
     let sortOrder: Int?
     let colorGraph: String?
     let colorValue: String?
+    let lineStyle: ChartLineStyle?
 
     init(
         id: String,
@@ -131,7 +147,8 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
         series: String?,
         sortOrder: Int?,
         colorGraph: String? = nil,
-        colorValue: String? = nil
+        colorValue: String? = nil,
+        lineStyle: ChartLineStyle? = nil
     ) {
         self.id = id
         self.label = label
@@ -140,7 +157,19 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
         self.sortOrder = sortOrder
         self.colorGraph = colorGraph
         self.colorValue = colorValue
+        self.lineStyle = lineStyle
     }
+}
+
+enum BarLayout: String, Codable, Sendable {
+    case spaced
+    case compact
+    case stacked
+}
+
+enum ChartLineStyle: String, Codable, Sendable {
+    case solid
+    case dashed
 }
 
 struct IndicatorRowGroup: Identifiable, Equatable, Sendable {
@@ -180,6 +209,12 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
     case horizontalBar = "BarMarkHorizon"
     case stackedBar = "BarMarkStacking"
     case donut = "SectorMarkInnerRadius"
+    case percentDonut = "PercentDonut"
+    case line = "LineMark"
+    case area = "AreaMark"
+    case splineLine = "SplineLineMark"
+    case splineArea = "SplineAreaMark"
+    case forecastLine = "ForecastLineMark"
     case oneValue = "OneValue"
     case linearProgress = "LinearProgressIndicator"
     case gauge = "Gauge"
@@ -202,6 +237,18 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             self = .bar
         case Self.donut.rawValue:
             self = .donut
+        case "PercentDonut", "DonutPercent", "SectorMarkPercent":
+            self = .percentDonut
+        case "LineMark", "LineChart", "Line":
+            self = .line
+        case "AreaMark", "AreaChart", "Area":
+            self = .area
+        case "SplineLineMark", "SmoothLineMark", "SplineLine", "SmoothLine":
+            self = .splineLine
+        case "SplineAreaMark", "LayeredAreaMark", "SmoothAreaMark", "SplineArea":
+            self = .splineArea
+        case "ForecastLineMark", "ForecastLine", "PredictionLineMark":
+            self = .forecastLine
         case Self.stackedBar.rawValue:
             self = .stackedBar
         case Self.horizontalBar.rawValue:
@@ -230,6 +277,18 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             "BarMarkStacking"
         case .donut:
             "SectorMarkInnerRadius"
+        case .percentDonut:
+            "PercentDonut"
+        case .line:
+            "LineMark"
+        case .area:
+            "AreaMark"
+        case .splineLine:
+            "SplineLineMark"
+        case .splineArea:
+            "SplineAreaMark"
+        case .forecastLine:
+            "ForecastLineMark"
         case .oneValue:
             "OneValue"
         case .linearProgress:
@@ -249,6 +308,26 @@ extension Indicator {
 
     var showsLegend: Bool {
         showLegend ?? false
+    }
+
+    func formattedNumber(_ value: Double) -> String {
+        if useCompactNumbers == true {
+            return value.formatted(
+                .number.notation(.compactName).precision(.fractionLength(0...2))
+            )
+        }
+
+        return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
+    }
+
+    func formattedNumber(_ value: Decimal) -> String {
+        if useCompactNumbers == true {
+            return value.formatted(
+                .number.notation(.compactName).precision(.fractionLength(0...2))
+            )
+        }
+
+        return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
     }
 
     var orderedRows: [IndicatorRow] {
@@ -291,13 +370,13 @@ extension Indicator {
             .orange
         default:
             switch chartType {
-            case .bar, .compactBar:
+            case .bar, .compactBar, .line, .forecastLine:
                 .blue
-            case .horizontalBar:
+            case .horizontalBar, .area:
                 .green
-            case .stackedBar:
+            case .stackedBar, .splineLine, .splineArea:
                 .violet
-            case .donut:
+            case .donut, .percentDonut:
                 .orange
             case .oneValue:
                 .orange
@@ -313,7 +392,8 @@ extension Indicator {
         switch chartType {
         case .oneValue, .linearProgress, .gauge:
             false
-        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .geoMap:
+        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .percentDonut,
+             .line, .area, .splineLine, .splineArea, .forecastLine, .geoMap:
             showDetails ?? true
         }
     }

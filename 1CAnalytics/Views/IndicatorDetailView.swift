@@ -200,7 +200,7 @@ struct IndicatorDetailView: View {
     }
 
     private func totalText(for totalValue: Double) -> String {
-        "Итого \(totalValue.formatted(.number.precision(.fractionLength(0))))"
+        "Итого \(indicator.formattedNumber(totalValue))"
     }
 
     private func selectRow(_ rowID: IndicatorRow.ID) {
@@ -355,7 +355,7 @@ private struct DetailGroupRowView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text(value.formatted(.number.precision(.fractionLength(0))))
+                Text(indicator.formattedNumber(value))
                     .font(.body.monospacedDigit().weight(.bold))
                     .foregroundStyle(.primary)
                     .contentTransition(.numericText())

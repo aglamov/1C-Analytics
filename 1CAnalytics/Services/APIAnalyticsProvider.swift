@@ -286,6 +286,11 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let widthPercent: Double?
+    let useCompactNumbers: Bool?
+    let valueSpacing: Double?
+    let barLayout: BarLayout?
+    let lineStyle: ChartLineStyle?
+    let forecastFromIndex: Int?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -300,7 +305,21 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case colorValue
         case showLegend
         case showTotal
+        case showTotalSnake = "show_total"
+        case displayTotal
         case showDetails
+        case showDetailsSnake = "show_details"
+        case displayDetails
+        case useCompactNumbers
+        case useAbbreviations
+        case compactValues
+        case valueSpacing
+        case valueGap
+        case itemSpacing
+        case barLayout
+        case lineStyle
+        case dashed
+        case forecastFromIndex
         case widthPercent
         case width
         case halfWidth
@@ -320,7 +339,28 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         colorValue = container.decodeFlexibleString(forKey: .colorValue)
         showLegend = container.decodeFlexibleBool(forKey: .showLegend)
         showTotal = container.decodeFlexibleBool(forKey: .showTotal)
+            ?? container.decodeFlexibleBool(forKey: .showTotalSnake)
+            ?? container.decodeFlexibleBool(forKey: .displayTotal)
         showDetails = container.decodeFlexibleBool(forKey: .showDetails)
+            ?? container.decodeFlexibleBool(forKey: .showDetailsSnake)
+            ?? container.decodeFlexibleBool(forKey: .displayDetails)
+        useCompactNumbers = container.decodeFlexibleBool(forKey: .useCompactNumbers)
+            ?? container.decodeFlexibleBool(forKey: .useAbbreviations)
+            ?? container.decodeFlexibleBool(forKey: .compactValues)
+
+        let rawSpacing = container.decodeFlexibleDouble(forKey: .valueSpacing)
+            ?? container.decodeFlexibleDouble(forKey: .valueGap)
+            ?? container.decodeFlexibleDouble(forKey: .itemSpacing)
+        valueSpacing = rawSpacing.map { min(max($0, 0), 64) }
+
+        let rawBarLayout = container.decodeFlexibleString(forKey: .barLayout)?.lowercased()
+        barLayout = rawBarLayout.flatMap(BarLayout.init(rawValue:))
+        lineStyle = normalizedLineStyle(
+            container.decodeFlexibleString(forKey: .lineStyle),
+            dashed: container.decodeFlexibleBool(forKey: .dashed)
+        )
+        forecastFromIndex = container.decodeFlexibleDouble(forKey: .forecastFromIndex)
+            .map { max(0, Int($0)) }
 
         let rawWidth = container.decodeFlexibleDouble(forKey: .widthPercent)
             ?? container.decodeFlexibleDouble(forKey: .width)
@@ -376,6 +416,11 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             showTotal: showTotal,
             showDetails: showDetails,
             widthPercent: widthPercent,
+            useCompactNumbers: useCompactNumbers,
+            valueSpacing: valueSpacing,
+            barLayout: barLayout,
+            lineStyle: lineStyle,
+            forecastFromIndex: forecastFromIndex,
             rows: rows
         )
     }
@@ -384,7 +429,8 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         switch type {
         case .oneValue, .linearProgress, .gauge, .geoMap, .compactBar:
             nil
-        case .bar, .horizontalBar, .stackedBar, .donut:
+        case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
+             .line, .area, .splineLine, .splineArea, .forecastLine:
             "чел."
         }
     }
@@ -398,6 +444,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
     let unit: String?
     let colorGraph: String?
     let colorValue: String?
+    let lineStyle: ChartLineStyle?
     let subgroup: [AnalyticsAPISubgroup]?
 
     private enum CodingKeys: String, CodingKey {
@@ -408,6 +455,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         case unit
         case colorGraph
         case colorValue
+        case lineStyle
+        case dashed
         case subgroup
         case values
     }
@@ -421,6 +470,10 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         unit = container.decodeFlexibleString(forKey: .unit)
         colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
         colorValue = container.decodeFlexibleString(forKey: .colorValue)
+        lineStyle = normalizedLineStyle(
+            container.decodeFlexibleString(forKey: .lineStyle),
+            dashed: container.decodeFlexibleBool(forKey: .dashed)
+        )
 
         let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
         let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
@@ -452,7 +505,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                         series: nil,
                         sortOrder: index * 100 + subgroupIndex,
                         colorGraph: subgroup.colorGraph ?? colorGraph,
-                        colorValue: subgroup.colorValue ?? colorValue
+                        colorValue: subgroup.colorValue ?? colorValue,
+                        lineStyle: subgroup.lineStyle ?? lineStyle
                     )
                 }
             }
@@ -466,7 +520,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                     series: subgroup.name,
                     sortOrder: index * 100 + subgroupIndex,
                     colorGraph: subgroup.colorGraph ?? colorGraph,
-                    colorValue: subgroup.colorValue ?? colorValue
+                    colorValue: subgroup.colorValue ?? colorValue,
+                    lineStyle: subgroup.lineStyle ?? lineStyle
                 )
             }
         }
@@ -480,7 +535,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                 series: nil,
                 sortOrder: index,
                 colorGraph: colorGraph,
-                colorValue: colorValue
+                colorValue: colorValue,
+                lineStyle: lineStyle
             )
         ]
     }
@@ -505,6 +561,7 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
     let value: Double
     let colorGraph: String?
     let colorValue: String?
+    let lineStyle: ChartLineStyle?
 
     private enum CodingKeys: String, CodingKey {
         case name
@@ -512,6 +569,8 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
         case value
         case colorGraph
         case colorValue
+        case lineStyle
+        case dashed
     }
 
     init(from decoder: any Decoder) throws {
@@ -522,6 +581,21 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
         value = container.decodeFlexibleDouble(forKey: .value) ?? 0
         colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
         colorValue = container.decodeFlexibleString(forKey: .colorValue)
+        lineStyle = normalizedLineStyle(
+            container.decodeFlexibleString(forKey: .lineStyle),
+            dashed: container.decodeFlexibleBool(forKey: .dashed)
+        )
+    }
+}
+
+private func normalizedLineStyle(_ rawValue: String?, dashed: Bool?) -> ChartLineStyle? {
+    switch rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case ChartLineStyle.dashed.rawValue:
+        return .dashed
+    case ChartLineStyle.solid.rawValue:
+        return .solid
+    default:
+        return dashed.map { $0 ? .dashed : .solid }
     }
 }
 

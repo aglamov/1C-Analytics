@@ -634,7 +634,7 @@ private struct IndicatorDashboardCard: View {
             LinearProgressIndicatorView(indicator: indicator)
         case .gauge:
             GaugeIndicatorView(indicator: indicator)
-                .frame(minHeight: 190, idealHeight: 220, maxHeight: 240)
+                .frame(height: chartHeight)
         case .geoMap:
             GeoMapIndicatorView(indicator: indicator)
                 .frame(maxWidth: .infinity)
@@ -648,21 +648,44 @@ private struct IndicatorDashboardCard: View {
                     showsLegend: indicator.showsLegend,
                     animatesOnAppear: false
                 )
-                    .frame(minHeight: 180, idealHeight: 220, maxHeight: 260)
+                    .frame(height: chartHeight)
                     .padding(.top, 2)
 
                 CompactBarValues(indicator: indicator)
             }
-        case .bar, .horizontalBar, .stackedBar, .donut:
+        case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
+             .line, .area, .splineLine, .splineArea, .forecastLine:
             AnalyticsChart(
                 indicator: indicator,
                 showsTitle: false,
                 usesCardBackground: false,
                 showsLegend: indicator.showsLegend,
-                animatesOnAppear: false
+                animatesOnAppear: false,
+                showsLineAreaFill: true
             )
-                .frame(minHeight: 220, idealHeight: 260, maxHeight: 320)
+                .frame(height: chartHeight)
                 .padding(.top, 2)
+        }
+    }
+
+    private var chartHeight: CGFloat {
+        let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
+
+        switch indicator.chartType {
+        case .horizontalBar:
+            return min(max(CGFloat(categoryCount) * 42 + 52, 180), 340)
+        case .bar, .stackedBar:
+            return categoryCount > 6 ? 250 : 220
+        case .compactBar:
+            return categoryCount > 5 ? 220 : 190
+        case .line, .area, .splineLine, .splineArea, .forecastLine:
+            return categoryCount > 8 ? 250 : 220
+        case .donut, .percentDonut:
+            return 230
+        case .gauge:
+            return 220
+        case .oneValue, .linearProgress, .geoMap:
+            return 220
         }
     }
 
@@ -685,7 +708,7 @@ private struct IndicatorDashboardCard: View {
 
             if indicator.showsAggregateValue {
                 Text(valueText)
-                    .font(.system(.title, design: .default).weight(.semibold))
+                    .font(.system(.title2, design: .default).weight(.semibold))
                     .foregroundStyle(indicator.valueColor)
                     .monospacedDigit()
                     .contentTransition(.numericText())
@@ -702,15 +725,19 @@ private struct IndicatorDashboardCard: View {
             return "нет данных"
         }
 
-        return "\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")"
+        return "\(indicator.formattedNumber(value)) \(indicator.unit ?? "")"
     }
 
     private var iconName: String {
         switch indicator.chartType {
         case .bar, .compactBar, .horizontalBar, .stackedBar:
             "chart.bar.fill"
-        case .donut:
+        case .donut, .percentDonut:
             "chart.pie.fill"
+        case .line, .splineLine, .forecastLine:
+            "chart.xyaxis.line"
+        case .area, .splineArea:
+            "chart.xyaxis.line"
         case .oneValue:
             "waveform.path.ecg"
         case .linearProgress:
@@ -746,7 +773,7 @@ private struct CompactBarValues: View {
 
                     Spacer(minLength: 4)
 
-                    Text(row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0))))
+                    Text(indicator.formattedNumber(row.value))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(Color(apiHex: row.colorValue ?? indicator.colorValue) ?? .primary)
                         .lineLimit(1)
@@ -760,7 +787,7 @@ private struct CompactBarValues: View {
 
 private struct OneValueDashboardContent: View {
     let indicator: Indicator
-    @ScaledMetric(relativeTo: .largeTitle) private var valueFontSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .largeTitle) private var valueFontSize: CGFloat = 38
 
     var body: some View {
         ZStack(alignment: .trailing) {
@@ -813,7 +840,7 @@ private struct OneValueDashboardContent: View {
             return "нет данных"
         }
 
-        return "\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")"
+        return "\(indicator.formattedNumber(value)) \(indicator.unit ?? "")"
             .trimmingCharacters(in: .whitespaces)
     }
 }
@@ -828,7 +855,13 @@ private struct LinearProgressIndicatorView: View {
                     .fill(indicator.graphColor.opacity(0.18))
 
                 Capsule()
-                    .fill(indicator.graphColor)
+                    .fill(
+                        LinearGradient(
+                            colors: [indicator.graphColor.opacity(0.56), indicator.graphColor],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: proxy.size.width * progress)
             }
         }
@@ -851,7 +884,7 @@ private struct LinearProgressIndicatorView: View {
             return "Нет данных"
         }
 
-        return "\(value.formatted(.number.grouping(.automatic))) из \(valueMax.formatted(.number.grouping(.automatic)))"
+        return "\(indicator.formattedNumber(value)) из \(indicator.formattedNumber(valueMax))"
     }
 }
 
@@ -910,7 +943,7 @@ private struct GaugeIndicatorView: View {
                             .frame(width: 5, height: 5)
                     }
 
-                VStack(spacing: 4) {
+                VStack(spacing: 7) {
                     Spacer()
 
                     Text(progress.formatted(.percent.precision(.fractionLength(0))))
@@ -919,15 +952,25 @@ private struct GaugeIndicatorView: View {
                         .monospacedDigit()
 
                     if let value = indicator.value, let valueMax = indicator.valueMax {
-                        Text(
-                            "\(value.formatted(.number.notation(.compactName))) из "
-                                + valueMax.formatted(.number.notation(.compactName))
-                        )
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: 14) {
+                            gaugeValue(
+                                title: "Сейчас",
+                                value: indicator.formattedNumber(value),
+                                alignment: .leading
+                            )
+
+                            Spacer(minLength: 8)
+
+                            gaugeValue(
+                                title: "Цель",
+                                value: indicator.formattedNumber(valueMax),
+                                alignment: .trailing
+                            )
+                        }
                     }
                 }
-                .padding(.bottom, max(2, size * 0.02))
+                .padding(.horizontal, max(14, size * 0.09))
+                .padding(.bottom, max(2, size * 0.015))
             }
             .frame(width: size, height: size)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -946,12 +989,30 @@ private struct GaugeIndicatorView: View {
         return min(max(NSDecimalNumber(decimal: value).doubleValue / valueMax, 0), 1)
     }
 
+    private func gaugeValue(
+        title: String,
+        value: String,
+        alignment: HorizontalAlignment
+    ) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+    }
+
     private var accessibilityValue: String {
         guard let value = indicator.value, let valueMax = indicator.valueMax else {
             return "Нет данных"
         }
 
-        return "\(value.formatted(.number.grouping(.automatic))) из \(valueMax.formatted(.number.grouping(.automatic)))"
+        return "\(indicator.formattedNumber(value)) из \(indicator.formattedNumber(valueMax))"
     }
 }
 

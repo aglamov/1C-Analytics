@@ -174,14 +174,17 @@ extension Indicator {
     var chartColorDomain: [String] {
         switch chartType {
         case .stackedBar:
-            orderedRows.uniqueValues { $0.series ?? "Значение" }
+            return orderedRows.uniqueValues { $0.series ?? "Значение" }
+        case .line, .area, .splineLine, .splineArea, .forecastLine:
+            let series = orderedRows.uniqueValues { $0.series ?? "" }.filter { !$0.isEmpty }
+            return series.isEmpty ? [title] : series
         case .bar where !barDataShape.series.isEmpty,
              .horizontalBar where !barDataShape.series.isEmpty:
-            barDataShape.series
-        case .bar, .compactBar, .horizontalBar, .donut:
-            orderedRows.uniqueValues(\.label)
+            return barDataShape.series
+        case .bar, .compactBar, .horizontalBar, .donut, .percentDonut:
+            return orderedRows.uniqueValues(\.label)
         case .oneValue, .linearProgress, .gauge, .geoMap:
-            []
+            return []
         }
     }
 
@@ -194,10 +197,12 @@ extension Indicator {
         switch chartType {
         case .stackedBar:
             key = row.series ?? "Значение"
+        case .line, .area, .splineLine, .splineArea, .forecastLine:
+            key = row.series ?? title
         case .bar where !barDataShape.series.isEmpty,
              .horizontalBar where !barDataShape.series.isEmpty:
             key = row.series ?? "Значение"
-        case .bar, .compactBar, .horizontalBar, .donut:
+        case .bar, .compactBar, .horizontalBar, .donut, .percentDonut:
             key = row.label
         case .oneValue, .linearProgress, .gauge, .geoMap:
             return accent.primary
@@ -232,7 +237,7 @@ extension Indicator {
     }
 }
 
-private extension Array where Element == IndicatorRow {
+extension Array where Element == IndicatorRow {
     func uniqueValues(_ transform: (IndicatorRow) -> String) -> [String] {
         reduce(into: [String]()) { values, row in
             let value = transform(row)
@@ -382,15 +387,19 @@ struct IndicatorCard: View {
             return "нет данных"
         }
 
-        return "\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")"
+        return "\(indicator.formattedNumber(value)) \(indicator.unit ?? "")"
     }
 
     private var iconName: String {
         switch indicator.chartType {
         case .bar, .compactBar, .horizontalBar, .stackedBar:
             "chart.bar.fill"
-        case .donut:
+        case .donut, .percentDonut:
             "chart.pie.fill"
+        case .line, .splineLine, .forecastLine:
+            "chart.xyaxis.line"
+        case .area, .splineArea:
+            "chart.xyaxis.line"
         case .oneValue:
             "waveform.path.ecg"
         case .linearProgress:
@@ -427,7 +436,7 @@ struct IndicatorHero: View {
             }
 
             if indicator.showsAggregateValue, let value = indicator.value {
-                Text("\(value.formatted(.number.grouping(.automatic))) \(indicator.unit ?? "")")
+                Text("\(indicator.formattedNumber(value)) \(indicator.unit ?? "")")
                     .font(.system(.largeTitle, design: .default).weight(.semibold))
                     .foregroundStyle(indicator.valueColor)
                     .monospacedDigit()
@@ -445,8 +454,12 @@ struct IndicatorHero: View {
         switch indicator.chartType {
         case .bar, .compactBar, .horizontalBar, .stackedBar:
             "chart.bar.fill"
-        case .donut:
+        case .donut, .percentDonut:
             "chart.pie.fill"
+        case .line, .splineLine, .forecastLine:
+            "chart.xyaxis.line"
+        case .area, .splineArea:
+            "chart.xyaxis.line"
         case .oneValue:
             "waveform.path.ecg"
         case .linearProgress:

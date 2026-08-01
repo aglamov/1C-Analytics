@@ -8,6 +8,7 @@ struct AnalyticsChart: View {
     var showsLegend = true
     var showsValueLabels = true
     var animatesOnAppear = true
+    var showsLineAreaFill = false
     private var externalSelection: Binding<IndicatorRow.ID?>?
     @State private var internalSelectedRowID: IndicatorRow.ID?
     @State private var hasAppeared = false
@@ -22,6 +23,7 @@ struct AnalyticsChart: View {
         showsLegend: Bool = true,
         showsValueLabels: Bool = true,
         animatesOnAppear: Bool = true,
+        showsLineAreaFill: Bool = false,
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
         self.indicator = indicator
@@ -30,6 +32,7 @@ struct AnalyticsChart: View {
         self.showsLegend = showsLegend
         self.showsValueLabels = showsValueLabels
         self.animatesOnAppear = animatesOnAppear
+        self.showsLineAreaFill = showsLineAreaFill
         self.externalSelection = selectedRowID
     }
 
@@ -65,7 +68,19 @@ struct AnalyticsChart: View {
             case .stackedBar:
                 stackedBars
             case .donut:
-                donut
+                donut(showsPercentages: false)
+            case .percentDonut:
+                donut(showsPercentages: true)
+            case .line:
+                trendLine(smooth: false)
+            case .splineLine:
+                trendLine(smooth: true)
+            case .area:
+                trendArea(smooth: false)
+            case .splineArea:
+                trendArea(smooth: true)
+            case .forecastLine:
+                forecastLine
             case .oneValue, .linearProgress, .gauge, .geoMap:
                 EmptyView()
             }
@@ -100,10 +115,12 @@ struct AnalyticsChart: View {
             Chart(indicator.orderedRows) { row in
                 BarMark(
                     x: .value("Группа", row.label),
-                    y: .value("Значение", animatedValue(for: row))
+                    y: .value("Значение", animatedValue(for: row)),
+                    width: barMarkDimension
                 )
-                .position(by: .value("Серия", row.series ?? "Значение"), axis: .horizontal)
-                .foregroundStyle(chartColor(for: row))
+                .position(by: .value("Серия", verticalBarPosition(for: row)), axis: .horizontal)
+                .foregroundStyle(verticalGradient(for: row))
+                .alignsMarkStylesWithPlotArea(false)
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
                 .annotation(position: .top, alignment: .center) {
@@ -128,7 +145,10 @@ struct AnalyticsChart: View {
                 responsiveCategoryAxis(availableWidth: geometry.size.width)
             }
             .chartOverlay { proxy in
-                chartTapOverlay(proxy: proxy, mode: .verticalBar)
+                chartTapOverlay(
+                    proxy: proxy,
+                    mode: indicator.barLayout == .stacked ? .stackedBar : .verticalBar
+                )
             }
         }
     }
@@ -137,10 +157,12 @@ struct AnalyticsChart: View {
         Chart(indicator.orderedRows) { row in
             BarMark(
                 x: .value("Значение", animatedValue(for: row)),
-                y: .value("Группа", row.label)
+                y: .value("Группа", row.label),
+                height: barMarkDimension
             )
             .position(by: .value("Серия", row.series ?? "Значение"), axis: .vertical)
-            .foregroundStyle(chartColor(for: row))
+            .foregroundStyle(horizontalGradient(for: row))
+            .alignsMarkStylesWithPlotArea(false)
             .opacity(opacity(for: row))
             .cornerRadius(3)
             .annotation(position: .trailing, alignment: .center) {
@@ -178,9 +200,11 @@ struct AnalyticsChart: View {
             Chart(indicator.orderedRows) { row in
                 BarMark(
                     x: .value("Группа", row.label),
-                    y: .value("Значение", animatedValue(for: row))
+                    y: .value("Значение", animatedValue(for: row)),
+                    width: barMarkDimension
                 )
-                .foregroundStyle(chartColor(for: row))
+                .foregroundStyle(verticalGradient(for: row))
+                .alignsMarkStylesWithPlotArea(false)
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
                 .annotation(position: .overlay, alignment: .center) {
@@ -210,26 +234,182 @@ struct AnalyticsChart: View {
         }
     }
 
-    private var donut: some View {
+    private func donut(showsPercentages: Bool) -> some View {
         Chart(indicator.orderedRows) { row in
             SectorMark(
                 angle: .value("Доля", animatedValue(for: row)),
                 innerRadius: .ratio(0.62),
                 outerRadius: selectedRowID == row.id ? .ratio(1.0) : .ratio(0.92),
-                angularInset: 1.5
+                angularInset: donutAngularInset
             )
             .cornerRadius(3)
-            .foregroundStyle(chartColor(for: row))
+            .foregroundStyle(sectorGradient(for: row))
+            .alignsMarkStylesWithPlotArea(false)
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
                 if showsValueLabels {
-                    valueLabel(for: row)
+                    if showsPercentages {
+                        percentLabel(for: row)
+                    } else {
+                        valueLabel(for: row)
+                    }
                 }
             }
         }
         .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
         .chartOverlay { proxy in
             donutTapOverlay(proxy: proxy)
+        }
+    }
+
+    private func trendLine(smooth: Bool) -> some View {
+        GeometryReader { geometry in
+            Chart(indicator.orderedRows) { row in
+                if showsLineAreaFill {
+                    AreaMark(
+                        x: .value("Группа", row.label),
+                        yStart: .value("Основание", 0),
+                        yEnd: .value("Значение", animatedValue(for: row)),
+                        series: .value("Серия", row.series ?? indicator.title)
+                    )
+                    .interpolationMethod(smooth ? .catmullRom : .monotone)
+                    .foregroundStyle(areaGradient(for: row))
+                    .alignsMarkStylesWithPlotArea(false)
+                    .opacity(opacity(for: row))
+                }
+
+                LineMark(
+                    x: .value("Группа", row.label),
+                    y: .value("Значение", animatedValue(for: row)),
+                    series: .value("Серия", row.series ?? indicator.title)
+                )
+                .interpolationMethod(smooth ? .catmullRom : .monotone)
+                .lineStyle(strokeStyle(for: row))
+                .foregroundStyle(chartColor(for: row))
+                .opacity(opacity(for: row))
+
+                PointMark(
+                    x: .value("Группа", row.label),
+                    y: .value("Значение", animatedValue(for: row))
+                )
+                .foregroundStyle(chartColor(for: row))
+                .symbolSize(selectedRowID == row.id ? 62 : 24)
+                .opacity(opacity(for: row))
+            }
+            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            .chartYAxis {
+                valueAxis
+            }
+            .chartXAxis {
+                responsiveCategoryAxis(availableWidth: geometry.size.width)
+            }
+            .chartOverlay { proxy in
+                chartTapOverlay(proxy: proxy, mode: .point)
+            }
+        }
+    }
+
+    private func trendArea(smooth: Bool) -> some View {
+        GeometryReader { geometry in
+            Chart(indicator.orderedRows) { row in
+                AreaMark(
+                    x: .value("Группа", row.label),
+                    yStart: .value("Основание", 0),
+                    yEnd: .value("Значение", animatedValue(for: row)),
+                    series: .value("Серия", row.series ?? indicator.title)
+                )
+                .interpolationMethod(smooth ? .catmullRom : .monotone)
+                .foregroundStyle(areaGradient(for: row))
+                .alignsMarkStylesWithPlotArea(false)
+                .opacity(opacity(for: row))
+
+                LineMark(
+                    x: .value("Группа", row.label),
+                    y: .value("Значение", animatedValue(for: row)),
+                    series: .value("Серия", row.series ?? indicator.title)
+                )
+                .interpolationMethod(smooth ? .catmullRom : .monotone)
+                .lineStyle(strokeStyle(for: row))
+                .foregroundStyle(chartColor(for: row))
+                .opacity(opacity(for: row))
+
+                PointMark(
+                    x: .value("Группа", row.label),
+                    y: .value("Значение", animatedValue(for: row))
+                )
+                .foregroundStyle(chartColor(for: row))
+                .symbolSize(selectedRowID == row.id ? 58 : 20)
+                .opacity(opacity(for: row))
+            }
+            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            .chartYAxis {
+                valueAxis
+            }
+            .chartXAxis {
+                responsiveCategoryAxis(availableWidth: geometry.size.width)
+            }
+            .chartOverlay { proxy in
+                chartTapOverlay(proxy: proxy, mode: .point)
+            }
+        }
+    }
+
+    private var forecastLine: some View {
+        GeometryReader { geometry in
+            Chart {
+                ForEach(indicator.orderedRows) { row in
+                    LineMark(
+                        x: .value("Группа", row.label),
+                        y: .value("Значение", animatedValue(for: row)),
+                        series: .value("Серия", row.series ?? indicator.title)
+                    )
+                    .interpolationMethod(.monotone)
+                    .lineStyle(strokeStyle(for: row, isForecast: isForecast(row)))
+                    .foregroundStyle(chartColor(for: row))
+                    .opacity(opacity(for: row))
+
+                    PointMark(
+                        x: .value("Группа", row.label),
+                        y: .value("Значение", animatedValue(for: row))
+                    )
+                    .foregroundStyle(chartColor(for: row))
+                    .symbolSize(selectedRowID == row.id ? 62 : 24)
+                    .opacity(opacity(for: row))
+                }
+
+                if let forecastStartLabel {
+                    RuleMark(x: .value("Начало прогноза", forecastStartLabel))
+                        .foregroundStyle(Color.secondary.opacity(0.42))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .annotation(position: .top, alignment: .leading) {
+                            Text("Прогноз")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                }
+            }
+            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            .chartYAxis {
+                valueAxis
+            }
+            .chartXAxis {
+                responsiveCategoryAxis(availableWidth: geometry.size.width)
+            }
+            .chartOverlay { proxy in
+                chartTapOverlay(proxy: proxy, mode: .point)
+            }
+        }
+    }
+
+    private var valueAxis: some AxisContent {
+        AxisMarks(position: .leading) { _ in
+            AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                .foregroundStyle(Color.secondary.opacity(0.16))
+            AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
+                .foregroundStyle(Color.secondary.opacity(0.26))
+            AxisValueLabel()
+                .foregroundStyle(Color.secondary)
+                .font(.caption2)
         }
     }
 
@@ -269,9 +449,12 @@ struct AnalyticsChart: View {
     }
 
     private var legendRows: [IndicatorRow] {
-        guard !indicator.barDataShape.series.isEmpty,
-              indicator.chartType == .bar || indicator.chartType == .horizontalBar else {
+        guard usesSeriesLegend else {
             return indicator.orderedRows
+        }
+
+        guard !indicator.barDataShape.series.isEmpty else {
+            return Array(indicator.orderedRows.prefix(1))
         }
 
         return indicator.barDataShape.series.compactMap { series in
@@ -280,12 +463,23 @@ struct AnalyticsChart: View {
     }
 
     private func legendTitle(for row: IndicatorRow) -> String {
-        if !indicator.barDataShape.series.isEmpty,
-           indicator.chartType == .bar || indicator.chartType == .horizontalBar {
-            return row.series ?? "Значение"
+        if usesSeriesLegend {
+            return row.series ?? indicator.title
         }
 
         return row.label
+    }
+
+    private var usesSeriesLegend: Bool {
+        switch indicator.chartType {
+        case .line, .area, .splineLine, .splineArea, .forecastLine:
+            return true
+        case .bar, .horizontalBar:
+            return !indicator.barDataShape.series.isEmpty
+        case .compactBar, .stackedBar, .donut, .percentDonut,
+             .oneValue, .linearProgress, .gauge, .geoMap:
+            return false
+        }
     }
 
     private var selectedRow: IndicatorRow? {
@@ -308,8 +502,44 @@ struct AnalyticsChart: View {
         indicator.chartColor(for: row, scheme: chartPaletteScheme)
     }
 
+    private func verticalGradient(for row: IndicatorRow) -> LinearGradient {
+        let color = chartColor(for: row)
+        return LinearGradient(
+            colors: [color.opacity(colorScheme == .dark ? 0.58 : 0.52), color],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func horizontalGradient(for row: IndicatorRow) -> LinearGradient {
+        let color = chartColor(for: row)
+        return LinearGradient(
+            colors: [color.opacity(colorScheme == .dark ? 0.58 : 0.52), color],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private func sectorGradient(for row: IndicatorRow) -> LinearGradient {
+        let color = chartColor(for: row)
+        return LinearGradient(
+            colors: [color.opacity(colorScheme == .dark ? 0.62 : 0.56), color],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func areaGradient(for row: IndicatorRow) -> LinearGradient {
+        let color = chartColor(for: row)
+        return LinearGradient(
+            colors: [color.opacity(colorScheme == .dark ? 0.58 : 0.52), color.opacity(0.035)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
     private func selectedRowTitle(for row: IndicatorRow) -> String {
-        let value = row.value.formatted(.number.grouping(.automatic).precision(.fractionLength(0)))
+        let value = indicator.formattedNumber(row.value)
         if let series = row.series {
             return "\(row.label), \(series): \(value)"
         }
@@ -330,6 +560,11 @@ struct AnalyticsChart: View {
             return 1
         }
 
+        if usesSeriesLegend,
+           let selectedRow = indicator.orderedRows.first(where: { $0.id == selectedRowID }) {
+            return (row.series ?? indicator.title) == (selectedRow.series ?? indicator.title) ? 1 : 0.28
+        }
+
         return selectedRowID == row.id ? 1 : 0.28
     }
 
@@ -338,8 +573,84 @@ struct AnalyticsChart: View {
             value: row.value,
             isSelected: selectedRowID == row.id,
             selectionColor: chartColor(for: row),
-            valueColor: Color(apiHex: row.colorValue ?? indicator.colorValue)
+            valueColor: Color(apiHex: row.colorValue ?? indicator.colorValue),
+            useCompactNumbers: indicator.useCompactNumbers
         )
+    }
+
+    private func percentLabel(for row: IndicatorRow) -> some View {
+        let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
+        let share = total > 0 ? row.value / total : 0
+
+        return Text(share.formatted(.percent.precision(.fractionLength(0))))
+            .font(.caption.monospacedDigit().weight(.bold))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
+    }
+
+    private var donutAngularInset: Double {
+        guard let valueSpacing = indicator.valueSpacing else {
+            return 1.5
+        }
+
+        return min(max(valueSpacing / 16, 0), 4)
+    }
+
+    private var barMarkDimension: MarkDimension {
+        if let valueSpacing = indicator.valueSpacing {
+            return .ratio(max(0.18, 1 - valueSpacing / 80))
+        }
+
+        if indicator.barLayout == .compact {
+            return .ratio(0.94)
+        }
+
+        return .automatic
+    }
+
+    private func verticalBarPosition(for row: IndicatorRow) -> String {
+        indicator.barLayout == .stacked ? "Значение" : (row.series ?? "Значение")
+    }
+
+    private func strokeStyle(for row: IndicatorRow, isForecast: Bool = false) -> StrokeStyle {
+        let style = row.lineStyle ?? indicator.lineStyle
+        let usesDash = isForecast || style == .dashed
+        return StrokeStyle(
+            lineWidth: selectedRowID == row.id ? 3.5 : 2.5,
+            lineCap: .round,
+            lineJoin: .round,
+            dash: usesDash ? [7, 5] : []
+        )
+    }
+
+    private var forecastLabels: [String] {
+        indicator.orderedRows.uniqueValues(\.label)
+    }
+
+    private var forecastStartIndex: Int? {
+        guard !forecastLabels.isEmpty else {
+            return nil
+        }
+
+        let defaultIndex = max(forecastLabels.count - max(1, forecastLabels.count / 4), 0)
+        return min(indicator.forecastFromIndex ?? defaultIndex, forecastLabels.count - 1)
+    }
+
+    private var forecastStartLabel: String? {
+        guard let forecastStartIndex else {
+            return nil
+        }
+
+        return forecastLabels[forecastStartIndex]
+    }
+
+    private func isForecast(_ row: IndicatorRow) -> Bool {
+        guard let forecastStartIndex,
+              let rowIndex = forecastLabels.firstIndex(of: row.label) else {
+            return false
+        }
+
+        return rowIndex >= forecastStartIndex
     }
 
     private func responsiveCategoryAxis(availableWidth: CGFloat) -> some AxisContent {
@@ -506,6 +817,19 @@ struct AnalyticsChart: View {
             }
 
             return nil
+
+        case .point:
+            guard
+                let label = proxy.value(atX: location.x, as: String.self),
+                let value = proxy.value(atY: location.y, as: Double.self)
+            else {
+                return nil
+            }
+
+            return indicator.orderedRows
+                .filter { $0.label == label }
+                .min { abs($0.value - value) < abs($1.value - value) }?
+                .id
         }
     }
 
@@ -550,6 +874,7 @@ private enum ChartSelectionMode {
     case verticalBar
     case horizontalBar
     case stackedBar
+    case point
 }
 
 private struct ChartValueLabel: View {
@@ -557,6 +882,7 @@ private struct ChartValueLabel: View {
     let isSelected: Bool
     let selectionColor: Color
     let valueColor: Color?
+    let useCompactNumbers: Bool?
     @Environment(\.colorScheme) private var colorScheme
 
     @ViewBuilder
@@ -587,11 +913,13 @@ private struct ChartValueLabel: View {
     }
 
     private var valueText: String {
-        if isSelected {
-            return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0)))
+        if useCompactNumbers == true {
+            return value.formatted(
+                .number.notation(.compactName).precision(.fractionLength(0...2))
+            )
+        } else {
+            return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
         }
-
-        return value.formatted(.number.notation(.compactName).precision(.fractionLength(0)))
     }
 
     private var selectedBackground: Color {

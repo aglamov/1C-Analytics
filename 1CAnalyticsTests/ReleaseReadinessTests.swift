@@ -429,6 +429,98 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(geoMap.supportsDetail)
     }
 
+    func testChartCatalogContractAddsNewChartsWithoutChangingLegacyDefaults() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [{
+                "name": "Каталог",
+                "values": [
+                  {
+                    "name": "Линия",
+                    "type": "LineChart",
+                    "show_total": false,
+                    "show_details": false,
+                    "useAbbreviations": true,
+                    "valueGap": 80,
+                    "lineStyle": "dashed",
+                    "values": [
+                      {"group": "Янв", "value": 10},
+                      {"group": "Фев", "value": 14}
+                    ]
+                  },
+                  {
+                    "name": "Область",
+                    "type": "Area",
+                    "barLayout": "compact",
+                    "values": [{"group": "Янв", "value": 8}]
+                  },
+                  {
+                    "name": "Сглаженные линии",
+                    "type": "SmoothLineMark",
+                    "values": [{
+                      "group": "Янв",
+                      "subgroup": [
+                        {"name": "Создано", "value": 12},
+                        {"name": "Закрыто", "value": 9, "dashed": true}
+                      ]
+                    }]
+                  },
+                  {
+                    "name": "Сглаженная область",
+                    "type": "LayeredAreaMark",
+                    "values": [{"group": "Янв", "value": 7}]
+                  },
+                  {
+                    "name": "Прогноз",
+                    "type": "PredictionLineMark",
+                    "forecastFromIndex": 2,
+                    "values": [
+                      {"group": "1", "value": 2},
+                      {"group": "2", "value": 4},
+                      {"group": "3", "value": 6}
+                    ]
+                  },
+                  {
+                    "name": "Доли",
+                    "type": "SectorMarkPercent",
+                    "itemSpacing": -5,
+                    "values": [
+                      {"group": "Web", "value": 60},
+                      {"group": "Email", "value": 40}
+                    ]
+                  }
+                ]
+              }]
+            }
+            """#.utf8
+        )
+
+        let indicators = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+
+        XCTAssertEqual(
+            indicators.map(\.chartType),
+            [.line, .area, .splineLine, .splineArea, .forecastLine, .percentDonut]
+        )
+
+        let line = indicators[0]
+        XCTAssertFalse(line.showsAggregateValue)
+        XCTAssertFalse(line.supportsDetail)
+        XCTAssertEqual(line.useCompactNumbers, true)
+        XCTAssertEqual(line.valueSpacing, 64)
+        XCTAssertEqual(line.lineStyle, .dashed)
+
+        XCTAssertEqual(indicators[1].barLayout, .compact)
+        XCTAssertEqual(indicators[2].rows.map(\.lineStyle), [nil, .dashed])
+        XCTAssertEqual(indicators[4].forecastFromIndex, 2)
+        XCTAssertEqual(indicators[5].valueSpacing, 0)
+
+        XCTAssertFalse(line.showsLegend)
+        XCTAssertTrue(indicators[1].showsAggregateValue)
+    }
+
     func testAndroidContractAliasesFlexibleNumbersNestedValuesAndStableIDs() throws {
         let data = Data(
             #"""
