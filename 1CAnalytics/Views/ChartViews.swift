@@ -124,7 +124,7 @@ struct AnalyticsChart: View {
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
                 .annotation(position: .top, alignment: .center) {
-                    if showsValueLabels {
+                    if shouldShowBarValueLabel(for: row) {
                         valueLabel(for: row)
                     }
                 }
@@ -160,13 +160,13 @@ struct AnalyticsChart: View {
                 y: .value("Группа", row.label),
                 height: barMarkDimension
             )
-            .position(by: .value("Серия", row.series ?? "Значение"), axis: .vertical)
+            .position(by: .value("Серия", horizontalBarPosition(for: row)), axis: .vertical)
             .foregroundStyle(horizontalGradient(for: row))
             .alignsMarkStylesWithPlotArea(false)
             .opacity(opacity(for: row))
             .cornerRadius(3)
             .annotation(position: .trailing, alignment: .center) {
-                if showsValueLabels {
+                if shouldShowBarValueLabel(for: row) {
                     valueLabel(for: row)
                 }
             }
@@ -208,7 +208,7 @@ struct AnalyticsChart: View {
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
                 .annotation(position: .overlay, alignment: .center) {
-                    if showsValueLabels {
+                    if shouldShowBarValueLabel(for: row) {
                         valueLabel(for: row)
                     }
                 }
@@ -578,6 +578,18 @@ struct AnalyticsChart: View {
         )
     }
 
+    private func shouldShowBarValueLabel(for row: IndicatorRow) -> Bool {
+        guard showsValueLabels else {
+            return false
+        }
+
+        guard let selectedRowID else {
+            return true
+        }
+
+        return selectedRowID == row.id
+    }
+
     private func percentLabel(for row: IndicatorRow) -> some View {
         let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
         let share = total > 0 ? row.value / total : 0
@@ -776,9 +788,21 @@ struct AnalyticsChart: View {
             guard
                 let label = proxy.value(atX: location.x, as: String.self),
                 let value = proxy.value(atY: location.y, as: Double.self),
-                let row = indicator.orderedRows.first(where: { $0.label == label }),
-                value >= 0,
-                value <= row.value
+                let categoryBounds = categoryBounds(
+                    for: label,
+                    labels: indicator.orderedRows.uniqueValues(\.label),
+                    plotLength: proxy.plotSize.width,
+                    position: { proxy.position(forX: $0) }
+                ),
+                let positionKey = BarSelectionResolver.positionKey(
+                    at: location.x,
+                    in: categoryBounds,
+                    domain: verticalBarPositionDomain
+                ),
+                let row = indicator.orderedRows.first(where: {
+                    $0.label == label && verticalBarPosition(for: $0) == positionKey
+                }),
+                valueIsInsideBar(value, rowValue: row.value)
             else {
                 return nil
             }
@@ -789,9 +813,21 @@ struct AnalyticsChart: View {
             guard
                 let label = proxy.value(atY: location.y, as: String.self),
                 let value = proxy.value(atX: location.x, as: Double.self),
-                let row = indicator.orderedRows.first(where: { $0.label == label }),
-                value >= 0,
-                value <= row.value
+                let categoryBounds = categoryBounds(
+                    for: label,
+                    labels: indicator.orderedRows.uniqueValues(\.label),
+                    plotLength: proxy.plotSize.height,
+                    position: { proxy.position(forY: $0) }
+                ),
+                let positionKey = BarSelectionResolver.positionKey(
+                    at: location.y,
+                    in: categoryBounds,
+                    domain: horizontalBarPositionDomain
+                ),
+                let row = indicator.orderedRows.first(where: {
+                    $0.label == label && horizontalBarPosition(for: $0) == positionKey
+                }),
+                valueIsInsideBar(value, rowValue: row.value)
             else {
                 return nil
             }
@@ -831,6 +867,58 @@ struct AnalyticsChart: View {
                 .min { abs($0.value - value) < abs($1.value - value) }?
                 .id
         }
+    }
+
+    private var verticalBarPositionDomain: [String] {
+        indicator.orderedRows.uniqueValues { verticalBarPosition(for: $0) }
+    }
+
+    private var horizontalBarPositionDomain: [String] {
+        indicator.orderedRows.uniqueValues { horizontalBarPosition(for: $0) }
+    }
+
+    private func horizontalBarPosition(for row: IndicatorRow) -> String {
+        row.series ?? "Значение"
+    }
+
+    private func categoryBounds(
+        for label: String,
+        labels: [String],
+        plotLength: CGFloat,
+        position: (String) -> CGFloat?
+    ) -> ClosedRange<CGFloat>? {
+        let positionedLabels = labels.compactMap { label in
+            position(label).map { (label: label, position: $0) }
+        }
+        guard let index = positionedLabels.firstIndex(where: { $0.label == label }) else {
+            return nil
+        }
+
+        let currentPosition = positionedLabels[index].position
+        let lowerBound: CGFloat
+        let upperBound: CGFloat
+
+        if index > 0 {
+            lowerBound = (positionedLabels[index - 1].position + currentPosition) / 2
+        } else {
+            lowerBound = 0
+        }
+
+        if index + 1 < positionedLabels.count {
+            upperBound = (currentPosition + positionedLabels[index + 1].position) / 2
+        } else {
+            upperBound = plotLength
+        }
+
+        guard lowerBound < upperBound else {
+            return nil
+        }
+
+        return lowerBound...upperBound
+    }
+
+    private func valueIsInsideBar(_ value: Double, rowValue: Double) -> Bool {
+        value >= min(0, rowValue) && value <= max(0, rowValue)
     }
 
     private func selectedDonutRowID(at location: CGPoint, in size: CGSize) -> IndicatorRow.ID? {
@@ -923,11 +1011,36 @@ private struct ChartValueLabel: View {
     }
 
     private var selectedBackground: Color {
-        colorScheme == .dark ? Color(.secondarySystemGroupedBackground).opacity(0.96) : Color(.systemBackground).opacity(0.94)
+        colorScheme == .dark ? Color(.secondarySystemGroupedBackground) : Color(.systemBackground)
     }
 
     private var selectedForeground: Color {
         colorScheme == .dark ? .white : selectionColor
+    }
+}
+
+enum BarSelectionResolver {
+    static func positionKey(
+        at coordinate: CGFloat,
+        in categoryBounds: ClosedRange<CGFloat>,
+        domain: [String]
+    ) -> String? {
+        guard !domain.isEmpty, categoryBounds.contains(coordinate) else {
+            return nil
+        }
+
+        guard domain.count > 1 else {
+            return domain.first
+        }
+
+        let categoryWidth = categoryBounds.upperBound - categoryBounds.lowerBound
+        guard categoryWidth > 0 else {
+            return nil
+        }
+
+        let relativePosition = (coordinate - categoryBounds.lowerBound) / categoryWidth
+        let index = min(Int(relativePosition * CGFloat(domain.count)), domain.count - 1)
+        return domain[index]
     }
 }
 

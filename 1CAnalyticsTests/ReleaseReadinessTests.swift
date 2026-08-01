@@ -3,6 +3,28 @@ import XCTest
 
 @MainActor
 final class ReleaseReadinessTests: XCTestCase {
+    func testGroupedBarSelectionResolvesEverySeriesSlot() {
+        let bounds: ClosedRange<CGFloat> = 20...120
+        let domain = ["План", "Факт"]
+
+        XCTAssertEqual(
+            BarSelectionResolver.positionKey(at: 40, in: bounds, domain: domain),
+            "План"
+        )
+        XCTAssertEqual(
+            BarSelectionResolver.positionKey(at: 100, in: bounds, domain: domain),
+            "Факт"
+        )
+    }
+
+    func testBarSelectionRejectsTapsOutsideCategory() {
+        let bounds: ClosedRange<CGFloat> = 20...120
+
+        XCTAssertNil(
+            BarSelectionResolver.positionKey(at: 10, in: bounds, domain: ["План", "Факт"])
+        )
+    }
+
     func testDashboardLayoutReconcilesSavedOrderWithFreshIndicators() {
         XCTAssertEqual(
             DashboardLayoutStore.reconciledOrder(
