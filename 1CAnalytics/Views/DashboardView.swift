@@ -651,7 +651,9 @@ private struct IndicatorDashboardCard: View {
                     .frame(height: chartHeight)
                     .padding(.top, 2)
 
-                CompactBarValues(indicator: indicator)
+                if !indicator.prefersHorizontalGroupedBars {
+                    CompactBarValues(indicator: indicator)
+                }
             }
         case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
              .line, .area, .splineLine, .splineArea, .forecastLine:
@@ -671,6 +673,10 @@ private struct IndicatorDashboardCard: View {
     private var chartHeight: CGFloat {
         let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
 
+        if indicator.prefersHorizontalGroupedBars {
+            return min(max(CGFloat(categoryCount) * 54 + 64, 240), 420)
+        }
+
         switch indicator.chartType {
         case .horizontalBar:
             return min(max(CGFloat(categoryCount) * 42 + 52, 180), 340)
@@ -681,7 +687,7 @@ private struct IndicatorDashboardCard: View {
         case .line, .area, .splineLine, .splineArea, .forecastLine:
             return categoryCount > 8 ? 250 : 220
         case .donut, .percentDonut:
-            return 230
+            return 270
         case .gauge:
             return 220
         case .oneValue, .linearProgress, .geoMap:
@@ -709,7 +715,7 @@ private struct IndicatorDashboardCard: View {
             if indicator.showsAggregateValue {
                 Text(valueText)
                     .font(.system(.title2, design: .default).weight(.semibold))
-                    .foregroundStyle(indicator.valueColor)
+                    .foregroundStyle(.primary)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .minimumScaleFactor(0.7)
@@ -775,7 +781,7 @@ private struct CompactBarValues: View {
 
                     Text(indicator.formattedNumber(row.value))
                         .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(Color(apiHex: row.colorValue ?? indicator.colorValue) ?? .primary)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                 }
@@ -855,14 +861,16 @@ private struct LinearProgressIndicatorView: View {
                     .fill(indicator.graphColor.opacity(0.18))
 
                 Capsule()
-                    .fill(
+                    .fill(indicator.graphColor)
+                    .frame(width: proxy.size.width * progress)
+                    .overlay {
                         LinearGradient(
-                            colors: [indicator.graphColor.opacity(0.56), indicator.graphColor],
+                            colors: [.white.opacity(0.18), .clear, .black.opacity(0.14)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
-                    )
-                    .frame(width: proxy.size.width * progress)
+                        .clipShape(Capsule())
+                    }
             }
         }
         .frame(height: 10)

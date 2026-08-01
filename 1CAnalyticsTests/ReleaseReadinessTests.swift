@@ -217,6 +217,21 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testDenseStackedChartWithFullValuesUsesReadableHorizontalLayout() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Образование","values":[{"name":"Всего обучающихся РФ и ИГ","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":18347},{"name":"ИГ","value":3604}]},{"group":"СПЕЦ","subgroup":[{"name":"РФ","value":5120},{"name":"ИГ","value":920}]},{"group":"МАГ","subgroup":[{"name":"РФ","value":3480},{"name":"ИГ","value":740}]},{"group":"АСП","subgroup":[{"name":"РФ","value":995},{"name":"ИГ","value":115}]}],"type":"BarMarkStacking"}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertTrue(indicator.prefersHorizontalGroupedBars)
+    }
+
     func testGroupedValuesDoNotPopulateMissingSummaryValue() throws {
         let data = Data(
             #"""

@@ -62,11 +62,19 @@ struct AnalyticsChart: View {
 
             switch indicator.chartType {
             case .bar, .compactBar:
-                verticalBars
+                if indicator.prefersHorizontalGroupedBars {
+                    horizontalBars
+                } else {
+                    verticalBars
+                }
             case .horizontalBar:
                 horizontalBars
             case .stackedBar:
-                stackedBars
+                if indicator.prefersHorizontalGroupedBars {
+                    horizontalBars
+                } else {
+                    stackedBars
+                }
             case .donut:
                 donut(showsPercentages: false)
             case .percentDonut:
@@ -85,7 +93,7 @@ struct AnalyticsChart: View {
                 EmptyView()
             }
 
-            if showsLegend, !indicator.orderedRows.isEmpty {
+            if displaysLegend, !indicator.orderedRows.isEmpty {
                 interactiveLegend
             }
         }
@@ -123,7 +131,11 @@ struct AnalyticsChart: View {
                 .alignsMarkStylesWithPlotArea(false)
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
-                .annotation(position: .top, alignment: .center) {
+                .annotation(
+                    position: .top,
+                    alignment: .center,
+                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                ) {
                     if shouldShowBarValueLabel(for: row) {
                         valueLabel(for: row)
                     }
@@ -165,7 +177,12 @@ struct AnalyticsChart: View {
             .alignsMarkStylesWithPlotArea(false)
             .opacity(opacity(for: row))
             .cornerRadius(3)
-            .annotation(position: .trailing, alignment: .center) {
+            .annotation(
+                position: .trailing,
+                alignment: .center,
+                spacing: 5,
+                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+            ) {
                 if shouldShowBarValueLabel(for: row) {
                     valueLabel(for: row)
                 }
@@ -209,7 +226,7 @@ struct AnalyticsChart: View {
                 .cornerRadius(3)
                 .annotation(position: .overlay, alignment: .center) {
                     if shouldShowBarValueLabel(for: row) {
-                        valueLabel(for: row)
+                        valueLabel(for: row, usesContrastingForeground: true)
                     }
                 }
             }
@@ -247,7 +264,7 @@ struct AnalyticsChart: View {
             .alignsMarkStylesWithPlotArea(false)
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
-                if showsValueLabels {
+                if showsValueLabels, selectedRowID == row.id {
                     if showsPercentages {
                         percentLabel(for: row)
                     } else {
@@ -414,7 +431,11 @@ struct AnalyticsChart: View {
     }
 
     private var interactiveLegend: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: legendColumnMinimumWidth), spacing: 8)],
+            alignment: .leading,
+            spacing: 8
+        ) {
             ForEach(legendRows.prefix(8)) { row in
                 Button {
                     toggleSelection(row.id)
@@ -429,6 +450,14 @@ struct AnalyticsChart: View {
                             .lineLimit(1)
 
                         Spacer(minLength: 0)
+
+                        if let legendValue = legendValue(for: row) {
+                            Text(legendValue)
+                                .font(.caption2.monospacedDigit().weight(.bold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
                     }
                     .padding(.horizontal, 9)
                     .padding(.vertical, 7)
@@ -470,15 +499,55 @@ struct AnalyticsChart: View {
         return row.label
     }
 
+    private var legendColumnMinimumWidth: CGFloat {
+        switch indicator.chartType {
+        case .donut, .percentDonut:
+            142
+        default:
+            96
+        }
+    }
+
+    private func legendValue(for row: IndicatorRow) -> String? {
+        switch indicator.chartType {
+        case .donut:
+            return indicator.formattedNumber(row.value)
+        case .percentDonut:
+            let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
+            guard total > 0 else {
+                return "0%"
+            }
+            return (row.value / total).formatted(.percent.precision(.fractionLength(0)))
+        default:
+            return nil
+        }
+    }
+
     private var usesSeriesLegend: Bool {
         switch indicator.chartType {
         case .line, .area, .splineLine, .splineArea, .forecastLine:
             return true
         case .bar, .horizontalBar:
             return !indicator.barDataShape.series.isEmpty
-        case .compactBar, .stackedBar, .donut, .percentDonut,
+        case .stackedBar:
+            return indicator.prefersHorizontalGroupedBars
+        case .compactBar:
+            return indicator.prefersHorizontalGroupedBars
+                && !indicator.barDataShape.series.isEmpty
+        case .donut, .percentDonut,
              .oneValue, .linearProgress, .gauge, .geoMap:
             return false
+        }
+    }
+
+    private var displaysLegend: Bool {
+        switch indicator.chartType {
+        case .donut, .percentDonut:
+            true
+        default:
+            showsLegend
+                || (indicator.prefersHorizontalGroupedBars
+                    && !indicator.barDataShape.series.isEmpty)
         }
     }
 
@@ -505,7 +574,7 @@ struct AnalyticsChart: View {
     private func verticalGradient(for row: IndicatorRow) -> LinearGradient {
         let color = chartColor(for: row)
         return LinearGradient(
-            colors: [color.opacity(colorScheme == .dark ? 0.58 : 0.52), color],
+            colors: [vividColor(color, brightness: 1.10), color, vividColor(color, brightness: 0.70)],
             startPoint: .top,
             endPoint: .bottom
         )
@@ -514,7 +583,7 @@ struct AnalyticsChart: View {
     private func horizontalGradient(for row: IndicatorRow) -> LinearGradient {
         let color = chartColor(for: row)
         return LinearGradient(
-            colors: [color.opacity(colorScheme == .dark ? 0.58 : 0.52), color],
+            colors: [vividColor(color, brightness: 1.08), color, vividColor(color, brightness: 0.72)],
             startPoint: .leading,
             endPoint: .trailing
         )
@@ -523,7 +592,7 @@ struct AnalyticsChart: View {
     private func sectorGradient(for row: IndicatorRow) -> LinearGradient {
         let color = chartColor(for: row)
         return LinearGradient(
-            colors: [color.opacity(colorScheme == .dark ? 0.62 : 0.56), color],
+            colors: [vividColor(color, brightness: 1.10), color, vividColor(color, brightness: 0.76)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -532,9 +601,33 @@ struct AnalyticsChart: View {
     private func areaGradient(for row: IndicatorRow) -> LinearGradient {
         let color = chartColor(for: row)
         return LinearGradient(
-            colors: [color.opacity(colorScheme == .dark ? 0.58 : 0.52), color.opacity(0.035)],
+            colors: [vividColor(color, brightness: 1.06).opacity(0.54), color.opacity(0.04)],
             startPoint: .top,
             endPoint: .bottom
+        )
+    }
+
+    private func vividColor(_ color: Color, brightness factor: CGFloat) -> Color {
+        let resolvedColor = UIColor(color)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard resolvedColor.getHue(
+            &hue,
+            saturation: &saturation,
+            brightness: &brightness,
+            alpha: &alpha
+        ) else {
+            return color
+        }
+
+        return Color(
+            hue: Double(hue),
+            saturation: Double(min(saturation * 1.08, 1)),
+            brightness: Double(min(max(brightness * factor, 0), 1)),
+            opacity: Double(alpha)
         )
     }
 
@@ -568,12 +661,15 @@ struct AnalyticsChart: View {
         return selectedRowID == row.id ? 1 : 0.28
     }
 
-    private func valueLabel(for row: IndicatorRow) -> some View {
+    private func valueLabel(
+        for row: IndicatorRow,
+        usesContrastingForeground: Bool = false
+    ) -> some View {
         ChartValueLabel(
             value: row.value,
             isSelected: selectedRowID == row.id,
             selectionColor: chartColor(for: row),
-            valueColor: Color(apiHex: row.colorValue ?? indicator.colorValue),
+            usesContrastingForeground: usesContrastingForeground,
             useCompactNumbers: indicator.useCompactNumbers
         )
     }
@@ -969,7 +1065,7 @@ private struct ChartValueLabel: View {
     let value: Double
     let isSelected: Bool
     let selectionColor: Color
-    let valueColor: Color?
+    let usesContrastingForeground: Bool
     let useCompactNumbers: Bool?
     @Environment(\.colorScheme) private var colorScheme
 
@@ -991,12 +1087,16 @@ private struct ChartValueLabel: View {
                 .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.10), radius: 6, x: 0, y: 3)
         } else {
             Text(valueText)
-                .font(.callout.monospacedDigit().weight(.bold))
-                .foregroundStyle(valueColor ?? Color.secondary)
+                .font(.subheadline.monospacedDigit().weight(.bold))
+                .foregroundStyle(usesContrastingForeground ? Color.white : Color.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .allowsTightening(true)
-                .frame(maxWidth: 72)
+                .fixedSize(horizontal: true, vertical: true)
+                .shadow(
+                    color: usesContrastingForeground ? .black.opacity(0.38) : .clear,
+                    radius: 2,
+                    x: 0,
+                    y: 1
+                )
         }
     }
 

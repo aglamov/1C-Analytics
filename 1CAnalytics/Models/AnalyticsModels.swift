@@ -358,6 +358,43 @@ extension Indicator {
             : .multipleValuesPerGroup(series: series)
     }
 
+    var prefersHorizontalGroupedBars: Bool {
+        guard useCompactNumbers != true,
+              chartType == .bar || chartType == .compactBar || chartType == .stackedBar else {
+            return false
+        }
+
+        if title.isPlanFactIndicatorTitle {
+            return orderedRows.count > 1
+        }
+
+        let seriesCount = barDataShape.series.count
+        if chartType == .bar,
+           seriesCount > 1,
+           rowGroups.count * seriesCount >= 4 {
+            let longestValue = orderedRows
+                .map { formattedNumber($0.value).count }
+                .max() ?? 0
+            if longestValue >= 6 {
+                return true
+            }
+        }
+
+        let isStacked = chartType == .stackedBar || barLayout == .stacked
+        guard isStacked,
+              seriesCount > 1 else {
+            return false
+        }
+
+        let positiveValues = orderedRows.map(\.value).filter { $0 > 0 }
+        guard let largestValue = positiveValues.max(),
+              let smallestValue = positiveValues.min() else {
+            return false
+        }
+
+        return rowGroups.count >= 4 || smallestValue < largestValue * 0.18
+    }
+
     var accent: AppAccent {
         switch id {
         case "students-total":
