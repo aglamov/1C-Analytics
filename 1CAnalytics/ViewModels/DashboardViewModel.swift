@@ -48,6 +48,7 @@ final class DashboardViewModel: ObservableObject {
     func load() async {
         refreshErrorMessage = nil
         let cachedDashboard = try? cache.loadDashboard()
+        let receivedSections = DashboardSectionAccumulator()
 
         if let cachedDashboard {
             show(cachedDashboard, isCached: true)
@@ -59,9 +60,8 @@ final class DashboardViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         do {
-            let dashboard = try await provider.fetchDashboard { [weak self] section in
-                guard let self else { return }
-                mergeFreshSection(section)
+            let dashboard = try await provider.fetchDashboard { section in
+                receivedSections.append(section)
             }
             try? cache.save(dashboard)
             show(dashboard, isCached: false)
@@ -69,6 +69,8 @@ final class DashboardViewModel: ObservableObject {
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
             onAuthenticationRequired()
         } catch {
+            publishReceivedSections(receivedSections.sections)
+
             if dashboard == nil {
                 state = .failed(error.localizedDescription)
             } else {
@@ -83,10 +85,10 @@ final class DashboardViewModel: ObservableObject {
         defer { isRefreshing = false }
 
         let dashboardBeforeRefresh = dashboard
+        let receivedSections = DashboardSectionAccumulator()
         do {
-            let dashboard = try await provider.fetchDashboard { [weak self] section in
-                guard let self else { return }
-                mergeFreshSection(section)
+            let dashboard = try await provider.fetchDashboard { section in
+                receivedSections.append(section)
             }
             try? cache.save(dashboard)
             show(dashboard, isCached: false)
@@ -94,8 +96,11 @@ final class DashboardViewModel: ObservableObject {
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
             onAuthenticationRequired()
         } catch {
+            publishReceivedSections(receivedSections.sections)
+
             if dashboard != nil {
-                isShowingCachedData = dashboard == dashboardBeforeRefresh
+                isShowingCachedData = receivedSections.sections.isEmpty
+                    && dashboard == dashboardBeforeRefresh
                 refreshErrorMessage = Self.offlineMessage(for: error)
             } else {
                 state = .failed(error.localizedDescription)
@@ -103,15 +108,21 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    private func mergeFreshSection(_ section: DashboardSection) {
+    private func publishReceivedSections(_ receivedSections: [DashboardSection]) {
+        guard !receivedSections.isEmpty else {
+            return
+        }
+
         var sections = dashboard?.sections ?? []
-        if let index = sections.firstIndex(where: {
-            $0.id == section.id
-                || AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(section.title)
-        }) {
-            sections[index] = section
-        } else {
-            sections.append(section)
+        for section in receivedSections {
+            if let index = sections.firstIndex(where: {
+                $0.id == section.id
+                    || AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(section.title)
+            }) {
+                sections[index] = section
+            } else {
+                sections.append(section)
+            }
         }
         sections.sort {
             let lhsOrder = AnalyticsAPIContract.order(of: $0.title)
@@ -156,5 +167,14 @@ final class DashboardViewModel: ObservableObject {
         default:
             return urlError.localizedDescription
         }
+    }
+}
+
+@MainActor
+private final class DashboardSectionAccumulator {
+    private(set) var sections: [DashboardSection] = []
+
+    func append(_ section: DashboardSection) {
+        sections.append(section)
     }
 }

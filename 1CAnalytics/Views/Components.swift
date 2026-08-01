@@ -292,7 +292,18 @@ struct PremiumPanelModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(borderColor, lineWidth: 1)
             )
-            .shadow(color: shadowColor, radius: isElevated ? 18 : 8, x: 0, y: isElevated ? 10 : 4)
+            .shadow(
+                color: isElevated ? .clear : directionalShadowColor,
+                radius: isElevated ? 0 : 2,
+                x: isElevated ? 0 : 6,
+                y: isElevated ? 0 : 6
+            )
+            .shadow(
+                color: shadowColor,
+                radius: isElevated ? 18 : 8,
+                x: isElevated ? 0 : 4,
+                y: isElevated ? 10 : 5
+            )
     }
 
     private var backgroundShape: some View {
@@ -313,10 +324,14 @@ struct PremiumPanelModifier: ViewModifier {
 
     private var shadowColor: Color {
         if colorScheme == .dark {
-            return .black.opacity(isElevated ? 0.28 : 0.16)
+            return .black.opacity(isElevated ? 0.28 : 0.30)
         }
 
-        return .black.opacity(isElevated ? 0.08 : 0.04)
+        return .black.opacity(isElevated ? 0.08 : 0.12)
+    }
+
+    private var directionalShadowColor: Color {
+        colorScheme == .dark ? .black.opacity(0.42) : .black.opacity(0.16)
     }
 }
 

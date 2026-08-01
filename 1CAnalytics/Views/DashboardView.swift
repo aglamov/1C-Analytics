@@ -11,11 +11,26 @@ struct DashboardView: View {
     @State private var collapsedSectionIDs: Set<DashboardSection.ID> = []
     @State private var isEditingLayout = false
     @State private var draggedIndicator: DashboardDraggedIndicator?
+    @State private var navigationPath: [DashboardRoute] = []
+    @State private var indicatorIDToRestore: Indicator.ID?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             content
                 .navigationTitle(viewModel.dashboard?.title ?? "Аналитика")
+                .navigationDestination(for: DashboardRoute.self) { route in
+                    switch route {
+                    case let .indicator(indicatorID):
+                        if let indicator = viewModel.dashboard?.indicators.first(where: { $0.id == indicatorID }) {
+                            IndicatorDetailView(indicator: indicator)
+                        } else {
+                            ContentUnavailableView(
+                                "График недоступен",
+                                systemImage: "chart.bar.xaxis"
+                            )
+                        }
+                    }
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         NavigationLink {
@@ -52,6 +67,13 @@ struct DashboardView: View {
                     }
                 }
         }
+        .onChange(of: navigationPath) { oldPath, newPath in
+            guard newPath.count < oldPath.count,
+                  case let .indicator(indicatorID) = oldPath.last else {
+                return
+            }
+            indicatorIDToRestore = indicatorID
+        }
         .environment(\.chartPaletteScheme, chartPaletteScheme)
         .task {
             if case .idle = viewModel.state {
@@ -81,93 +103,126 @@ struct DashboardView: View {
                 .disabled(viewModel.isRefreshing)
             }
         case let .loaded(dashboard):
-            GeometryReader { geometry in
-                VStack(spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            ForEach(dashboard.sections) { section in
-                                DisclosureGroup(isExpanded: sectionExpandedBinding(for: section.id)) {
-                                    LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                                        ForEach(layoutStore.orderedIndicators(in: section)) { indicator in
-                                            IndicatorDashboardCard(indicator: indicator)
-                                                .overlay(alignment: .topTrailing) {
-                                                    if isEditingLayout {
-                                                        reorderHandle(for: indicator, in: section)
-                                                    } else if indicator.supportsDetail {
-                                                        NavigationLink {
-                                                            IndicatorDetailView(indicator: indicator)
-                                                        } label: {
-                                                            Image(systemName: "arrow.up.right")
-                                                                .font(.caption.weight(.bold))
-                                                                .foregroundStyle(indicator.graphColor)
-                                                                .frame(width: 30, height: 30)
-                                                                .background(
-                                                                    Color(.systemBackground).opacity(0.94),
-                                                                    in: RoundedRectangle(cornerRadius: 8)
-                                                                )
-                                                                .overlay {
-                                                                    RoundedRectangle(cornerRadius: 8)
-                                                                        .strokeBorder(
-                                                                            Color.secondary.opacity(0.12),
-                                                                            lineWidth: 1
-                                                                        )
-                                                                }
-                                                        }
-                                                        .buttonStyle(.plain)
-                                                        .accessibilityLabel("Открыть детализацию")
-                                                        .padding(14)
-                                                    }
-                                                }
-                                                .opacity(draggedIndicator?.indicatorID == indicator.id ? 0.68 : 1)
-                                                .animation(
-                                                    .easeInOut(duration: 0.16),
-                                                    value: draggedIndicator?.indicatorID
-                                                )
-                                                .onDrop(
-                                                    of: [UTType.plainText],
-                                                    delegate: DashboardIndicatorDropDelegate(
-                                                        section: section,
-                                                        targetIndicatorID: indicator.id,
-                                                        isEditing: isEditingLayout,
-                                                        draggedIndicator: $draggedIndicator,
-                                                        layoutStore: layoutStore
-                                                    )
-                                                )
-                                        }
-                                    }
-                                    .padding(.top, 12)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(section.title)
-                                            .font(.title2.weight(.bold))
-
-                                        Text(sectionCountText(section.indicators.count))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                    .accessibilityAddTraits(.isHeader)
-                                }
-                                .tint(.primary)
-                            }
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        ForEach(dashboard.sections) { section in
+                            dashboardSection(section)
                         }
-                        .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-                        .padding(.vertical, 16)
                     }
-                    .background(AppBackground())
-
-                    DashboardConnectionBar(
-                        date: dashboard.fetchedAt,
-                        isCached: viewModel.isShowingCachedData,
-                        isRefreshing: viewModel.isRefreshing
-                    )
-                    .padding(.bottom, geometry.safeAreaInsets.bottom)
-                    .background(.bar)
+                    .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
+                    .padding(.vertical, 16)
                 }
-                .ignoresSafeArea(edges: .bottom)
+                .onChange(of: indicatorIDToRestore) { _, indicatorID in
+                    guard let indicatorID else {
+                        return
+                    }
+
+                    var transaction = Transaction()
+                    transaction.animation = nil
+                    withTransaction(transaction) {
+                        scrollProxy.scrollTo(indicatorID, anchor: .center)
+                    }
+                    indicatorIDToRestore = nil
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                DashboardConnectionBar(
+                    date: dashboard.fetchedAt,
+                    isCached: viewModel.isShowingCachedData,
+                    isRefreshing: viewModel.isRefreshing
+                )
+            }
+            .background(Color(.systemBackground).ignoresSafeArea())
+        }
+    }
+
+    private func dashboardSection(_ section: DashboardSection) -> some View {
+        let isExpanded = !collapsedSectionIDs.contains(section.id)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                toggleSection(section.id)
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(section.title)
+                            .font(.title2.weight(.bold))
+
+                        Text(sectionCountText(section.indicators.count))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    Image(systemName: "chevron.down")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                        .accessibilityHidden(true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(section.title)
+            .accessibilityValue(isExpanded ? "Развернуто" : "Свернуто")
+            .accessibilityAddTraits(.isHeader)
+
+            if isExpanded {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                    ForEach(layoutStore.orderedIndicators(in: section)) { indicator in
+                        dashboardCard(indicator, in: section)
+                    }
+                }
+                .padding(.top, 12)
+                .transition(.opacity)
             }
         }
+    }
+
+    private func dashboardCard(
+        _ indicator: Indicator,
+        in section: DashboardSection
+    ) -> some View {
+        IndicatorDashboardCard(indicator: indicator)
+            .overlay(alignment: .topTrailing) {
+                if isEditingLayout {
+                    reorderHandle(for: indicator, in: section)
+                } else if indicator.supportsDetail {
+                    NavigationLink(value: DashboardRoute.indicator(indicator.id)) {
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(indicator.graphColor)
+                            .frame(width: 30, height: 30)
+                            .background(
+                                Color(.systemBackground).opacity(0.94),
+                                in: RoundedRectangle(cornerRadius: 8)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(Color.secondary.opacity(0.12), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Открыть детализацию")
+                    .padding(14)
+                }
+            }
+            .id(indicator.id)
+            .opacity(draggedIndicator?.indicatorID == indicator.id ? 0.68 : 1)
+            .animation(.easeInOut(duration: 0.16), value: draggedIndicator?.indicatorID)
+            .onDrop(
+                of: [UTType.plainText],
+                delegate: DashboardIndicatorDropDelegate(
+                    section: section,
+                    targetIndicatorID: indicator.id,
+                    isEditing: isEditingLayout,
+                    draggedIndicator: $draggedIndicator,
+                    layoutStore: layoutStore
+                )
+            )
     }
 
     private func reorderHandle(
@@ -220,16 +275,12 @@ struct DashboardView: View {
         ChartPaletteScheme(rawValue: chartPaletteSchemeRawValue) ?? .corporate
     }
 
-    private func sectionExpandedBinding(for sectionID: DashboardSection.ID) -> Binding<Bool> {
-        Binding {
-            !collapsedSectionIDs.contains(sectionID)
-        } set: { isExpanded in
-            withAnimation(.easeInOut(duration: 0.22)) {
-                if isExpanded {
-                    collapsedSectionIDs.remove(sectionID)
-                } else {
-                    collapsedSectionIDs.insert(sectionID)
-                }
+    private func toggleSection(_ sectionID: DashboardSection.ID) {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            if collapsedSectionIDs.contains(sectionID) {
+                collapsedSectionIDs.remove(sectionID)
+            } else {
+                collapsedSectionIDs.insert(sectionID)
             }
         }
     }
@@ -258,6 +309,10 @@ struct DashboardView: View {
         }
     }
 
+}
+
+private enum DashboardRoute: Hashable {
+    case indicator(Indicator.ID)
 }
 
 final class DashboardLayoutStore: ObservableObject {
@@ -547,7 +602,7 @@ private struct IndicatorDashboardCard: View {
             indicator.chartType == .oneValue ? indicator.graphColor.opacity(0.075) : .clear,
             in: RoundedRectangle(cornerRadius: 8)
         )
-        .premiumPanel()
+        .premiumPanel(isElevated: false)
         .overlay(alignment: .leading) {
             if indicator.chartType == .oneValue {
                 Capsule()
@@ -620,28 +675,23 @@ private struct IndicatorDashboardCard: View {
                     .frame(width: 36, height: 36)
                     .background(indicator.graphColor, in: RoundedRectangle(cornerRadius: 8))
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(indicator.title)
-                        .font(.headline)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(indicator.title)
+                    .font(.headline)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 0)
             }
 
             if indicator.showsAggregateValue {
-                HStack(alignment: .lastTextBaseline, spacing: 8) {
-                    Text(valueText)
-                        .font(.system(.title, design: .default).weight(.semibold))
-                        .foregroundStyle(indicator.valueColor)
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 8)
-                }
+                Text(valueText)
+                    .font(.system(.title, design: .default).weight(.semibold))
+                    .foregroundStyle(indicator.valueColor)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
         }

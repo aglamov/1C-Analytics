@@ -98,7 +98,12 @@ struct IndicatorDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         } else {
-            let chart = AnalyticsChart(indicator: indicator, showsLegend: false, selectedRowID: $selectedRowID)
+            let chart = AnalyticsChart(
+                indicator: indicator,
+                usesCardBackground: false,
+                showsLegend: false,
+                selectedRowID: $selectedRowID
+            )
                 .frame(maxWidth: .infinity)
 
             if fillsAvailableHeight {
