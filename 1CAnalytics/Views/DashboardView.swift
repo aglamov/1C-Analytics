@@ -907,17 +907,17 @@ private struct ContractPlanFactPeriodSummary: View {
             HStack(alignment: .center, spacing: 8) {
                 Text(periodRows.period.title)
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(periodColor)
 
                 Spacer(minLength: 8)
 
                 if let completionRatio = periodRows.completionRatio {
                     Text(completionRatio.formatted(.percent.precision(.fractionLength(0))))
                         .font(.caption.monospacedDigit().weight(.bold))
-                        .foregroundStyle(completionRatio >= 1 ? paidColor : .primary)
+                        .foregroundStyle(periodColor)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(paidColor.opacity(0.12), in: Capsule())
+                        .background(periodColor.opacity(0.14), in: Capsule())
                 }
             }
 
@@ -953,12 +953,31 @@ private struct ContractPlanFactPeriodSummary: View {
             .frame(height: 10)
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+        .background(
+            LinearGradient(
+                colors: [
+                    periodColor.opacity(0.12),
+                    periodColor.opacity(0.035)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+                .strokeBorder(periodColor.opacity(0.24), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var periodColor: Color {
+        switch periodRows.period {
+        case .current:
+            Color(red: 0.02, green: 0.55, blue: 0.45)
+        case .previous:
+            Color(red: 0.48, green: 0.35, blue: 0.72)
+        }
     }
 
     private func metric(title: String, row: IndicatorRow?, color: Color) -> some View {
