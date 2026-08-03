@@ -75,8 +75,7 @@ struct DashboardView: View {
                                     isCached: viewModel.isShowingCachedData,
                                     isRefreshing: viewModel.isRefreshing
                                 )
-
-                                Spacer(minLength: 0)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }

@@ -547,20 +547,41 @@ struct DashboardConnectionStatus: View {
     var body: some View {
         HStack(spacing: 8) {
             statusIcon
+                .fixedSize()
 
-            Text(isRefreshing ? "Обновляем данные…" : lastSynchronizationText)
+            statusText
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if isRefreshing {
                 ProgressView()
                     .controlSize(.small)
+                    .fixedSize()
                     .accessibilityHidden(true)
             }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(1)
-        .minimumScaleFactor(0.78)
+        .padding(.horizontal, 10)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        if isRefreshing {
+            Text("Обновляем данные…")
+        } else {
+            ViewThatFits(in: .horizontal) {
+                Text(lastSynchronizationText)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Text(compactSynchronizationText)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Text(compactSynchronizationText)
+                    .minimumScaleFactor(0.72)
+            }
+        }
     }
 
     @ViewBuilder
@@ -588,6 +609,14 @@ struct DashboardConnectionStatus: View {
         }
 
         return "Последняя синхронизация: \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    private var compactSynchronizationText: String {
+        guard let date else {
+            return "Синхронизация неизвестна"
+        }
+
+        return date.formatted(date: .numeric, time: .shortened)
     }
 }
 
