@@ -60,6 +60,46 @@ struct AnalyticsChart: View {
                 }
             }
 
+            chartContent
+
+            if displaysLegend, !indicator.orderedRows.isEmpty {
+                interactiveLegend
+            }
+        }
+        .modifier(ChartChromeModifier(isEnabled: usesCardBackground))
+        .chartLegend(.hidden)
+        .onAppear {
+            guard animatesOnAppear else {
+                return
+            }
+            withAnimation(.easeOut(duration: 0.7)) {
+                hasAppeared = true
+            }
+        }
+        .onDisappear {
+            clearSelection()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                clearSelection()
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedRowID)
+    }
+
+    @ViewBuilder
+    private var chartContent: some View {
+        if indicator.hasOnlyZeroValues {
+            emptyDataState
+        } else if indicator.usesMixedUnitPersonnelPresentation {
+            personnelComposition
+        } else if indicator.usesRankedCategoryPresentation {
+            rankedCategoryBars
+        } else if indicator.usesDenseEnrollmentCompositionPresentation {
+            horizontalStackedComposition
+        } else if indicator.prefersTrendPresentation {
+            trendLine(smooth: false)
+        } else {
             switch indicator.chartType {
             case .bar, .compactBar:
                 if indicator.prefersHorizontalGroupedBars {
@@ -92,30 +132,184 @@ struct AnalyticsChart: View {
             case .oneValue, .linearProgress, .gauge, .geoMap:
                 EmptyView()
             }
+        }
+    }
 
-            if displaysLegend, !indicator.orderedRows.isEmpty {
-                interactiveLegend
+    private var emptyDataState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(indicator.graphColor.opacity(0.72))
+
+            Text("Данные пока отсутствуют")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text("Плановые и фактические значения равны нулю")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 24)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rankedCategoryBars: some View {
+        let rows = rankedPresentationRows
+        let maximum = rows.map(\.value).max() ?? 1
+
+        return VStack(alignment: .leading, spacing: 11) {
+            ForEach(rows) { row in
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(row.label)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 6)
+
+                        Text(indicator.formattedNumber(row.value))
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .foregroundStyle(.primary)
+                    }
+
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(chartColor(for: row).opacity(0.12))
+
+                            Capsule()
+                                .fill(horizontalGradient(for: row))
+                                .frame(width: proxy.size.width * max(row.value / maximum, 0.012))
+                                .shadow(color: chartColor(for: row).opacity(0.18), radius: 4, x: 2, y: 2)
+                        }
+                    }
+                    .frame(height: 7)
+                }
+                .accessibilityElement(children: .combine)
             }
         }
-        .modifier(ChartChromeModifier(isEnabled: usesCardBackground))
-        .chartLegend(.hidden)
-        .onAppear {
-            guard animatesOnAppear else {
-                return
-            }
-            withAnimation(.easeOut(duration: 0.7)) {
-                hasAppeared = true
+    }
+
+    private var rankedPresentationRows: [IndicatorRow] {
+        let sorted = indicator.orderedRows.sorted { $0.value > $1.value }
+        guard sorted.count > 5 else {
+            return sorted
+        }
+
+        let visibleRows = Array(sorted.prefix(4))
+        let remainingRows = sorted.dropFirst(4)
+        let other = IndicatorRow(
+            id: "\(indicator.id)-other",
+            label: "Прочие звания",
+            value: remainingRows.reduce(0) { $0 + $1.value },
+            series: nil,
+            sortOrder: nil,
+            colorGraph: nil,
+            colorValue: nil
+        )
+        return visibleRows + [other]
+    }
+
+    private var personnelComposition: some View {
+        let countRows = indicator.orderedRows.filter { !($0.series ?? "").lowercased().contains("процент") }
+        let percentRows = indicator.orderedRows.filter { ($0.series ?? "").lowercased().contains("процент") }
+
+        return VStack(alignment: .leading, spacing: 16) {
+            presentationMetricGroup(title: "Численность, чел.", rows: countRows, maximum: countRows.map(\.value).max() ?? 1, isPercent: false)
+
+            Divider()
+
+            presentationMetricGroup(title: "Доля в ССЧ", rows: percentRows, maximum: 100, isPercent: true)
+        }
+    }
+
+    private func presentationMetricGroup(
+        title: String,
+        rows: [IndicatorRow],
+        maximum: Double,
+        isPercent: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+
+            ForEach(rows) { row in
+                HStack(spacing: 8) {
+                    Text(presentationLabel(for: row))
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .frame(width: 104, alignment: .leading)
+
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(chartColor(for: row).opacity(0.12))
+
+                            Capsule()
+                                .fill(horizontalGradient(for: row))
+                                .frame(width: proxy.size.width * min(max(row.value / max(maximum, 1), 0.012), 1))
+                                .shadow(color: chartColor(for: row).opacity(0.16), radius: 3, x: 2, y: 2)
+                        }
+                    }
+                    .frame(height: 9)
+
+                    Text(isPercent ? "\(indicator.formattedNumber(row.value))%" : indicator.formattedNumber(row.value))
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .frame(minWidth: 48, alignment: .trailing)
+                }
+                .accessibilityElement(children: .combine)
             }
         }
-        .onDisappear {
-            clearSelection()
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active {
-                clearSelection()
+    }
+
+    private func presentationLabel(for row: IndicatorRow) -> String {
+        let raw = row.series ?? row.label
+        return raw
+            .replacingOccurrences(of: "Общая численность", with: "Всего")
+            .replacingOccurrences(of: "Численность ", with: "")
+            .replacingOccurrences(of: "Процент ", with: "")
+    }
+
+    private var horizontalStackedComposition: some View {
+        Chart(indicator.orderedRows) { row in
+            BarMark(
+                x: .value("Значение", animatedValue(for: row)),
+                y: .value("Период", row.label),
+                height: .ratio(0.58)
+            )
+            .foregroundStyle(horizontalGradient(for: row))
+            .alignsMarkStylesWithPlotArea(false)
+            .cornerRadius(2)
+            .opacity(opacity(for: row))
+            .annotation(position: .overlay, alignment: .center) {
+                if compositionShare(for: row) >= 0.10 {
+                    valueLabel(for: row, usesContrastingForeground: true)
+                }
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedRowID)
+        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+        .chartXAxis {
+            humanReadableValueAxis(position: .bottom)
+        }
+        .chartYAxis {
+            AxisMarks { _ in
+                AxisValueLabel()
+                    .foregroundStyle(Color.secondary)
+                    .font(.caption2)
+            }
+        }
+        .chartOverlay { proxy in
+            chartTapOverlay(proxy: proxy, mode: .stackedBar)
+        }
+    }
+
+    private func compositionShare(for row: IndicatorRow) -> Double {
+        let total = indicator.rowGroups.first { $0.label == row.label }?.totalValue ?? 0
+        return total > 0 ? row.value / total : 0
     }
 
     private var verticalBars: some View {
@@ -143,15 +337,7 @@ struct AnalyticsChart: View {
             }
             .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
             .chartYAxis {
-                AxisMarks(position: .leading) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
-                        .foregroundStyle(Color.secondary.opacity(0.16))
-                    AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
-                        .foregroundStyle(Color.secondary.opacity(0.26))
-                    AxisValueLabel()
-                        .foregroundStyle(Color.secondary)
-                        .font(.caption2)
-                }
+                humanReadableValueAxis(position: .leading)
             }
             .chartXAxis {
                 responsiveCategoryAxis(availableWidth: geometry.size.width)
@@ -190,15 +376,7 @@ struct AnalyticsChart: View {
         }
         .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
         .chartXAxis {
-            AxisMarks(position: .bottom) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
-                    .foregroundStyle(Color.secondary.opacity(0.16))
-                AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
-                    .foregroundStyle(Color.secondary.opacity(0.26))
-                AxisValueLabel()
-                    .foregroundStyle(Color.secondary)
-                    .font(.caption2)
-            }
+            humanReadableValueAxis(position: .bottom)
         }
         .chartYAxis {
             AxisMarks { _ in
@@ -232,15 +410,7 @@ struct AnalyticsChart: View {
             }
             .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
             .chartYAxis {
-                AxisMarks(position: .leading) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
-                        .foregroundStyle(Color.secondary.opacity(0.16))
-                    AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
-                        .foregroundStyle(Color.secondary.opacity(0.26))
-                    AxisValueLabel()
-                        .foregroundStyle(Color.secondary)
-                        .font(.caption2)
-                }
+                humanReadableValueAxis(position: .leading)
             }
             .chartXAxis {
                 responsiveCategoryAxis(availableWidth: geometry.size.width)
@@ -312,6 +482,11 @@ struct AnalyticsChart: View {
                 .foregroundStyle(chartColor(for: row))
                 .symbolSize(selectedRowID == row.id ? 62 : 24)
                 .opacity(opacity(for: row))
+                .annotation(position: .top, alignment: .center) {
+                    if indicator.prefersTrendPresentation && shouldShowBarValueLabel(for: row) {
+                        valueLabel(for: row)
+                    }
+                }
             }
             .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
             .chartYAxis {
@@ -419,15 +594,34 @@ struct AnalyticsChart: View {
     }
 
     private var valueAxis: some AxisContent {
-        AxisMarks(position: .leading) { _ in
+        humanReadableValueAxis(position: .leading)
+    }
+
+    private func humanReadableValueAxis(position: AxisMarkPosition) -> some AxisContent {
+        AxisMarks(position: position) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
                 .foregroundStyle(Color.secondary.opacity(0.16))
             AxisTick(stroke: StrokeStyle(lineWidth: 0.6))
                 .foregroundStyle(Color.secondary.opacity(0.26))
-            AxisValueLabel()
-                .foregroundStyle(Color.secondary)
-                .font(.caption2)
+            AxisValueLabel {
+                if let number = value.as(Double.self) {
+                    Text(formattedAxisValue(number))
+                }
+            }
+            .foregroundStyle(Color.secondary)
+            .font(.caption2)
         }
+    }
+
+    private func formattedAxisValue(_ value: Double) -> String {
+        let absoluteValue = abs(value)
+        if absoluteValue >= 1_000_000 {
+            return "\((value / 1_000_000).formatted(.number.precision(.fractionLength(0...1)))) млн"
+        }
+        if absoluteValue >= 1_000 {
+            return "\((value / 1_000).formatted(.number.precision(.fractionLength(0...1)))) тыс."
+        }
+        return value.formatted(.number.precision(.fractionLength(0...1)))
     }
 
     private var interactiveLegend: some View {
@@ -447,7 +641,8 @@ struct AnalyticsChart: View {
 
                         Text(legendTitle(for: row))
                             .font(.caption2.weight(.semibold))
-                            .lineLimit(1)
+                            .lineLimit(indicator.usesDenseEnrollmentCompositionPresentation ? 2 : 1)
+                            .minimumScaleFactor(0.78)
 
                         Spacer(minLength: 0)
 
@@ -461,7 +656,7 @@ struct AnalyticsChart: View {
                     }
                     .padding(.horizontal, 9)
                     .padding(.vertical, 7)
-                    .frame(minHeight: 28)
+                    .frame(minHeight: indicator.usesDenseEnrollmentCompositionPresentation ? 38 : 28)
                     .background(
                         selectedRowID == row.id ? chartColor(for: row).opacity(0.12) : Color(.tertiarySystemGroupedBackground).opacity(0.72),
                         in: RoundedRectangle(cornerRadius: 8)
@@ -500,7 +695,11 @@ struct AnalyticsChart: View {
     }
 
     private var legendColumnMinimumWidth: CGFloat {
-        switch indicator.chartType {
+        if indicator.usesDenseEnrollmentCompositionPresentation {
+            return 140
+        }
+
+        return switch indicator.chartType {
         case .donut, .percentDonut:
             142
         default:
@@ -541,7 +740,17 @@ struct AnalyticsChart: View {
     }
 
     private var displaysLegend: Bool {
-        switch indicator.chartType {
+        if indicator.hasOnlyZeroValues
+            || indicator.usesMixedUnitPersonnelPresentation
+            || indicator.usesRankedCategoryPresentation {
+            return false
+        }
+
+        if indicator.usesDenseEnrollmentCompositionPresentation {
+            return true
+        }
+
+        return switch indicator.chartType {
         case .donut, .percentDonut:
             true
         default:

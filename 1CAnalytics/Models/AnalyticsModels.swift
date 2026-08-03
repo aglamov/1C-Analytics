@@ -303,7 +303,19 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
 
 extension Indicator {
     var showsAggregateValue: Bool {
-        showTotal ?? !title.isPlanFactIndicatorTitle
+        guard !usesMixedUnitPersonnelPresentation else {
+            return false
+        }
+
+        return showTotal ?? !title.isPlanFactIndicatorTitle
+    }
+
+    var displayUnit: String? {
+        if let unit = unit?.trimmingCharacters(in: .whitespacesAndNewlines), !unit.isEmpty {
+            return unit
+        }
+
+        return title.contains("%") ? "%" : nil
     }
 
     var showsLegend: Bool {
@@ -332,6 +344,48 @@ extension Indicator {
 
     var orderedRows: [IndicatorRow] {
         rows.sortedByOrder()
+    }
+
+    var hasOnlyZeroValues: Bool {
+        !orderedRows.isEmpty && orderedRows.allSatisfy { abs($0.value) < 0.000_001 }
+    }
+
+    var usesMixedUnitPersonnelPresentation: Bool {
+        let normalizedTitle = title.lowercased()
+        guard normalizedTitle.contains("доля ауп") && normalizedTitle.contains("увп") else {
+            return false
+        }
+
+        let seriesNames = orderedRows.compactMap(\.series).map { $0.lowercased() }
+        return seriesNames.contains { $0.contains("процент") }
+            && seriesNames.contains { $0.contains("численност") }
+    }
+
+    var usesRankedCategoryPresentation: Bool {
+        let normalizedTitle = title.lowercased()
+        return (chartType == .donut || chartType == .percentDonut)
+            && orderedRows.count > 4
+            && normalizedTitle.contains("учеными званиями")
+    }
+
+    var usesDenseEnrollmentCompositionPresentation: Bool {
+        title.lowercased().contains("динамика зачисления иг")
+            && barDataShape.series.count >= 4
+            && rowGroups.count >= 2
+    }
+
+    var prefersTrendPresentation: Bool {
+        guard chartType == .bar || chartType == .compactBar,
+              barDataShape.series.isEmpty,
+              orderedRows.count >= 3,
+              !title.isPlanFactIndicatorTitle else {
+            return false
+        }
+
+        return orderedRows.allSatisfy { row in
+            let digits = row.label.filter(\.isNumber)
+            return digits.count >= 4 && row.label.contains("20")
+        }
     }
 
     var rowGroups: [IndicatorRowGroup] {

@@ -278,6 +278,87 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testPresentationRulesKeepMixedPersonnelUnitsSeparate() {
+        let indicator = Indicator(
+            id: "personnel-share",
+            title: "Доля АУП и УВП, % ССЧ",
+            value: 4_663.1,
+            unit: "чел.",
+            chartType: .horizontalBar,
+            source: nil,
+            rows: [
+                IndicatorRow(id: "total", label: "2026", value: 3_494.1, series: "Общая численность", sortOrder: 0),
+                IndicatorRow(id: "aup", label: "2026", value: 762.1, series: "Численность АУП", sortOrder: 1),
+                IndicatorRow(id: "aup-share", label: "2026", value: 21.8, series: "Процент АУП", sortOrder: 2)
+            ]
+        )
+
+        XCTAssertTrue(indicator.usesMixedUnitPersonnelPresentation)
+        XCTAssertFalse(indicator.showsAggregateValue)
+    }
+
+    func testPresentationRulesReplaceDenseAcademicTitleDonutWithRanking() {
+        let rows = (0..<7).map {
+            IndicatorRow(id: "title-\($0)", label: "Звание \($0)", value: Double($0 + 1), series: nil, sortOrder: $0)
+        }
+        let indicator = Indicator(
+            id: "academic-titles",
+            title: "ППС с учеными званиями, чел",
+            value: 28,
+            unit: "чел.",
+            chartType: .donut,
+            source: nil,
+            rows: rows
+        )
+
+        XCTAssertTrue(indicator.usesRankedCategoryPresentation)
+    }
+
+    func testPresentationRulesRecognizeZeroAndTemporalCharts() {
+        let zeroIndicator = Indicator(
+            id: "zero-plan-fact",
+            title: "План-Факт (контракт), тыс. руб",
+            value: nil,
+            unit: nil,
+            chartType: .bar,
+            source: nil,
+            rows: [
+                IndicatorRow(id: "plan", label: "БАК", value: 0, series: "План", sortOrder: 0),
+                IndicatorRow(id: "fact", label: "БАК", value: 0, series: "Факт", sortOrder: 1)
+            ]
+        )
+        let temporalIndicator = Indicator(
+            id: "research",
+            title: "Внешнее финансирование НИОКР",
+            value: 1_858,
+            unit: "млн руб.",
+            chartType: .bar,
+            source: nil,
+            rows: [
+                IndicatorRow(id: "2024", label: "2024", value: 728, series: nil, sortOrder: 0),
+                IndicatorRow(id: "2025", label: "2025", value: 666, series: nil, sortOrder: 1),
+                IndicatorRow(id: "2026", label: "2026", value: 464, series: nil, sortOrder: 2)
+            ]
+        )
+
+        XCTAssertTrue(zeroIndicator.hasOnlyZeroValues)
+        XCTAssertTrue(temporalIndicator.prefersTrendPresentation)
+    }
+
+    func testPercentageTitleProvidesVisibleUnitWhenServerOmitsIt() {
+        let indicator = Indicator(
+            id: "share",
+            title: "Доля НПР до 39 лет, %",
+            value: 30,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+
+        XCTAssertEqual(indicator.displayUnit, "%")
+    }
+
     func testResponseMappingSupportsNewCompactIndicatorTypesAndColors() throws {
         let data = Data(
             #"""

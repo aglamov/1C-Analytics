@@ -138,7 +138,8 @@ struct DashboardView: View {
     }
 
     private func dashboardSection(_ section: DashboardSection) -> some View {
-        let isExpanded = !collapsedSectionIDs.contains(section.id)
+        let isExpanded = debugSectionTitle.map { $0 == section.title }
+            ?? !collapsedSectionIDs.contains(section.id)
 
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -172,7 +173,7 @@ struct DashboardView: View {
 
             if isExpanded {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(layoutStore.orderedIndicators(in: section)) { indicator in
+                    ForEach(displayedIndicators(in: section)) { indicator in
                         dashboardCard(indicator, in: section)
                     }
                 }
@@ -299,6 +300,43 @@ struct DashboardView: View {
         }
 
         return "\(count) \(noun)"
+    }
+
+    private func displayedIndicators(in section: DashboardSection) -> [Indicator] {
+        let indicators = layoutStore.orderedIndicators(in: section)
+        return indicators.filter { indicator in
+            let matchesTitle = debugIndicatorTitle.map {
+                indicator.title.localizedCaseInsensitiveContains($0)
+            } ?? true
+            let matchesSeries = debugMinimumSeriesCount.map {
+                indicator.barDataShape.series.count >= $0
+            } ?? true
+            return matchesTitle && matchesSeries
+        }
+    }
+
+    private var debugSectionTitle: String? {
+#if DEBUG
+        ProcessInfo.processInfo.environment["DASHBOARD_SCREENSHOT_SECTION"]
+#else
+        nil
+#endif
+    }
+
+    private var debugIndicatorTitle: String? {
+#if DEBUG
+        ProcessInfo.processInfo.environment["DASHBOARD_SCREENSHOT_INDICATOR"]
+#else
+        nil
+#endif
+    }
+
+    private var debugMinimumSeriesCount: Int? {
+#if DEBUG
+        ProcessInfo.processInfo.environment["DASHBOARD_SCREENSHOT_MIN_SERIES"].flatMap(Int.init)
+#else
+        nil
+#endif
     }
 
     private var chartPaletteBinding: Binding<ChartPaletteScheme> {
@@ -648,7 +686,7 @@ private struct IndicatorDashboardCard: View {
                     showsLegend: indicator.showsLegend,
                     animatesOnAppear: false
                 )
-                    .frame(height: chartHeight)
+                    .frame(height: chartHeight, alignment: .top)
                     .padding(.top, 2)
 
                 if !indicator.prefersHorizontalGroupedBars {
@@ -665,13 +703,25 @@ private struct IndicatorDashboardCard: View {
                 animatesOnAppear: false,
                 showsLineAreaFill: true
             )
-                .frame(height: chartHeight)
+                .frame(height: chartHeight, alignment: .top)
                 .padding(.top, 2)
         }
     }
 
     private var chartHeight: CGFloat {
         let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
+
+        if indicator.usesMixedUnitPersonnelPresentation {
+            return 226
+        }
+
+        if indicator.usesRankedCategoryPresentation {
+            return 230
+        }
+
+        if indicator.usesDenseEnrollmentCompositionPresentation {
+            return min(max(CGFloat(categoryCount) * 48 + 142, 286), 360)
+        }
 
         if indicator.prefersHorizontalGroupedBars {
             return min(max(CGFloat(categoryCount) * 54 + 64, 240), 420)
@@ -711,6 +761,7 @@ private struct IndicatorDashboardCard: View {
 
                 Spacer(minLength: 0)
             }
+            .padding(.trailing, indicator.supportsDetail ? 42 : 0)
 
             if indicator.showsAggregateValue {
                 Text(valueText)
@@ -731,7 +782,7 @@ private struct IndicatorDashboardCard: View {
             return "нет данных"
         }
 
-        return "\(indicator.formattedNumber(value)) \(indicator.unit ?? "")"
+        return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
     }
 
     private var iconName: String {
@@ -846,7 +897,7 @@ private struct OneValueDashboardContent: View {
             return "нет данных"
         }
 
-        return "\(indicator.formattedNumber(value)) \(indicator.unit ?? "")"
+        return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
             .trimmingCharacters(in: .whitespaces)
     }
 }

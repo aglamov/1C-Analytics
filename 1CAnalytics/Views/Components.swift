@@ -387,7 +387,7 @@ struct IndicatorCard: View {
             return "нет данных"
         }
 
-        return "\(indicator.formattedNumber(value)) \(indicator.unit ?? "")"
+        return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
     }
 
     private var iconName: String {
@@ -436,7 +436,7 @@ struct IndicatorHero: View {
             }
 
             if indicator.showsAggregateValue, let value = indicator.value {
-                Text("\(indicator.formattedNumber(value)) \(indicator.unit ?? "")")
+                Text("\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")")
                     .font(.system(.largeTitle, design: .default).weight(.semibold))
                     .foregroundStyle(indicator.valueColor)
                     .monospacedDigit()
