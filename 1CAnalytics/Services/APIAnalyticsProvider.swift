@@ -631,18 +631,27 @@ struct AnalyticsAPIValue: Decodable, Sendable {
 
     func toRows(index: Int, chartType: ChartType) -> [IndicatorRow] {
         if let subgroup, !subgroup.isEmpty {
+            let flattenedSubgroups = subgroup.flatMap {
+                $0.flattened(
+                    inheritedGraphColor: colorGraph,
+                    inheritedValueColor: colorValue,
+                    inheritedLineStyle: lineStyle,
+                    inheritedValueLabel: nil
+                )
+            }
+
             if chartType == .compactBar {
-                return subgroup.enumerated().map { subgroupIndex, subgroup in
-                    let label = subgroup.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                return flattenedSubgroups.enumerated().map { subgroupIndex, subgroup in
+                    let label = subgroup.name
                     return IndicatorRow(
                         id: "\(index)-\(subgroupIndex)-\(label.stableID)",
                         label: label.isEmpty ? fallbackLabel(index: subgroupIndex) : label,
                         value: subgroup.value,
                         series: nil,
                         sortOrder: index * 100 + subgroupIndex,
-                        colorGraph: subgroup.colorGraph ?? colorGraph,
-                        colorValue: subgroup.colorValue ?? colorValue,
-                        lineStyle: subgroup.lineStyle ?? lineStyle,
+                        colorGraph: subgroup.colorGraph,
+                        colorValue: subgroup.colorValue,
+                        lineStyle: subgroup.lineStyle,
                         totalLabel: totalLabel,
                         valueLabel: subgroup.valueLabel
                     )
@@ -650,16 +659,16 @@ struct AnalyticsAPIValue: Decodable, Sendable {
             }
 
             let groupLabel = normalizedGroup.isEmpty ? preferredLabel(index: index) : normalizedGroup
-            return subgroup.enumerated().map { subgroupIndex, subgroup in
+            return flattenedSubgroups.enumerated().map { subgroupIndex, subgroup in
                 IndicatorRow(
                     id: "\(groupLabel.stableID)-\(subgroupIndex)-\(subgroup.name.stableID)",
                     label: groupLabel,
                     value: subgroup.value,
                     series: subgroup.name,
                     sortOrder: index * 100 + subgroupIndex,
-                    colorGraph: subgroup.colorGraph ?? colorGraph,
-                    colorValue: subgroup.colorValue ?? colorValue,
-                    lineStyle: subgroup.lineStyle ?? lineStyle,
+                    colorGraph: subgroup.colorGraph,
+                    colorValue: subgroup.colorValue,
+                    lineStyle: subgroup.lineStyle,
                     totalLabel: totalLabel,
                     valueLabel: subgroup.valueLabel
                 )
@@ -703,11 +712,12 @@ struct AnalyticsAPIValue: Decodable, Sendable {
 
 struct AnalyticsAPISubgroup: Decodable, Sendable {
     let name: String
-    let value: Double
+    let value: Double?
     let colorGraph: String?
     let colorValue: String?
     let lineStyle: ChartLineStyle?
     let valueLabel: String?
+    let subgroup: [AnalyticsAPISubgroup]?
 
     private enum CodingKeys: String, CodingKey {
         case name
@@ -721,6 +731,8 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
         case displayValue
         case displayLabel
         case totalLabel
+        case subgroup
+        case values
     }
 
     init(from decoder: any Decoder) throws {
@@ -728,7 +740,7 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
         name = container.decodeFlexibleString(forKey: .name)
             ?? container.decodeFlexibleString(forKey: .group)
             ?? ""
-        value = container.decodeFlexibleDouble(forKey: .value) ?? 0
+        value = container.decodeFlexibleDouble(forKey: .value)
         colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
         colorValue = container.decodeFlexibleString(forKey: .colorValue)
         lineStyle = normalizedLineStyle(
@@ -739,7 +751,62 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
             ?? container.decodeFlexibleString(forKey: .displayValue)
             ?? container.decodeFlexibleString(forKey: .displayLabel)
             ?? container.decodeFlexibleString(forKey: .totalLabel)
+
+        let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
+        let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
+        let combinedValues = subgroupValues.isEmpty ? nestedValues : subgroupValues
+        subgroup = combinedValues.isEmpty ? nil : combinedValues
     }
+
+    func flattened(
+        ancestors: [String] = [],
+        inheritedGraphColor: String?,
+        inheritedValueColor: String?,
+        inheritedLineStyle: ChartLineStyle?,
+        inheritedValueLabel: String?
+    ) -> [AnalyticsAPIFlattenedSubgroup] {
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let graphColor = colorGraph ?? inheritedGraphColor
+        let valueColor = colorValue ?? inheritedValueColor
+        let resolvedLineStyle = lineStyle ?? inheritedLineStyle
+        let resolvedValueLabel = valueLabel ?? inheritedValueLabel
+
+        if let subgroup, !subgroup.isEmpty {
+            let nestedAncestors = normalizedName.isEmpty
+                ? ancestors
+                : ancestors + [normalizedName]
+            return subgroup.flatMap {
+                $0.flattened(
+                    ancestors: nestedAncestors,
+                    inheritedGraphColor: graphColor,
+                    inheritedValueColor: valueColor,
+                    inheritedLineStyle: resolvedLineStyle,
+                    inheritedValueLabel: resolvedValueLabel
+                )
+            }
+        }
+
+        let nameComponents = ([normalizedName] + ancestors.reversed()).filter { !$0.isEmpty }
+        return [
+            AnalyticsAPIFlattenedSubgroup(
+                name: nameComponents.joined(separator: " "),
+                value: value ?? 0,
+                colorGraph: graphColor,
+                colorValue: valueColor,
+                lineStyle: resolvedLineStyle,
+                valueLabel: resolvedValueLabel
+            )
+        ]
+    }
+}
+
+struct AnalyticsAPIFlattenedSubgroup: Sendable {
+    let name: String
+    let value: Double
+    let colorGraph: String?
+    let colorValue: String?
+    let lineStyle: ChartLineStyle?
+    let valueLabel: String?
 }
 
 private func normalizedLineStyle(_ rawValue: String?, dashed: Bool?) -> ChartLineStyle? {

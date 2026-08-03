@@ -492,6 +492,39 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testContractPlanFactBuildsCurrentThenPreviousYearPresentation() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Финансы","values":[{"name":"План-Факт (контракт), тыс. руб","values":[{"group":"БАК","subgroup":[{"name":"Прошлый год","values":[{"name":"План","value":412755},{"name":"Опл.","value":893538}]},{"name":"Текущий год","subgroup":[{"name":"Опл.","value":400192},{"name":"План","value":483360}]}]}],"type":"BarMark"}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertTrue(indicator.usesContractPlanFactPresentation)
+        XCTAssertEqual(indicator.contractPlanFactCategories.map(\.label), ["БАК"])
+        XCTAssertEqual(
+            indicator.contractPlanFactCategories[0].periods.map(\.period),
+            [.current, .previous]
+        )
+        XCTAssertEqual(
+            indicator.contractPlanFactCategories[0].periods[0].rows.map(\.contractPlanFactMetricLabel),
+            ["План", "Опл."]
+        )
+        XCTAssertEqual(
+            indicator.contractPlanFactCategories[0].periods[0].rows.map(\.value),
+            [483_360, 400_192]
+        )
+        XCTAssertEqual(
+            indicator.contractPlanFactCategories[0].periods[1].rows.map(\.value),
+            [412_755, 893_538]
+        )
+        XCTAssertEqual(indicator.contractPlanFactCategories[0].maximumValue, 893_538)
+    }
+
     func testEnrollmentByCitizenshipOverridesStaleServerTypeWithHorizontalBar() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Всего обучающихся РФ и ИГ","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":18347},{"name":"ИГ","value":3604}]},{"group":"СПЕЦ","subgroup":[{"name":"РФ","value":5120},{"name":"ИГ","value":920}]},{"group":"МАГ","subgroup":[{"name":"РФ","value":3480},{"name":"ИГ","value":740}]},{"group":"АСП","subgroup":[{"name":"РФ","value":995},{"name":"ИГ","value":115}]}],"type":"BarMarkStacking"}]}]}"#.utf8

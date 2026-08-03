@@ -10,6 +10,7 @@ struct AnalyticsChart: View {
     var showsValueLabels = true
     var animatesOnAppear = true
     var showsLineAreaFill = false
+    var showsProminentSelection = false
     private var externalSelection: Binding<IndicatorRow.ID?>?
     @State private var internalSelectedRowID: IndicatorRow.ID?
     @State private var selectedSeriesKey: String?
@@ -27,6 +28,7 @@ struct AnalyticsChart: View {
         showsValueLabels: Bool = true,
         animatesOnAppear: Bool = true,
         showsLineAreaFill: Bool = false,
+        showsProminentSelection: Bool = false,
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
         self.indicator = indicator
@@ -36,12 +38,16 @@ struct AnalyticsChart: View {
         self.showsValueLabels = showsValueLabels
         self.animatesOnAppear = animatesOnAppear
         self.showsLineAreaFill = showsLineAreaFill
+        self.showsProminentSelection = showsProminentSelection
         self.externalSelection = selectedRowID
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if showsTitle, indicator.showValueLabels != false, let selectedRow {
+            if showsTitle,
+               !showsProminentSelection,
+               indicator.showValueLabels != false,
+               let selectedRow {
                 HStack {
                     Spacer()
 
@@ -67,6 +73,17 @@ struct AnalyticsChart: View {
             chartContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .clipped()
+                .overlay(alignment: .topTrailing) {
+                    if showsProminentSelection, let selectedRow {
+                        prominentSelection(for: selectedRow)
+                            .padding(10)
+                            .transition(
+                                .scale(scale: 0.92, anchor: .topTrailing)
+                                    .combined(with: .opacity)
+                            )
+                            .allowsHitTesting(false)
+                    }
+                }
 
             if displaysLegend, !indicator.orderedRows.isEmpty {
                 interactiveLegend
@@ -1158,6 +1175,55 @@ struct AnalyticsChart: View {
         }
 
         return "\(row.label): \(value)"
+    }
+
+    private func prominentSelection(for row: IndicatorRow) -> some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            Text(selectionContext(for: row))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.trailing)
+
+            Text(displayValue(for: row))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(indicator.valueColor(for: row))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(opaqueLabelBackground.opacity(0.94), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(chartColor(for: row))
+                .frame(width: 4)
+                .padding(.vertical, 9)
+                .padding(.leading, 5)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(chartColor(for: row).opacity(0.30), lineWidth: 1)
+        }
+        .shadow(
+            color: .black.opacity(colorScheme == .dark ? 0.30 : 0.14),
+            radius: 8,
+            x: 0,
+            y: 4
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(selectionContext(for: row)), \(displayValue(for: row))")
+    }
+
+    private func selectionContext(for row: IndicatorRow) -> String {
+        guard let series = row.series?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !series.isEmpty else {
+            return row.label
+        }
+
+        return "\(row.label) · \(series)"
     }
 
     private var selectedTitleBackground: Color {

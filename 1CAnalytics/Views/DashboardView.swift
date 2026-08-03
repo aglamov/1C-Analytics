@@ -709,6 +709,15 @@ private struct IndicatorDashboardCard: View {
 
     @ViewBuilder
     private var visualization: some View {
+        if indicator.usesContractPlanFactPresentation {
+            ContractPlanFactDashboardView(indicator: indicator)
+        } else {
+            standardVisualization
+        }
+    }
+
+    @ViewBuilder
+    private var standardVisualization: some View {
         switch indicator.chartType {
         case .oneValue:
             EmptyView()
@@ -810,7 +819,7 @@ private struct IndicatorDashboardCard: View {
             }
             .padding(.trailing, indicator.supportsDetail ? 42 : 0)
 
-            if indicator.showsAggregateValue {
+            if indicator.showsAggregateValue && !indicator.usesContractPlanFactPresentation {
                 Text(valueText)
                     .font(.system(.title2, design: .default).weight(.semibold))
                     .foregroundStyle(.primary)
@@ -833,6 +842,102 @@ private struct IndicatorDashboardCard: View {
         return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
     }
 
+}
+
+private struct ContractPlanFactDashboardView: View {
+    let indicator: Indicator
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            ForEach(indicator.contractPlanFactCategories) { category in
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(category.label)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .textCase(.uppercase)
+
+                    ForEach(category.periods) { periodRows in
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(periodRows.period.title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(periodAccentColor(for: periodRows))
+
+                            ForEach(periodRows.rows) { row in
+                                ContractPlanFactBar(
+                                    indicator: indicator,
+                                    row: row,
+                                    maximumValue: category.maximumValue,
+                                    color: barColor(for: row)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func periodAccentColor(for periodRows: ContractPlanFactPeriodRows) -> Color {
+        guard let firstRow = periodRows.rows.first else {
+            return indicator.graphColor
+        }
+        return barColor(for: firstRow)
+    }
+
+    private func barColor(for row: IndicatorRow) -> Color {
+        if let apiColor = Color(apiHex: row.colorGraph) {
+            return apiColor
+        }
+
+        let colors = ChartPalette.colors(for: chartPaletteScheme)
+        guard !colors.isEmpty else {
+            return indicator.graphColor
+        }
+        return colors[row.isContractPlanMetric ? 0 : min(1, colors.count - 1)]
+    }
+}
+
+private struct ContractPlanFactBar: View {
+    let indicator: Indicator
+    let row: IndicatorRow
+    let maximumValue: Double
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(row.contractPlanFactMetricLabel)
+                    .font(.caption.weight(.medium))
+
+                Spacer(minLength: 8)
+
+                Text(row.valueLabel ?? indicator.formattedNumber(row.value))
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(indicator.valueColor(for: row))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.12))
+
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(color)
+                        .frame(
+                            width: geometry.size.width
+                                * min(max(row.value / maximumValue, 0), 1)
+                        )
+                }
+            }
+            .frame(height: 14)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(row.valueLabel ?? indicator.formattedNumber(row.value))
+    }
 }
 
 private struct CompactBarValues: View {

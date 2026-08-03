@@ -111,6 +111,7 @@ struct IndicatorDetailView: View {
                     indicator: indicator,
                     usesCardBackground: false,
                     showsLegend: true,
+                    showsProminentSelection: true,
                     selectedRowID: $selectedRowID
                 )
                     .frame(maxWidth: .infinity)

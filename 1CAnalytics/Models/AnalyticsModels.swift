@@ -213,6 +213,54 @@ struct IndicatorRowGroup: Identifiable, Equatable, Sendable {
     }
 }
 
+enum ContractPlanFactPeriod: Int, Identifiable, Sendable {
+    case current
+    case previous
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .current:
+            "Текущий год"
+        case .previous:
+            "Прошлый год"
+        }
+    }
+
+    init?(series: String?) {
+        let normalized = series?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() ?? ""
+
+        if normalized.contains("текущ") {
+            self = .current
+        } else if normalized.contains("прошл") {
+            self = .previous
+        } else {
+            return nil
+        }
+    }
+}
+
+struct ContractPlanFactPeriodRows: Identifiable, Equatable, Sendable {
+    let period: ContractPlanFactPeriod
+    let rows: [IndicatorRow]
+
+    var id: ContractPlanFactPeriod.ID { period.id }
+}
+
+struct ContractPlanFactCategory: Identifiable, Equatable, Sendable {
+    let label: String
+    let periods: [ContractPlanFactPeriodRows]
+
+    var id: String { label }
+
+    var maximumValue: Double {
+        max(periods.flatMap(\.rows).map(\.value).max() ?? 0, 1)
+    }
+}
+
 enum BarChartDataShape: Equatable, Sendable {
     case singleValuePerGroup
     case multipleValuesPerGroup(series: [String])
@@ -503,6 +551,44 @@ extension Indicator {
         return rowGroups.count >= 4 || smallestValue < largestValue * 0.18
     }
 
+    var usesContractPlanFactPresentation: Bool {
+        guard title.isPlanFactIndicatorTitle,
+              title.lowercased().contains("контракт"),
+              !orderedRows.isEmpty else {
+            return false
+        }
+
+        return orderedRows.allSatisfy {
+            ContractPlanFactPeriod(series: $0.series) != nil
+        }
+    }
+
+    var contractPlanFactCategories: [ContractPlanFactCategory] {
+        guard usesContractPlanFactPresentation else {
+            return []
+        }
+
+        return rowGroups.map { group in
+            let periods = [ContractPlanFactPeriod.current, .previous].compactMap { period in
+                let rows = group.rows
+                    .filter { ContractPlanFactPeriod(series: $0.series) == period }
+                    .sorted { lhs, rhs in
+                        let lhsPriority = lhs.contractPlanFactMetricPriority
+                        let rhsPriority = rhs.contractPlanFactMetricPriority
+                        return lhsPriority == rhsPriority
+                            ? (lhs.sortOrder ?? .max) < (rhs.sortOrder ?? .max)
+                            : lhsPriority < rhsPriority
+                    }
+
+                return rows.isEmpty
+                    ? nil
+                    : ContractPlanFactPeriodRows(period: period, rows: rows)
+            }
+
+            return ContractPlanFactCategory(label: group.label, periods: periods)
+        }
+    }
+
     var accent: AppAccent {
         switch id {
         case "students-total":
@@ -548,6 +634,32 @@ extension String {
 
         return normalized.contains("план-факт")
             || normalized.contains("план факт")
+    }
+}
+
+extension IndicatorRow {
+    var contractPlanFactMetricLabel: String {
+        let normalized = series?.lowercased() ?? ""
+
+        if normalized.contains("план") {
+            return "План"
+        }
+        if normalized.contains("опл") {
+            return "Опл."
+        }
+        if normalized.contains("факт") {
+            return "Факт"
+        }
+
+        return series ?? label
+    }
+
+    var isContractPlanMetric: Bool {
+        (series?.lowercased() ?? "").contains("план")
+    }
+
+    fileprivate var contractPlanFactMetricPriority: Int {
+        isContractPlanMetric ? 0 : 1
     }
 }
 
