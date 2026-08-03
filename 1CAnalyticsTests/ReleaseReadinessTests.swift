@@ -522,6 +522,16 @@ final class ReleaseReadinessTests: XCTestCase {
             indicator.contractPlanFactCategories[0].periods[1].rows.map(\.value),
             [412_755, 893_538]
         )
+        XCTAssertEqual(
+            try XCTUnwrap(indicator.contractPlanFactCategories[0].periods[0].completionRatio),
+            400_192.0 / 483_360.0,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(indicator.contractPlanFactCategories[0].periods[1].completionRatio),
+            893_538.0 / 412_755.0,
+            accuracy: 0.000_001
+        )
         XCTAssertEqual(indicator.contractPlanFactCategories[0].maximumValue, 893_538)
     }
 

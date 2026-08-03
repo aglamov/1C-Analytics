@@ -248,6 +248,24 @@ struct ContractPlanFactPeriodRows: Identifiable, Equatable, Sendable {
     let rows: [IndicatorRow]
 
     var id: ContractPlanFactPeriod.ID { period.id }
+
+    var planRow: IndicatorRow? {
+        rows.first(where: \.isContractPlanMetric)
+    }
+
+    var paidRow: IndicatorRow? {
+        rows.first { !$0.isContractPlanMetric }
+    }
+
+    var completionRatio: Double? {
+        guard let plan = planRow?.value,
+              let paid = paidRow?.value,
+              plan > 0 else {
+            return nil
+        }
+
+        return paid / plan
+    }
 }
 
 struct ContractPlanFactCategory: Identifiable, Equatable, Sendable {

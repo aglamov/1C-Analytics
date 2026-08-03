@@ -849,29 +849,21 @@ private struct ContractPlanFactDashboardView: View {
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: 22) {
             ForEach(indicator.contractPlanFactCategories) { category in
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     Text(category.label)
-                        .font(.caption.weight(.bold))
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                         .textCase(.uppercase)
 
                     ForEach(category.periods) { periodRows in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(periodRows.period.title)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(periodAccentColor(for: periodRows))
-
-                            ForEach(periodRows.rows) { row in
-                                ContractPlanFactBar(
-                                    indicator: indicator,
-                                    row: row,
-                                    maximumValue: category.maximumValue,
-                                    color: barColor(for: row)
-                                )
-                            }
-                        }
+                        ContractPlanFactPeriodSummary(
+                            indicator: indicator,
+                            periodRows: periodRows,
+                            planColor: planColor(for: periodRows),
+                            paidColor: paidColor(for: periodRows)
+                        )
                     }
                 }
             }
@@ -879,11 +871,16 @@ private struct ContractPlanFactDashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func periodAccentColor(for periodRows: ContractPlanFactPeriodRows) -> Color {
-        guard let firstRow = periodRows.rows.first else {
-            return indicator.graphColor
+    private func planColor(for periodRows: ContractPlanFactPeriodRows) -> Color {
+        periodRows.planRow.map(barColor(for:)) ?? indicator.graphColor
+    }
+
+    private func paidColor(for periodRows: ContractPlanFactPeriodRows) -> Color {
+        guard let paidRow = periodRows.paidRow else {
+            return ChartPalette.colors(for: chartPaletteScheme).dropFirst().first
+                ?? indicator.graphColor
         }
-        return barColor(for: firstRow)
+        return barColor(for: paidRow)
     }
 
     private func barColor(for row: IndicatorRow) -> Color {
@@ -899,44 +896,97 @@ private struct ContractPlanFactDashboardView: View {
     }
 }
 
-private struct ContractPlanFactBar: View {
+private struct ContractPlanFactPeriodSummary: View {
     let indicator: Indicator
-    let row: IndicatorRow
-    let maximumValue: Double
-    let color: Color
+    let periodRows: ContractPlanFactPeriodRows
+    let planColor: Color
+    let paidColor: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(row.contractPlanFactMetricLabel)
-                    .font(.caption.weight(.medium))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(periodRows.period.title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.primary)
 
                 Spacer(minLength: 8)
 
-                Text(row.valueLabel ?? indicator.formattedNumber(row.value))
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(indicator.valueColor(for: row))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                if let completionRatio = periodRows.completionRatio {
+                    Text(completionRatio.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(completionRatio >= 1 ? paidColor : .primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(paidColor.opacity(0.12), in: Capsule())
+                }
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                metric(
+                    title: "План",
+                    row: periodRows.planRow,
+                    color: planColor
+                )
+
+                Divider()
+
+                metric(
+                    title: "Оплачено",
+                    row: periodRows.paidRow,
+                    color: paidColor
+                )
             }
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.12))
+                        .fill(planColor.opacity(0.16))
 
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(color)
+                        .fill(paidColor)
                         .frame(
                             width: geometry.size.width
-                                * min(max(row.value / maximumValue, 0), 1)
+                                * min(max(periodRows.completionRatio ?? 0, 0), 1)
                         )
                 }
             }
-            .frame(height: 14)
+            .frame(height: 10)
+        }
+        .padding(12)
+        .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityValue(row.valueLabel ?? indicator.formattedNumber(row.value))
+    }
+
+    private func metric(title: String, row: IndicatorRow?, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 6, height: 6)
+
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(displayValue(for: row))
+                .font(.subheadline.monospacedDigit().weight(.bold))
+                .foregroundStyle(row.map(indicator.valueColor(for:)) ?? .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func displayValue(for row: IndicatorRow?) -> String {
+        guard let row else {
+            return "—"
+        }
+        return row.valueLabel ?? indicator.formattedNumber(row.value)
     }
 }
 
