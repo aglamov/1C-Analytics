@@ -851,7 +851,10 @@ struct AnalyticsChart: View {
     @AxisContentBuilder
     private var valueAxis: some AxisContent {
         if indicator.showsYAxisLabels {
-            humanReadableValueAxis(position: .leading)
+            humanReadableValueAxis(
+                position: .leading,
+                labelMaximumWidth: trendYAxisLabelMaximumWidth
+            )
         } else {
             AxisMarks { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
@@ -862,7 +865,8 @@ struct AnalyticsChart: View {
 
     private func humanReadableValueAxis(
         position: AxisMarkPosition,
-        font: Font = .caption2
+        font: Font = .caption2,
+        labelMaximumWidth: CGFloat? = nil
     ) -> some AxisContent {
         AxisMarks(position: position) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
@@ -872,6 +876,10 @@ struct AnalyticsChart: View {
             AxisValueLabel {
                 if let number = value.as(Double.self) {
                     Text(formattedAxisValue(number))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .allowsTightening(true)
+                        .frame(maxWidth: labelMaximumWidth, alignment: .trailing)
                 }
             }
             .foregroundStyle(Color.secondary)
@@ -913,6 +921,10 @@ struct AnalyticsChart: View {
 
     private var histogramYAxisLabelMaximumWidth: CGFloat {
         44
+    }
+
+    private var trendYAxisLabelMaximumWidth: CGFloat {
+        24
     }
 
     private var interactiveLegend: some View {
