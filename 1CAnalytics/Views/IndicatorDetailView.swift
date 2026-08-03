@@ -43,20 +43,18 @@ struct IndicatorDetailView: View {
                 .frame(maxWidth: .infinity, minHeight: headerHeight, maxHeight: headerHeight, alignment: .leading)
 
             HStack(alignment: .top, spacing: 16) {
-                chartSection(fillsAvailableHeight: true)
+                chartSection(fillsAvailableHeight: false)
                     .frame(
                         maxWidth: .infinity,
-                        minHeight: lowerHeight,
                         maxHeight: lowerHeight,
                         alignment: .top
                     )
 
-                ScrollView(.vertical) {
+                OverflowAwareScrollView {
                     rowsSection
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
                 .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
-                .scrollBounceBehavior(.basedOnSize)
             }
 
             Spacer(minLength: 0)
@@ -80,7 +78,7 @@ struct IndicatorDetailView: View {
         let contentSpacing: CGFloat = 16
         let remainingHeight = availableSize.height - verticalPadding - headerHeight - contentSpacing
 
-        return max(320, remainingHeight * 0.8)
+        return max(320, remainingHeight)
     }
 
     private func compactChartAspectRatio(for availableSize: CGSize) -> CGFloat {
@@ -93,27 +91,31 @@ struct IndicatorDetailView: View {
 
     @ViewBuilder
     private func chartSection(fillsAvailableHeight: Bool, aspectRatio: CGFloat = 1.0) -> some View {
-        if indicator.chartType == .geoMap {
-            GeoMapIndicatorView(indicator: indicator)
-                .frame(maxWidth: .infinity, alignment: .top)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        } else {
-            let chart = AnalyticsChart(
-                indicator: indicator,
-                usesCardBackground: false,
-                showsLegend: false,
-                selectedRowID: $selectedRowID
-            )
-                .frame(maxWidth: .infinity)
-
-            if fillsAvailableHeight {
-                chart
-                    .frame(maxHeight: .infinity)
+        Group {
+            if indicator.chartType == .geoMap {
+                GeoMapIndicatorView(indicator: indicator)
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             } else {
-                chart
-                    .aspectRatio(aspectRatio, contentMode: .fit)
+                let chart = AnalyticsChart(
+                    indicator: indicator,
+                    usesCardBackground: false,
+                    showsLegend: true,
+                    selectedRowID: $selectedRowID
+                )
+                    .frame(maxWidth: .infinity)
+
+                if fillsAvailableHeight {
+                    chart
+                        .frame(maxHeight: .infinity)
+                } else {
+                    chart
+                        .aspectRatio(aspectRatio, contentMode: .fit)
+                }
             }
         }
+        .padding(16)
+        .premiumPanel()
     }
 
     private var rowsSection: some View {
@@ -172,8 +174,6 @@ struct IndicatorDetailView: View {
                     .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
             }
         }
-        .padding(16)
-        .premiumPanel()
     }
 
     private var detailGroups: [IndicatorRowGroup] {
@@ -227,6 +227,99 @@ struct IndicatorDetailView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
             selectedRowID = selectedRowID == rowID ? nil : rowID
         }
+    }
+}
+
+private struct OverflowAwareScrollView<Content: View>: View {
+    let content: Content
+    @State private var viewportHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    @State private var contentBottom: CGFloat = 0
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    private var hasOverflow: Bool {
+        contentHeight > viewportHeight + 1
+    }
+
+    private var showsMoreBelow: Bool {
+        hasOverflow && contentBottom > viewportHeight + 8
+    }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            content
+                .padding(.bottom, hasOverflow ? 38 : 0)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear
+                            .preference(key: DetailContentHeightKey.self, value: proxy.size.height)
+                            .preference(
+                                key: DetailContentBottomKey.self,
+                                value: proxy.frame(in: .named("detail-scroll")).maxY
+                            )
+                    }
+                }
+        }
+        .coordinateSpace(name: "detail-scroll")
+        .scrollBounceBehavior(.basedOnSize)
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: DetailViewportHeightKey.self, value: proxy.size.height)
+            }
+        }
+        .onPreferenceChange(DetailContentHeightKey.self) { contentHeight = $0 }
+        .onPreferenceChange(DetailContentBottomKey.self) { contentBottom = $0 }
+        .onPreferenceChange(DetailViewportHeightKey.self) { viewportHeight = $0 }
+        .overlay(alignment: .bottom) {
+            if showsMoreBelow {
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [.clear, Color(.systemGroupedBackground).opacity(0.94)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 24)
+
+                    Label("Прокрутите, чтобы увидеть ещё", systemImage: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 6)
+                        .background(Color(.systemGroupedBackground).opacity(0.94))
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showsMoreBelow)
+    }
+}
+
+private struct DetailContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct DetailViewportHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct DetailContentBottomKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

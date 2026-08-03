@@ -117,11 +117,7 @@ struct AnalyticsChart: View {
             case .horizontalBar:
                 horizontalBars
             case .stackedBar:
-                if indicator.usesStackedCompositionPresentation {
-                    horizontalStackedBars
-                } else {
-                    stackedBars
-                }
+                stackedBars
             case .donut:
                 donut(showsPercentages: false)
             case .percentDonut:
@@ -356,152 +352,6 @@ struct AnalyticsChart: View {
         return total > 0 ? row.value / total : 0
     }
 
-    private var horizontalStackedBars: some View {
-        let groups = indicator.rowGroups
-        let maximum = max(groups.map(\.totalValue).max() ?? 0, 1)
-
-        return VStack(alignment: .leading, spacing: 17) {
-            ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(group.label)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .subtleTextShadow()
-
-                        Spacer(minLength: 8)
-
-                        Text(stackedGroupValueLabel(group))
-                            .font(.caption.monospacedDigit().weight(.bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                            .subtleTextShadow()
-                    }
-
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(.tertiarySystemFill))
-
-                            HStack(spacing: 0) {
-                                ForEach(group.rows) { row in
-                                    Rectangle()
-                                        .fill(horizontalGradient(for: row))
-                                        .frame(
-                                            width: proxy.size.width
-                                                * max(animatedValue(for: row), 0)
-                                                / maximum
-                                        )
-                                        .opacity(opacity(for: row))
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            toggleSelection(row.id)
-                                        }
-                                        .overlay {
-                                            if showsStackedSegmentValue(
-                                                row,
-                                                availableWidth: proxy.size.width,
-                                                maximum: maximum
-                                            ) {
-                                                Text(indicator.formattedNumber(row.value))
-                                                    .font(.caption2.monospacedDigit().weight(.bold))
-                                                    .foregroundStyle(.white)
-                                                    .lineLimit(1)
-                                                    .minimumScaleFactor(0.72)
-                                                    .padding(.horizontal, 4)
-                                                    .subtleTextShadow()
-                                                    .allowsHitTesting(false)
-                                            }
-                                        }
-                                        .accessibilityLabel(stackedSegmentAccessibilityLabel(row))
-                                        .accessibilityAddTraits(.isButton)
-                                }
-                            }
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                            if let selectedRow = group.rows.first(where: rowMatchesSelection),
-                               shouldShowValueLabel(for: selectedRow) {
-                                valueLabel(for: selectedRow)
-                                    .position(
-                                        x: stackedSelectedLabelX(
-                                            selectedRow,
-                                            in: group,
-                                            availableWidth: proxy.size.width,
-                                            maximum: maximum
-                                        ),
-                                        y: proxy.size.height / 2
-                                    )
-                                    .zIndex(1)
-                                    .allowsHitTesting(false)
-                            }
-                        }
-                    }
-                    .frame(height: 32)
-                }
-                .accessibilityElement(children: .contain)
-            }
-        }
-    }
-
-    private func stackedGroupValueLabel(_ group: IndicatorRowGroup) -> String {
-        if let totalLabel = group.totalLabel {
-            return totalLabel
-        }
-
-        guard valueLabelsEnabledWhenIdle() else {
-            return indicator.formattedNumber(group.totalValue)
-        }
-
-        return group.rows
-            .map { indicator.formattedNumber($0.value) }
-            .joined(separator: " / ")
-    }
-
-    private func stackedSegmentAccessibilityLabel(_ row: IndicatorRow) -> String {
-        let series = row.series.map { ", \($0)" } ?? ""
-        return "\(row.label)\(series): \(indicator.formattedNumber(row.value))"
-    }
-
-    private func showsStackedSegmentValue(
-        _ row: IndicatorRow,
-        availableWidth: CGFloat,
-        maximum: Double
-    ) -> Bool {
-        guard !rowMatchesSelection(row),
-              shouldShowValueLabel(for: row),
-              maximum > 0 else {
-            return false
-        }
-
-        if indicator.showValueLabels == true {
-            return true
-        }
-
-        let segmentWidth = availableWidth * max(row.value, 0) / maximum
-        let characterCount = indicator.formattedNumber(row.value).count
-        let estimatedLabelWidth = CGFloat(characterCount) * 6.5 + 10
-        return segmentWidth >= estimatedLabelWidth
-    }
-
-    private func stackedSelectedLabelX(
-        _ row: IndicatorRow,
-        in group: IndicatorRowGroup,
-        availableWidth: CGFloat,
-        maximum: Double
-    ) -> CGFloat {
-        let precedingValue = group.rows
-            .prefix { $0.id != row.id }
-            .reduce(0) { $0 + max($1.value, 0) }
-        let midpoint = precedingValue + max(row.value, 0) / 2
-        let naturalX = availableWidth * midpoint / max(maximum, 1)
-        let labelWidth = CGFloat(indicator.formattedNumber(row.value).count) * 11 + 30
-        let halfLabelWidth = min(max(labelWidth / 2, 30), availableWidth / 2)
-
-        return min(max(naturalX, halfLabelWidth), availableWidth - halfLabelWidth)
-    }
-
     private var verticalBars: some View {
         GeometryReader { geometry in
             Chart(indicator.orderedRows) { row in
@@ -511,7 +361,7 @@ struct AnalyticsChart: View {
                     width: barMarkDimension
                 )
                 .position(by: .value("Серия", verticalBarPosition(for: row)), axis: .horizontal)
-                .foregroundStyle(verticalGradient(for: row))
+                .foregroundStyle(verticalBarStyle(for: row))
                 .alignsMarkStylesWithPlotArea(false)
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
@@ -526,6 +376,10 @@ struct AnalyticsChart: View {
                 }
             }
             .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            // Keep top annotations inside the plot area. `chartContent` is intentionally
+            // clipped to the card bounds, so relying on Charts annotation overflow makes
+            // vertical value labels disappear when the automatic scale ends at the max bar.
+            .chartYScale(domain: verticalBarValueLabelDomain)
             .chartYAxis {
                 humanReadableValueAxis(position: .leading)
             }
@@ -588,7 +442,7 @@ struct AnalyticsChart: View {
                     y: .value("Значение", animatedValue(for: row)),
                     width: barMarkDimension
                 )
-                .foregroundStyle(verticalGradient(for: row))
+                .foregroundStyle(verticalBarStyle(for: row))
                 .alignsMarkStylesWithPlotArea(false)
                 .opacity(opacity(for: row))
                 .cornerRadius(3)
@@ -610,6 +464,7 @@ struct AnalyticsChart: View {
                 }
             }
             .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+            .chartYScale(domain: stackedBarValueLabelDomain)
             .chartYAxis {
                 humanReadableValueAxis(position: .leading)
             }
@@ -867,12 +722,9 @@ struct AnalyticsChart: View {
                     toggleLegendSelection(row)
                 } label: {
                     HStack(spacing: 6) {
-                        RoundedRectangle(cornerRadius: indicator.usesStackedCompositionPresentation ? 2 : 4)
+                        RoundedRectangle(cornerRadius: 4)
                             .fill(chartColor(for: row).opacity(rowMatchesSelection(row) ? 1 : 0.72))
-                            .frame(
-                                width: indicator.usesStackedCompositionPresentation ? 10 : 7,
-                                height: indicator.usesStackedCompositionPresentation ? 10 : 7
-                            )
+                            .frame(width: 7, height: 7)
 
                         Text(legendTitle(for: row))
                             .font(.caption2.weight(.semibold))
@@ -940,10 +792,6 @@ struct AnalyticsChart: View {
             return 140
         }
 
-        if indicator.usesStackedCompositionPresentation {
-            return 92
-        }
-
         return switch indicator.chartType {
         case .donut, .percentDonut:
             142
@@ -985,32 +833,7 @@ struct AnalyticsChart: View {
     }
 
     private var displaysLegend: Bool {
-        if let showLegend = indicator.showLegend {
-            return showLegend
-        }
-
-        if indicator.hasOnlyZeroValues
-            || indicator.usesMixedUnitPersonnelPresentation
-            || indicator.usesRankedCategoryPresentation {
-            return false
-        }
-
-        if indicator.usesDenseEnrollmentCompositionPresentation {
-            return true
-        }
-
-        if indicator.usesStackedCompositionPresentation {
-            return indicator.showLegend ?? true
-        }
-
-        return switch indicator.chartType {
-        case .donut, .percentDonut:
-            true
-        default:
-            showsLegend
-                || (indicator.prefersHorizontalGroupedBars
-                    && !indicator.barDataShape.series.isEmpty)
-        }
+        indicator.showLegend ?? showsLegend
     }
 
     private var selectedRow: IndicatorRow? {
@@ -1023,15 +846,11 @@ struct AnalyticsChart: View {
 
     @ViewBuilder
     private func legendBackground(for row: IndicatorRow) -> some View {
-        if indicator.usesStackedCompositionPresentation, !rowMatchesSelection(row) {
-            Color.clear
-        } else {
-            ZStack {
-                opaqueLabelBackground
+        ZStack {
+            opaqueLabelBackground
 
-                if rowMatchesSelection(row) {
-                    chartColor(for: row).opacity(0.12)
-                }
+            if rowMatchesSelection(row) {
+                chartColor(for: row).opacity(0.12)
             }
         }
     }
@@ -1048,12 +867,19 @@ struct AnalyticsChart: View {
         indicator.chartColor(for: row, scheme: chartPaletteScheme)
     }
 
-    private func verticalGradient(for row: IndicatorRow) -> LinearGradient {
+    private func verticalBarStyle(for row: IndicatorRow) -> AnyShapeStyle {
         let color = chartColor(for: row)
-        return LinearGradient(
-            colors: [vividColor(color, brightness: 1.10), color, vividColor(color, brightness: 0.70)],
-            startPoint: .top,
-            endPoint: .bottom
+
+        guard indicator.orderedRows.count < 2 else {
+            return AnyShapeStyle(color)
+        }
+
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [vividColor(color, brightness: 1.10), color, vividColor(color, brightness: 0.70)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         )
     }
 
@@ -1166,6 +992,14 @@ struct AnalyticsChart: View {
 
     private func valueLabelsEnabledWhenIdle(defaultWhenIdle: Bool = true) -> Bool {
         indicator.showValueLabels ?? (showsValueLabels && defaultWhenIdle)
+    }
+
+    private var verticalBarValueLabelDomain: ClosedRange<Double> {
+        VerticalBarValueLabelScale.domain(for: indicator.orderedRows.map(\.value))
+    }
+
+    private var stackedBarValueLabelDomain: ClosedRange<Double> {
+        VerticalBarValueLabelScale.domain(for: indicator.rowGroups.map(\.totalValue))
     }
 
     private func rowGroup(for row: IndicatorRow) -> IndicatorRowGroup? {
@@ -1806,6 +1640,26 @@ enum ChartValueLabelPolicy {
         }
 
         return hasSelection ? rowMatchesSelection : defaultLabelsEnabled
+    }
+}
+
+/// Vertical value labels are part of the chart contract, not optional overflow.
+/// Keep enough room for them inside the plot so future clipping/layout changes cannot hide them.
+enum VerticalBarValueLabelScale {
+    static let topHeadroomFraction = 0.22
+
+    static func domain(for values: [Double]) -> ClosedRange<Double> {
+        let finiteValues = values.filter(\.isFinite)
+        guard let minimum = finiteValues.min(), let maximum = finiteValues.max() else {
+            return 0...1
+        }
+
+        let lowerBound = min(minimum, 0)
+        let upperBound = max(maximum, 0)
+        let span = max(upperBound - lowerBound, 1)
+        let labelHeadroom = span * topHeadroomFraction
+
+        return lowerBound...(upperBound + labelHeadroom)
     }
 }
 

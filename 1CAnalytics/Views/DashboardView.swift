@@ -65,6 +65,21 @@ struct DashboardView: View {
                         }
                         .disabled(isEditingLayout)
                     }
+
+                    if case let .loaded(dashboard) = viewModel.state {
+                        ToolbarItem(placement: .bottomBar) {
+                            HStack(spacing: 0) {
+                                DashboardConnectionStatus(
+                                    date: dashboard.fetchedAt,
+                                    isCached: viewModel.isShowingCachedData,
+                                    isRefreshing: viewModel.isRefreshing
+                                )
+
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
         }
         .onChange(of: navigationPath) { oldPath, newPath in
@@ -132,20 +147,6 @@ struct DashboardView: View {
                     isCached: viewModel.isShowingCachedData,
                     errorMessage: viewModel.refreshErrorMessage
                 )
-            }
-            .toolbar {
-                ToolbarItem(placement: .bottomBar) {
-                    HStack(spacing: 0) {
-                        DashboardConnectionStatus(
-                            date: dashboard.fetchedAt,
-                            isCached: viewModel.isShowingCachedData,
-                            isRefreshing: viewModel.isRefreshing
-                        )
-
-                        Spacer(minLength: 0)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
             .background(Color(.systemBackground).ignoresSafeArea())
         }
@@ -698,10 +699,10 @@ private struct IndicatorDashboardCard: View {
                     indicator: indicator,
                     showsTitle: false,
                     usesCardBackground: false,
-                    showsLegend: indicator.showsLegend,
+                    showsLegend: true,
                     animatesOnAppear: false
                 )
-                    .frame(height: chartHeight, alignment: .top)
+                    .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
                     .padding(.top, 2)
 
                 if !indicator.prefersHorizontalGroupedBars, indicator.showsValueLabels {
@@ -714,11 +715,11 @@ private struct IndicatorDashboardCard: View {
                 indicator: indicator,
                 showsTitle: false,
                 usesCardBackground: false,
-                showsLegend: indicator.showsLegend,
+                showsLegend: true,
                 animatesOnAppear: false,
                 showsLineAreaFill: true
             )
-                .frame(height: chartHeight, alignment: .top)
+                .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
                 .padding(.top, 2)
         }
     }
@@ -736,10 +737,6 @@ private struct IndicatorDashboardCard: View {
 
         if indicator.usesDenseEnrollmentCompositionPresentation {
             return min(max(CGFloat(categoryCount) * 48 + 142, 286), 360)
-        }
-
-        if indicator.usesStackedCompositionPresentation {
-            return min(max(CGFloat(categoryCount) * 56 + 48, 216), 384)
         }
 
         if indicator.prefersHorizontalGroupedBars {

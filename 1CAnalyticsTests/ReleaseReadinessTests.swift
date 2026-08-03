@@ -71,6 +71,29 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testVerticalBarsReservePlotSpaceForValueLabels() {
+        let domain = VerticalBarValueLabelScale.domain(for: [40, 100, 75])
+
+        XCTAssertEqual(domain.lowerBound, 0)
+        XCTAssertEqual(domain.upperBound, 122, accuracy: 0.0001)
+        XCTAssertGreaterThan(domain.upperBound, 100)
+    }
+
+    func testVerticalBarLabelScaleHandlesEmptyAndNegativeData() {
+        XCTAssertEqual(VerticalBarValueLabelScale.domain(for: []), 0...1)
+
+        let mixedDomain = VerticalBarValueLabelScale.domain(for: [-20, 80])
+        XCTAssertEqual(mixedDomain.lowerBound, -20)
+        XCTAssertEqual(mixedDomain.upperBound, 102, accuracy: 0.0001)
+    }
+
+    func testVerticalBarLabelScaleIgnoresNonFiniteValues() {
+        let domain = VerticalBarValueLabelScale.domain(for: [.nan, .infinity, 50])
+
+        XCTAssertEqual(domain.lowerBound, 0)
+        XCTAssertEqual(domain.upperBound, 61, accuracy: 0.0001)
+    }
+
     func testSmallDonutLabelsMoveOutsideAndAvoidVerticalOverlap() {
         XCTAssertTrue(
             DonutLabelPlacementPolicy.shouldPlaceOutside(
