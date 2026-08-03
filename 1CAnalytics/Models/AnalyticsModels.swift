@@ -80,6 +80,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let showValueLabels: Bool?
+    let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
     let useCompactNumbers: Bool?
@@ -103,6 +104,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showTotal: Bool? = nil,
         showDetails: Bool? = nil,
         showValueLabels: Bool? = nil,
+        showYAxisLabels: Bool? = nil,
         detailsOrientation: DetailsOrientation? = nil,
         widthPercent: Double? = nil,
         useCompactNumbers: Bool? = nil,
@@ -125,6 +127,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showTotal = showTotal
         self.showDetails = showDetails
         self.showValueLabels = showValueLabels
+        self.showYAxisLabels = showYAxisLabels
         self.detailsOrientation = detailsOrientation
         self.widthPercent = widthPercent
         self.useCompactNumbers = useCompactNumbers
@@ -146,6 +149,7 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
     let colorValue: String?
     let lineStyle: ChartLineStyle?
     let totalLabel: String?
+    let valueLabel: String?
 
     init(
         id: String,
@@ -156,7 +160,8 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
         colorGraph: String? = nil,
         colorValue: String? = nil,
         lineStyle: ChartLineStyle? = nil,
-        totalLabel: String? = nil
+        totalLabel: String? = nil,
+        valueLabel: String? = nil
     ) {
         self.id = id
         self.label = label
@@ -167,6 +172,7 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
         self.colorValue = colorValue
         self.lineStyle = lineStyle
         self.totalLabel = totalLabel
+        self.valueLabel = valueLabel
     }
 }
 
@@ -321,11 +327,7 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
 
 extension Indicator {
     var showsAggregateValue: Bool {
-        guard !usesMixedUnitPersonnelPresentation else {
-            return false
-        }
-
-        return showTotal ?? !title.isPlanFactIndicatorTitle
+        showTotal ?? (chartType != .geoMap)
     }
 
     var displayUnit: String? {
@@ -337,11 +339,23 @@ extension Indicator {
     }
 
     var showsLegend: Bool {
-        showLegend ?? false
+        showLegend ?? (chartType != .geoMap)
     }
 
     var showsValueLabels: Bool {
         showValueLabels ?? true
+    }
+
+    var showsYAxisLabels: Bool {
+        showYAxisLabels ?? false
+    }
+
+    var resolvedDetailsOrientation: DetailsOrientation {
+        detailsOrientation ?? .vertical
+    }
+
+    var resolvedWidthPercent: Double {
+        widthPercent ?? 100
     }
 
     func formattedNumber(_ value: Double) -> String {
@@ -507,13 +521,7 @@ extension Indicator {
     }
 
     var supportsDetail: Bool {
-        switch chartType {
-        case .oneValue, .linearProgress, .gauge:
-            false
-        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .percentDonut,
-             .line, .area, .splineLine, .splineArea, .forecastLine, .geoMap:
-            showDetails ?? true
-        }
+        showDetails ?? true
     }
 
 }

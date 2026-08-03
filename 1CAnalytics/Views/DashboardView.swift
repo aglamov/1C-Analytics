@@ -187,9 +187,22 @@ struct DashboardView: View {
             .accessibilityAddTraits(.isHeader)
 
             if isExpanded {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-                    ForEach(displayedIndicators(in: section)) { indicator in
-                        dashboardCard(indicator, in: section)
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(layoutRows(for: displayedIndicators(in: section))) { row in
+                        HStack(alignment: .top, spacing: 16) {
+                            ForEach(row.indicators) { indicator in
+                                dashboardCard(indicator, in: section)
+                                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                            }
+
+                            if horizontalSizeClass == .regular,
+                               row.indicators.count == 1,
+                               row.indicators[0].resolvedWidthPercent <= 50 {
+                                Color.clear
+                                    .frame(maxWidth: .infinity)
+                                    .accessibilityHidden(true)
+                            }
+                        }
                     }
                 }
                 .padding(.top, 12)
@@ -274,17 +287,40 @@ struct DashboardView: View {
             .padding(12)
     }
 
-    private var columns: [GridItem] {
-        if horizontalSizeClass == .regular {
-            [
-                GridItem(.flexible(), spacing: 16, alignment: .top),
-                GridItem(.flexible(), spacing: 16, alignment: .top)
-            ]
-        } else {
-            [
-                GridItem(.flexible(), spacing: 16, alignment: .top)
-            ]
+    private func layoutRows(for indicators: [Indicator]) -> [DashboardIndicatorLayoutRow] {
+        guard horizontalSizeClass == .regular else {
+            return indicators.map { DashboardIndicatorLayoutRow(indicators: [$0]) }
         }
+
+        var rows: [DashboardIndicatorLayoutRow] = []
+        var pendingHalfWidthIndicator: Indicator?
+
+        for indicator in indicators {
+            if indicator.resolvedWidthPercent <= 50 {
+                if let pending = pendingHalfWidthIndicator {
+                    rows.append(
+                        DashboardIndicatorLayoutRow(
+                            indicators: [pending, indicator]
+                        )
+                    )
+                    pendingHalfWidthIndicator = nil
+                } else {
+                    pendingHalfWidthIndicator = indicator
+                }
+            } else {
+                if let pending = pendingHalfWidthIndicator {
+                    rows.append(DashboardIndicatorLayoutRow(indicators: [pending]))
+                    pendingHalfWidthIndicator = nil
+                }
+                rows.append(DashboardIndicatorLayoutRow(indicators: [indicator]))
+            }
+        }
+
+        if let pendingHalfWidthIndicator {
+            rows.append(DashboardIndicatorLayoutRow(indicators: [pendingHalfWidthIndicator]))
+        }
+
+        return rows
     }
 
     private var chartPaletteScheme: ChartPaletteScheme {
@@ -366,6 +402,14 @@ struct DashboardView: View {
 
 private enum DashboardRoute: Hashable {
     case indicator(Indicator.ID)
+}
+
+private struct DashboardIndicatorLayoutRow: Identifiable {
+    let indicators: [Indicator]
+
+    var id: String {
+        indicators.map(\.id).joined(separator: "|")
+    }
 }
 
 final class DashboardLayoutStore: ObservableObject {
@@ -672,7 +716,7 @@ private struct IndicatorDashboardCard: View {
     @ViewBuilder
     private var cardContent: some View {
         if indicator.chartType == .oneValue {
-            OneValueDashboardContent(indicator: indicator)
+            OneValueDashboardContent(indicator: indicator, reservesDetailButtonSpace: true)
         } else {
             header
             visualization
@@ -728,34 +772,42 @@ private struct IndicatorDashboardCard: View {
         let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
 
         if indicator.usesMixedUnitPersonnelPresentation {
-            return 226
+            return max(250, CGFloat(indicator.orderedRows.count) * 30 + 96)
         }
 
         if indicator.usesRankedCategoryPresentation {
-            return 230
+            return 280
         }
 
         if indicator.usesDenseEnrollmentCompositionPresentation {
-            return min(max(CGFloat(categoryCount) * 48 + 142, 286), 360)
+            return max(CGFloat(categoryCount) * 50 + 142, 296)
         }
 
         if indicator.prefersHorizontalGroupedBars {
-            return min(max(CGFloat(categoryCount) * 54 + 64, 240), 420)
+            return ChartHeightPolicy.horizontalBarHeight(
+                categoryCount: categoryCount,
+                seriesCount: max(indicator.barDataShape.series.count, 1)
+            )
         }
 
         switch indicator.chartType {
         case .horizontalBar:
-            return min(max(CGFloat(categoryCount) * 42 + 52, 180), 340)
-        case .bar, .stackedBar:
-            return categoryCount > 6 ? 250 : 220
+            return ChartHeightPolicy.horizontalBarHeight(
+                categoryCount: categoryCount,
+                seriesCount: max(indicator.barDataShape.series.count, 1)
+            )
+        case .bar:
+            return 238
+        case .stackedBar:
+            return 252
         case .compactBar:
-            return categoryCount > 5 ? 220 : 190
+            return 214
         case .line, .area, .splineLine, .splineArea, .forecastLine:
-            return categoryCount > 8 ? 250 : 220
+            return 264
         case .donut, .percentDonut:
-            return 270
+            return indicator.orderedRows.count > 4 ? 310 : 286
         case .gauge:
-            return 220
+            return 250
         case .oneValue, .linearProgress, .geoMap:
             return 220
         }
@@ -823,7 +875,7 @@ private struct CompactBarValues: View {
 
                     Spacer(minLength: 4)
 
-                    Text(indicator.formattedNumber(row.value))
+                    Text(row.valueLabel ?? indicator.formattedNumber(row.value))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -834,10 +886,12 @@ private struct CompactBarValues: View {
             }
         }
     }
+
 }
 
-private struct OneValueDashboardContent: View {
+struct OneValueDashboardContent: View {
     let indicator: Indicator
+    var reservesDetailButtonSpace = false
     @ScaledMetric(relativeTo: .largeTitle) private var valueFontSize: CGFloat = 38
 
     var body: some View {
@@ -858,16 +912,19 @@ private struct OneValueDashboardContent: View {
 
                     Spacer(minLength: 0)
                 }
+                .padding(.trailing, reservesDetailButtonSpace && indicator.supportsDetail ? 42 : 0)
 
-                Text(valueText)
-                    .font(.system(size: valueFontSize, weight: .bold, design: .rounded))
-                    .foregroundStyle(indicator.valueColor)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .minimumScaleFactor(0.58)
-                    .lineLimit(1)
-                    .allowsTightening(true)
-                    .subtleTextShadow()
+                if indicator.showsAggregateValue {
+                    Text(valueText)
+                        .font(.system(size: valueFontSize, weight: .bold, design: .rounded))
+                        .foregroundStyle(indicator.valueColor)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .minimumScaleFactor(0.58)
+                        .lineLimit(1)
+                        .allowsTightening(true)
+                        .subtleTextShadow()
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -875,6 +932,10 @@ private struct OneValueDashboardContent: View {
     }
 
     private var valueText: String {
+        if let valueLabel = indicator.rows.first?.valueLabel {
+            return valueLabel
+        }
+
         guard let value = indicator.value else {
             return "нет данных"
         }
@@ -884,29 +945,62 @@ private struct OneValueDashboardContent: View {
     }
 }
 
-private struct LinearProgressIndicatorView: View {
+struct LinearProgressIndicatorView: View {
     let indicator: Indicator
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(indicator.graphColor.opacity(0.18))
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Выполнено")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
-                Capsule()
-                    .fill(indicator.graphColor)
-                    .frame(width: proxy.size.width * progress)
-                    .overlay {
-                        LinearGradient(
-                            colors: [.white.opacity(0.18), .clear, .black.opacity(0.14)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .clipShape(Capsule())
-                    }
+                    Text(currentValueText)
+                        .font(.subheadline.monospacedDigit().weight(.bold))
+                        .foregroundStyle(indicator.valueColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(progress.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(indicator.graphColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(indicator.graphColor.opacity(0.11), in: Capsule())
             }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(indicator.graphColor.opacity(0.18))
+
+                    Capsule()
+                        .fill(indicator.graphColor)
+                        .frame(width: proxy.size.width * progress)
+                        .overlay {
+                            LinearGradient(
+                                colors: [.white.opacity(0.18), .clear, .black.opacity(0.14)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                            .clipShape(Capsule())
+                        }
+                }
+            }
+            .frame(height: 10)
+
+            HStack {
+                Text("0")
+                Spacer()
+                Text("Цель: \(maximumValueText)")
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
         }
-        .frame(height: 10)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(indicator.title)
         .accessibilityValue(accessibilityValue)
@@ -920,6 +1014,26 @@ private struct LinearProgressIndicatorView: View {
         return min(max(NSDecimalNumber(decimal: value).doubleValue / valueMax, 0), 1)
     }
 
+    private var currentValueText: String {
+        if let valueLabel = indicator.rows.first?.valueLabel {
+            return valueLabel
+        }
+
+        guard let value = indicator.value else {
+            return "Нет данных"
+        }
+
+        return indicator.formattedNumber(value)
+    }
+
+    private var maximumValueText: String {
+        guard let valueMax = indicator.valueMax else {
+            return "—"
+        }
+
+        return indicator.formattedNumber(valueMax)
+    }
+
     private var accessibilityValue: String {
         guard let value = indicator.value, let valueMax = indicator.valueMax else {
             return "Нет данных"
@@ -929,7 +1043,7 @@ private struct LinearProgressIndicatorView: View {
     }
 }
 
-private struct GaugeIndicatorView: View {
+struct GaugeIndicatorView: View {
     let indicator: Indicator
 
     var body: some View {
@@ -995,7 +1109,7 @@ private struct GaugeIndicatorView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 14) {
                             gaugeValue(
                                 title: "Сейчас",
-                                value: indicator.formattedNumber(value),
+                                value: indicator.rows.first?.valueLabel ?? indicator.formattedNumber(value),
                                 alignment: .leading
                             )
 
@@ -1096,7 +1210,9 @@ struct GeoMapIndicatorView: View {
             .padding(.horizontal, 4)
             .accessibilityHidden(true)
 
-            mapLegend
+            if indicator.showsLegend {
+                mapLegend
+            }
         }
         .task {
             if geometry.shapes.isEmpty {
@@ -1153,7 +1269,7 @@ struct GeoMapIndicatorView: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 6) {
-                Text(minimumValue.formatted(.number.notation(.compactName)))
+                Text(indicator.formattedNumber(minimumValue))
                 LinearGradient(
                     colors: [
                         indicator.graphColor.opacity(0.18),
@@ -1164,7 +1280,7 @@ struct GeoMapIndicatorView: View {
                 )
                 .frame(width: 72, height: 8)
                 .clipShape(Capsule())
-                Text(maximumValue.formatted(.number.notation(.compactName)))
+                Text(indicator.formattedNumber(maximumValue))
             }
             .font(.caption2.monospacedDigit())
             .foregroundStyle(.primary)

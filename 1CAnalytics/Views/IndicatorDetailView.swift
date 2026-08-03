@@ -82,11 +82,12 @@ struct IndicatorDetailView: View {
     }
 
     private func compactChartAspectRatio(for availableSize: CGSize) -> CGFloat {
-        guard horizontalSizeClass == .regular, availableSize.height > availableSize.width else {
-            return 1.0
-        }
-
-        return 1.28
+        let availableWidth = max(availableSize.width - (horizontalSizeClass == .regular ? 72 : 64), 240)
+        let desiredHeight = ChartHeightPolicy.detailHeight(
+            for: indicator,
+            availableWidth: availableWidth
+        )
+        return availableWidth / max(desiredHeight, 1)
     }
 
     @ViewBuilder
@@ -96,6 +97,15 @@ struct IndicatorDetailView: View {
                 GeoMapIndicatorView(indicator: indicator)
                     .frame(maxWidth: .infinity, alignment: .top)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else if indicator.chartType == .oneValue {
+                OneValueDashboardContent(indicator: indicator)
+                    .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+            } else if indicator.chartType == .linearProgress {
+                LinearProgressIndicatorView(indicator: indicator)
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            } else if indicator.chartType == .gauge {
+                GaugeIndicatorView(indicator: indicator)
+                    .frame(maxWidth: .infinity, minHeight: 260)
             } else {
                 let chart = AnalyticsChart(
                     indicator: indicator,
@@ -446,6 +456,8 @@ private struct DetailGroupRowView: View {
                 title: row.series ?? "Значение",
                 value: row.value,
                 color: segmentColor(for: row),
+                valueColor: indicator.valueColor(for: row),
+                displayValue: row.valueLabel,
                 shareDenominator: detailDenominator(for: row)
             )
 
@@ -465,7 +477,8 @@ private struct DetailGroupRowView: View {
                 title: group.label,
                 value: group.totalValue,
                 color: groupColor,
-                displayValue: group.totalLabel,
+                valueColor: group.rows.first.map { indicator.valueColor(for: $0) } ?? .primary,
+                displayValue: group.rows.first?.valueLabel ?? group.totalLabel,
                 shareDenominator: aggregateTotal
             )
             progressBar(value: group.totalValue, color: groupColor)
@@ -476,6 +489,7 @@ private struct DetailGroupRowView: View {
         title: String,
         value: Double,
         color: Color,
+        valueColor: Color,
         displayValue: String? = nil,
         shareDenominator: Double?
     ) -> some View {
@@ -496,7 +510,7 @@ private struct DetailGroupRowView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(displayValue ?? indicator.formattedNumber(value))
                     .font(.body.monospacedDigit().weight(.bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(valueColor)
                     .contentTransition(.numericText())
 
                 Text(shareText(for: value, denominator: shareDenominator))

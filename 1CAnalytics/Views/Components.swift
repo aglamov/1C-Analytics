@@ -235,6 +235,14 @@ extension Indicator {
     var valueColor: Color {
         Color(apiHex: colorValue) ?? .primary
     }
+
+    func valueColor(for row: IndicatorRow) -> Color {
+        apiValueColor(for: row) ?? .primary
+    }
+
+    func apiValueColor(for row: IndicatorRow) -> Color? {
+        Color(apiHex: row.colorValue ?? colorValue)
+    }
 }
 
 extension Array where Element == IndicatorRow {

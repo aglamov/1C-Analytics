@@ -286,6 +286,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let showValueLabels: Bool?
+    let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
     let useCompactNumbers: Bool?
@@ -314,10 +315,18 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case displayDetails
         case showValueLabels
         case showLabels
+        case displayValueLabels
+        case showYAxisLabels
+        case showYAxis
+        case showScale
+        case displayYAxisLabels
         case detailsOrientation
+        case detailOrientation
+        case detailsLayout
         case useCompactNumbers
         case useAbbreviations
         case compactValues
+        case abbreviateValues
         case valueSpacing
         case valueGap
         case itemSpacing
@@ -351,7 +360,15 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             ?? container.decodeFlexibleBool(forKey: .displayDetails)
         showValueLabels = container.decodeFlexibleBool(forKey: .showValueLabels)
             ?? container.decodeFlexibleBool(forKey: .showLabels)
-        detailsOrientation = container.decodeFlexibleString(forKey: .detailsOrientation)
+            ?? container.decodeFlexibleBool(forKey: .displayValueLabels)
+        showYAxisLabels = container.decodeFlexibleBool(forKey: .showYAxisLabels)
+            ?? container.decodeFlexibleBool(forKey: .showYAxis)
+            ?? container.decodeFlexibleBool(forKey: .showScale)
+            ?? container.decodeFlexibleBool(forKey: .displayYAxisLabels)
+        let rawDetailsOrientation = container.decodeFlexibleString(forKey: .detailsOrientation)
+            ?? container.decodeFlexibleString(forKey: .detailOrientation)
+            ?? container.decodeFlexibleString(forKey: .detailsLayout)
+        detailsOrientation = rawDetailsOrientation
             .flatMap {
                 DetailsOrientation(
                     rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -360,6 +377,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         useCompactNumbers = container.decodeFlexibleBool(forKey: .useCompactNumbers)
             ?? container.decodeFlexibleBool(forKey: .useAbbreviations)
             ?? container.decodeFlexibleBool(forKey: .compactValues)
+            ?? container.decodeFlexibleBool(forKey: .abbreviateValues)
 
         let rawSpacing = container.decodeFlexibleDouble(forKey: .valueSpacing)
             ?? container.decodeFlexibleDouble(forKey: .valueGap)
@@ -399,12 +417,12 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
 
     func toIndicator(layoutID: String, sectionID: String) -> Indicator {
         let totalRow = values.first {
-            $0.normalizedGroup.isEmpty && !$0.hasSubgroupValues
+            !$0.hasCategoryLabel && !$0.hasSubgroupValues
         }
         let rowValues = type == .compactBar
             ? values.filter(\.hasCompactBarValues)
-            : values.filter { !$0.normalizedGroup.isEmpty || $0.hasSubgroupValues }
-        let rows = rowValues
+            : values.filter { $0.hasCategoryLabel || $0.hasSubgroupValues }
+        var rows = rowValues
             .enumerated()
             .flatMap { rowIndex, value in
                 value.toRows(index: rowIndex, chartType: type)
@@ -414,8 +432,26 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             : rows.reduce(0) { $0 + $1.value }
         let scalarValue = value
             ?? totalRow?.value
-            ?? (name.isPlanFactIndicatorTitle ? nil : calculatedTotal)
+            ?? calculatedTotal
         let primaryValue = values.first
+
+        if rows.isEmpty,
+           let scalarValue,
+           type == .oneValue || type == .linearProgress || type == .gauge {
+            rows = [
+                IndicatorRow(
+                    id: "scalar-value",
+                    label: name.isEmpty ? "Значение" : name,
+                    value: scalarValue,
+                    series: nil,
+                    sortOrder: 0,
+                    colorGraph: primaryValue?.colorGraph ?? colorGraph,
+                    colorValue: primaryValue?.colorValue ?? colorValue,
+                    lineStyle: primaryValue?.lineStyle ?? lineStyle,
+                    valueLabel: primaryValue?.valueLabel
+                )
+            ]
+        }
 
         return Indicator(
             id: "\(sectionID)-\(layoutID)",
@@ -431,6 +467,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             showTotal: showTotal,
             showDetails: showDetails,
             showValueLabels: showValueLabels,
+            showYAxisLabels: showYAxisLabels,
             detailsOrientation: detailsOrientation,
             widthPercent: widthPercent,
             useCompactNumbers: useCompactNumbers,
@@ -456,6 +493,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
 struct AnalyticsAPIValue: Decodable, Sendable {
     let name: String?
     let group: String?
+    let title: String?
     let value: Double?
     let valueMax: Double?
     let unit: String?
@@ -463,11 +501,13 @@ struct AnalyticsAPIValue: Decodable, Sendable {
     let colorValue: String?
     let lineStyle: ChartLineStyle?
     let totalLabel: String?
+    let valueLabel: String?
     let subgroup: [AnalyticsAPISubgroup]?
 
     private enum CodingKeys: String, CodingKey {
         case name
         case group
+        case title
         case value
         case valueMax
         case unit
@@ -476,6 +516,11 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         case lineStyle
         case dashed
         case totalLabel
+        case displayTotal
+        case totalValue
+        case valueLabel
+        case displayValue
+        case displayLabel
         case subgroup
         case values
     }
@@ -484,6 +529,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = container.decodeFlexibleString(forKey: .name)
         group = container.decodeFlexibleString(forKey: .group)
+        title = container.decodeFlexibleString(forKey: .title)
         value = container.decodeFlexibleDouble(forKey: .value)
         valueMax = container.decodeFlexibleDouble(forKey: .valueMax)
         unit = container.decodeFlexibleString(forKey: .unit)
@@ -494,6 +540,11 @@ struct AnalyticsAPIValue: Decodable, Sendable {
             dashed: container.decodeFlexibleBool(forKey: .dashed)
         )
         totalLabel = container.decodeFlexibleString(forKey: .totalLabel)
+            ?? container.decodeFlexibleString(forKey: .displayTotal)
+            ?? container.decodeFlexibleString(forKey: .totalValue)
+        valueLabel = container.decodeFlexibleString(forKey: .valueLabel)
+            ?? container.decodeFlexibleString(forKey: .displayValue)
+            ?? container.decodeFlexibleString(forKey: .displayLabel)
 
         let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
         let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
@@ -507,6 +558,14 @@ struct AnalyticsAPIValue: Decodable, Sendable {
 
     var normalizedName: String {
         (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var normalizedTitle: String {
+        (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var hasCategoryLabel: Bool {
+        !normalizedGroup.isEmpty || !normalizedName.isEmpty || !normalizedTitle.isEmpty
     }
 
     var hasCompactBarValues: Bool {
@@ -531,7 +590,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                         colorGraph: subgroup.colorGraph ?? colorGraph,
                         colorValue: subgroup.colorValue ?? colorValue,
                         lineStyle: subgroup.lineStyle ?? lineStyle,
-                        totalLabel: totalLabel
+                        totalLabel: totalLabel,
+                        valueLabel: subgroup.valueLabel
                     )
                 }
             }
@@ -547,7 +607,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                     colorGraph: subgroup.colorGraph ?? colorGraph,
                     colorValue: subgroup.colorValue ?? colorValue,
                     lineStyle: subgroup.lineStyle ?? lineStyle,
-                    totalLabel: totalLabel
+                    totalLabel: totalLabel,
+                    valueLabel: subgroup.valueLabel
                 )
             }
         }
@@ -563,7 +624,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                 colorGraph: colorGraph,
                 colorValue: colorValue,
                 lineStyle: lineStyle,
-                totalLabel: totalLabel
+                totalLabel: totalLabel,
+                valueLabel: valueLabel
             )
         ]
     }
@@ -574,6 +636,9 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         }
         if !normalizedName.isEmpty {
             return normalizedName
+        }
+        if !normalizedTitle.isEmpty {
+            return normalizedTitle
         }
         return fallbackLabel(index: index)
     }
@@ -589,6 +654,7 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
     let colorGraph: String?
     let colorValue: String?
     let lineStyle: ChartLineStyle?
+    let valueLabel: String?
 
     private enum CodingKeys: String, CodingKey {
         case name
@@ -598,6 +664,10 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
         case colorValue
         case lineStyle
         case dashed
+        case valueLabel
+        case displayValue
+        case displayLabel
+        case totalLabel
     }
 
     init(from decoder: any Decoder) throws {
@@ -612,6 +682,10 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
             container.decodeFlexibleString(forKey: .lineStyle),
             dashed: container.decodeFlexibleBool(forKey: .dashed)
         )
+        valueLabel = container.decodeFlexibleString(forKey: .valueLabel)
+            ?? container.decodeFlexibleString(forKey: .displayValue)
+            ?? container.decodeFlexibleString(forKey: .displayLabel)
+            ?? container.decodeFlexibleString(forKey: .totalLabel)
     }
 }
 

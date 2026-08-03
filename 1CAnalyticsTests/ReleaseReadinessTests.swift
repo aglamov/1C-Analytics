@@ -130,6 +130,69 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertLessThanOrEqual(positions[2], 120)
     }
 
+    func testDenseCategoricalChartsGrowInsteadOfCompressingLabels() {
+        let compactWidth = ChartPresentationPolicy.contentWidth(
+            availableWidth: 320,
+            categoryCount: 2,
+            seriesCount: 1,
+            longestValueCharacterCount: 4,
+            style: .trend
+        )
+        let denseWidth = ChartPresentationPolicy.contentWidth(
+            availableWidth: 320,
+            categoryCount: 8,
+            seriesCount: 2,
+            longestValueCharacterCount: 8,
+            style: .groupedBar
+        )
+
+        XCTAssertEqual(compactWidth, 320)
+        XCTAssertGreaterThan(denseWidth, 600)
+    }
+
+    func testStackedBarLabelsOnlyAppearWhenSegmentCanContainThem() {
+        XCTAssertTrue(
+            StackedBarLabelPolicy.isReadable(
+                value: 35,
+                groupTotal: 100,
+                labelCharacterCount: 4
+            )
+        )
+        XCTAssertFalse(
+            StackedBarLabelPolicy.isReadable(
+                value: 5,
+                groupTotal: 100,
+                labelCharacterCount: 6
+            )
+        )
+    }
+
+    func testTrendScaleReservesSpaceWithoutFlatteningLineAgainstZero() {
+        let lineDomain = TrendValueLabelScale.domain(for: [100, 110], includesZero: false)
+        let areaDomain = TrendValueLabelScale.domain(for: [100, 110], includesZero: true)
+
+        XCTAssertGreaterThan(lineDomain.lowerBound, 90)
+        XCTAssertLessThan(lineDomain.lowerBound, 100)
+        XCTAssertGreaterThan(lineDomain.upperBound, 110)
+        XCTAssertLessThan(areaDomain.lowerBound, 0)
+        XCTAssertGreaterThan(areaDomain.upperBound, 110)
+    }
+
+    func testHorizontalChartHeightAccountsForEverySeries() {
+        let singleSeriesHeight = ChartHeightPolicy.horizontalBarHeight(
+            categoryCount: 4,
+            seriesCount: 1
+        )
+        let threeSeriesHeight = ChartHeightPolicy.horizontalBarHeight(
+            categoryCount: 4,
+            seriesCount: 3
+        )
+
+        XCTAssertGreaterThan(threeSeriesHeight, singleSeriesHeight)
+        XCTAssertEqual(singleSeriesHeight, 240)
+        XCTAssertEqual(threeSeriesHeight, 424)
+    }
+
     func testDetailPresentationKeepsMultipleParametersSeparate() {
         let groups = [
             IndicatorRowGroup(
@@ -412,7 +475,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(indicator.rowGroups.map(\.totalValue), [21_951, 6_040, 4_220, 1_110])
     }
 
-    func testGroupedValuesDoNotPopulateMissingSummaryValue() throws {
+    func testGroupedValuesUseContractDefaultSummaryValue() throws {
         let data = Data(
             #"""
             {
@@ -438,11 +501,11 @@ final class ReleaseReadinessTests: XCTestCase {
                 .first
         )
 
-        XCTAssertNil(indicator.value)
-        XCTAssertFalse(indicator.showsAggregateValue)
+        XCTAssertEqual(indicator.value, 200)
+        XCTAssertTrue(indicator.showsAggregateValue)
     }
 
-    func testPlanFactTitlesNeverShowMisleadingAggregateValue() {
+    func testPlanFactTitlesFollowShowTotalContractDefault() {
         for title in ["План-факт", "План‑факт доходов", "План факт"] {
             let indicator = Indicator(
                 id: title,
@@ -454,7 +517,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 rows: []
             )
 
-            XCTAssertFalse(indicator.showsAggregateValue, title)
+            XCTAssertTrue(indicator.showsAggregateValue, title)
         }
     }
 
@@ -474,7 +537,7 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertTrue(indicator.usesMixedUnitPersonnelPresentation)
-        XCTAssertFalse(indicator.showsAggregateValue)
+        XCTAssertTrue(indicator.showsAggregateValue)
     }
 
     func testPresentationRulesReplaceDenseAcademicTitleDonutWithRanking() {
@@ -678,8 +741,8 @@ final class ReleaseReadinessTests: XCTestCase {
             XCTAssertEqual(indicator.rows.map(\.series), ["План", "Факт"])
             XCTAssertEqual(indicator.rows.map(\.value), [23_901_704, 13_450_484])
             XCTAssertEqual(indicator.rowGroups.map(\.label), ["Контракт"])
-            XCTAssertNil(indicator.value)
-            XCTAssertFalse(indicator.showsAggregateValue)
+            XCTAssertEqual(indicator.value, 37_352_188)
+            XCTAssertTrue(indicator.showsAggregateValue)
         }
     }
 
@@ -757,7 +820,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(gauge.value, 13_591_215)
         XCTAssertEqual(gauge.valueMax, 24_009_730)
         XCTAssertEqual(gauge.widthPercent, 50)
-        XCTAssertFalse(gauge.supportsDetail)
+        XCTAssertTrue(gauge.supportsDetail)
 
         XCTAssertEqual(geoMap.chartType, .geoMap)
         XCTAssertEqual(geoMap.rows.map(\.label), ["КИТАЙ", "ТУРКМЕНИСТАН"])
@@ -855,7 +918,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(indicators[4].forecastFromIndex, 2)
         XCTAssertEqual(indicators[5].valueSpacing, 0)
 
-        XCTAssertFalse(line.showsLegend)
+        XCTAssertTrue(line.showsLegend)
         XCTAssertTrue(indicators[1].showsAggregateValue)
     }
 
@@ -899,6 +962,148 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(stacked.rowGroups.first?.totalLabel, "16161/3220")
         XCTAssertEqual(stacked.rowGroups.first?.totalValue, 19_381)
         XCTAssertFalse(indicators[1].showsValueLabels)
+    }
+
+    func testLatestChartContractMapsAliasesCategoryTitlesAndCustomValueLabels() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [{
+                "name": "Контракт",
+                "values": [{
+                  "name": "Алиасы",
+                  "type": "LineMark",
+                  "displayValueLabels": false,
+                  "showScale": true,
+                  "detailsLayout": "horizontal",
+                  "abbreviateValues": true,
+                  "values": [{
+                    "name": "Янв",
+                    "displayTotal": "10/20",
+                    "subgroup": [
+                      {"name": "План", "value": 10, "displayValue": "десять"},
+                      {"name": "Факт", "value": 20, "totalLabel": "двадцать"}
+                    ]
+                  }, {
+                    "title": "Фев",
+                    "value": 30,
+                    "valueLabel": "тридцать"
+                  }, {
+                    "group": "Мар",
+                    "totalValue": "итог марта",
+                    "value": 40,
+                    "displayLabel": "сорок"
+                  }]
+                }]
+              }]
+            }
+            """#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertFalse(indicator.showsValueLabels)
+        XCTAssertTrue(indicator.showsYAxisLabels)
+        XCTAssertEqual(indicator.resolvedDetailsOrientation, .horizontal)
+        XCTAssertEqual(indicator.useCompactNumbers, true)
+        XCTAssertEqual(indicator.rows.map(\.label), ["Янв", "Янв", "Фев", "Мар"])
+        XCTAssertEqual(indicator.rows.map(\.valueLabel), ["десять", "двадцать", "тридцать", "сорок"])
+        XCTAssertEqual(indicator.rowGroups.map(\.totalLabel), ["10/20", nil, "итог марта"])
+    }
+
+    func testLatestChartContractAppliesDefaultsAndScalarDetails() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [{
+                "name": "Контракт",
+                "values": [{
+                  "name": "Линия",
+                  "type": "LineMark",
+                  "values": [{"group": "Янв", "value": 10}]
+                }, {
+                  "name": "Карта",
+                  "type": "GeoMap",
+                  "values": [{"group": "RU", "value": 20}]
+                }, {
+                  "name": "Индикатор",
+                  "type": "Gauge",
+                  "values": {"value": 30, "valueMax": 100, "valueLabel": "30 из 100"}
+                }]
+              }]
+            }
+            """#.utf8
+        )
+
+        let indicators = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+        let line = indicators[0]
+        let map = indicators[1]
+        let gauge = indicators[2]
+
+        XCTAssertTrue(line.showsAggregateValue)
+        XCTAssertTrue(line.supportsDetail)
+        XCTAssertTrue(line.showsValueLabels)
+        XCTAssertFalse(line.showsYAxisLabels)
+        XCTAssertTrue(line.showsLegend)
+        XCTAssertEqual(line.resolvedDetailsOrientation, .vertical)
+        XCTAssertEqual(line.resolvedWidthPercent, 100)
+
+        XCTAssertFalse(map.showsAggregateValue)
+        XCTAssertFalse(map.showsLegend)
+        XCTAssertTrue(map.supportsDetail)
+
+        XCTAssertTrue(gauge.supportsDetail)
+        XCTAssertEqual(gauge.rows.map(\.valueLabel), ["30 из 100"])
+    }
+
+    func testLatestChartContractSupportsRemainingDisplayAliases() throws {
+        let aliases = [
+            ("showYAxis", "detailOrientation"),
+            ("displayYAxisLabels", "detailsLayout")
+        ]
+
+        for (yAxisAlias, orientationAlias) in aliases {
+            let data = Data(
+                """
+                {
+                  "sections": [{
+                    "name": "Контракт",
+                    "values": [{
+                      "name": "График",
+                      "type": "AreaMark",
+                      "\(yAxisAlias)": true,
+                      "\(orientationAlias)": "horizontal",
+                      "values": [{"group": "A", "value": 1}]
+                    }]
+                  }]
+                }
+                """.utf8
+            )
+
+            let indicator = try XCTUnwrap(
+                JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                    .toDashboard()
+                    .indicators
+                    .first
+            )
+            XCTAssertTrue(indicator.showsYAxisLabels, yAxisAlias)
+            XCTAssertEqual(indicator.resolvedDetailsOrientation, .horizontal, orientationAlias)
+        }
+    }
+
+    func testForecastDefaultsToLastQuarterRoundedUp() {
+        XCTAssertEqual(ForecastPresentationPolicy.startIndex(pointCount: 6, explicitIndex: nil), 4)
+        XCTAssertEqual(ForecastPresentationPolicy.startIndex(pointCount: 8, explicitIndex: nil), 6)
+        XCTAssertEqual(ForecastPresentationPolicy.startIndex(pointCount: 1, explicitIndex: nil), 0)
+        XCTAssertEqual(ForecastPresentationPolicy.startIndex(pointCount: 6, explicitIndex: 2), 2)
+        XCTAssertNil(ForecastPresentationPolicy.startIndex(pointCount: 0, explicitIndex: nil))
     }
 
     func testAndroidContractAliasesFlexibleNumbersNestedValuesAndStableIDs() throws {
