@@ -71,6 +71,68 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testSmallDonutLabelsMoveOutsideAndAvoidVerticalOverlap() {
+        XCTAssertTrue(
+            DonutLabelPlacementPolicy.shouldPlaceOutside(
+                share: 0.04,
+                labelCharacterCount: 6,
+                radius: 90
+            )
+        )
+        XCTAssertTrue(
+            DonutLabelPlacementPolicy.shouldPlaceOutside(
+                share: 0.10,
+                labelCharacterCount: 4,
+                radius: 90
+            )
+        )
+        XCTAssertFalse(
+            DonutLabelPlacementPolicy.shouldPlaceOutside(
+                share: 0.45,
+                labelCharacterCount: 4,
+                radius: 90
+            )
+        )
+
+        let positions = DonutLabelPlacementPolicy.distributedVerticalPositions(
+            [42, 48, 53],
+            bounds: 16...120,
+            minimumSpacing: 28
+        )
+
+        XCTAssertEqual(positions.count, 3)
+        XCTAssertGreaterThanOrEqual(positions[1] - positions[0], 28)
+        XCTAssertGreaterThanOrEqual(positions[2] - positions[1], 28)
+        XCTAssertGreaterThanOrEqual(positions[0], 16)
+        XCTAssertLessThanOrEqual(positions[2], 120)
+    }
+
+    func testDetailPresentationKeepsMultipleParametersSeparate() {
+        let groups = [
+            IndicatorRowGroup(
+                label: "БАК",
+                rows: [
+                    IndicatorRow(id: "bak-rf", label: "БАК", value: 16_151, series: "РФ", sortOrder: 0),
+                    IndicatorRow(id: "bak-foreign", label: "БАК", value: 3_214, series: "ИГ", sortOrder: 1)
+                ]
+            ),
+            IndicatorRowGroup(
+                label: "СПЕЦ",
+                rows: [
+                    IndicatorRow(id: "spec-rf", label: "СПЕЦ", value: 5_109, series: "РФ", sortOrder: 2),
+                    IndicatorRow(id: "spec-foreign", label: "СПЕЦ", value: 2_300, series: "ИГ", sortOrder: 3)
+                ]
+            )
+        ]
+
+        XCTAssertTrue(DetailPresentationPolicy.hasMultipleParameters(in: groups))
+        XCTAssertNil(DetailPresentationPolicy.aggregateTotal(for: groups))
+        XCTAssertEqual(
+            DetailPresentationPolicy.seriesTotals(for: groups),
+            ["РФ": 21_260, "ИГ": 5_514]
+        )
+    }
+
     func testLegendSelectionMatchesEveryRowInSelectedSeries() {
         XCTAssertTrue(
             ChartSelectionPolicy.matches(

@@ -64,9 +64,13 @@ struct AnalyticsChart: View {
             }
 
             chartContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .clipped()
 
             if displaysLegend, !indicator.orderedRows.isEmpty {
                 interactiveLegend
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
             }
         }
         .modifier(ChartChromeModifier(isEnabled: usesCardBackground))
@@ -619,30 +623,48 @@ struct AnalyticsChart: View {
     }
 
     private func donut(showsPercentages: Bool) -> some View {
-        Chart(indicator.orderedRows) { row in
-            SectorMark(
-                angle: .value("Доля", animatedValue(for: row)),
-                innerRadius: .ratio(0.62),
-                outerRadius: rowMatchesSelection(row) ? .ratio(1.0) : .ratio(0.92),
-                angularInset: donutAngularInset
+        GeometryReader { geometry in
+            let labelInset = donutExternalLabelInset(in: geometry.size)
+            let plotSize = CGSize(
+                width: max(geometry.size.width - labelInset * 2, 1),
+                height: geometry.size.height
             )
-            .cornerRadius(3)
-            .foregroundStyle(sectorGradient(for: row))
-            .alignsMarkStylesWithPlotArea(false)
-            .opacity(opacity(for: row))
-            .annotation(position: .overlay, alignment: .center) {
-                if shouldShowValueLabel(for: row, defaultWhenIdle: false) {
-                    if showsPercentages {
-                        percentLabel(for: row)
-                    } else {
-                        valueLabel(for: row)
+
+            ZStack {
+                Chart(indicator.orderedRows) { row in
+                    SectorMark(
+                        angle: .value("Доля", animatedValue(for: row)),
+                        innerRadius: .ratio(0.62),
+                        outerRadius: rowMatchesSelection(row) ? .ratio(1.0) : .ratio(0.92),
+                        angularInset: donutAngularInset
+                    )
+                    .cornerRadius(3)
+                    .foregroundStyle(sectorGradient(for: row))
+                    .alignsMarkStylesWithPlotArea(false)
+                    .opacity(opacity(for: row))
+                    .annotation(position: .overlay, alignment: .center) {
+                        if shouldShowValueLabel(for: row),
+                           !shouldPlaceDonutLabelOutside(row, plotSize: plotSize) {
+                            if showsPercentages {
+                                percentLabel(for: row)
+                            } else {
+                                valueLabel(for: row, usesContrastingForeground: true)
+                            }
+                        }
                     }
                 }
+                .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartOverlay { proxy in
+                    donutTapOverlay(proxy: proxy)
+                }
+                .padding(.horizontal, labelInset)
+
+                donutExternalLabels(
+                    showsPercentages: showsPercentages,
+                    size: geometry.size,
+                    labelInset: labelInset
+                )
             }
-        }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-        .chartOverlay { proxy in
-            donutTapOverlay(proxy: proxy)
         }
     }
 
@@ -1182,6 +1204,187 @@ struct AnalyticsChart: View {
             .transition(.identity)
     }
 
+    private func donutExternalLabels(
+        showsPercentages: Bool,
+        size: CGSize,
+        labelInset: CGFloat
+    ) -> some View {
+        let positions = donutExternalLabelPositions(in: size, labelInset: labelInset)
+
+        return ZStack {
+            ForEach(positions) { position in
+                Path { path in
+                    path.move(to: position.anchor)
+                    path.addLine(to: position.elbow)
+                    path.addLine(to: position.lineEnd)
+                }
+                .stroke(
+                    chartColor(for: position.row).opacity(0.72),
+                    style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round)
+                )
+
+                Text(donutLabelText(for: position.row, showsPercentages: showsPercentages))
+                    .font(.caption2.monospacedDigit().weight(.bold))
+                    .foregroundStyle(colorScheme == .dark ? Color.white : chartColor(for: position.row))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: true)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 5)
+                    .background(opaqueLabelBackground, in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(
+                                chartColor(for: position.row).opacity(colorScheme == .dark ? 0.46 : 0.28),
+                                lineWidth: 1
+                            )
+                    }
+                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.09), radius: 4, y: 2)
+                    .position(position.labelCenter)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func donutExternalLabelInset(in size: CGSize) -> CGFloat {
+        let candidateInset = min(max(size.width * 0.12, 42), 56)
+        let plotSize = CGSize(
+            width: max(size.width - candidateInset * 2, 1),
+            height: size.height
+        )
+
+        let needsExternalLabels = indicator.orderedRows.contains { row in
+            shouldShowValueLabel(for: row)
+                && shouldPlaceDonutLabelOutside(row, plotSize: plotSize)
+        }
+
+        return needsExternalLabels ? candidateInset : 0
+    }
+
+    private func shouldPlaceDonutLabelOutside(
+        _ row: IndicatorRow,
+        plotSize: CGSize
+    ) -> Bool {
+        let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
+        guard total > 0 else {
+            return false
+        }
+
+        let share = max(row.value, 0) / total
+        let radius = min(plotSize.width, plotSize.height) * 0.36
+        return DonutLabelPlacementPolicy.shouldPlaceOutside(
+            share: share,
+            labelCharacterCount: indicator.formattedNumber(row.value).count,
+            radius: radius
+        )
+    }
+
+    private func donutExternalLabelPositions(
+        in size: CGSize,
+        labelInset: CGFloat
+    ) -> [DonutExternalLabelPosition] {
+        guard labelInset > 0 else {
+            return []
+        }
+
+        let rows = indicator.orderedRows
+        let total = rows.reduce(0) { $0 + max($1.value, 0) }
+        guard total > 0 else {
+            return []
+        }
+
+        let plotSize = CGSize(width: max(size.width - labelInset * 2, 1), height: size.height)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius = min(plotSize.width, plotSize.height) * 0.46
+        var cumulativeShare = 0.0
+        var candidates: [DonutExternalLabelCandidate] = []
+
+        for row in rows {
+            let share = max(row.value, 0) / total
+            let middleAngle = -.pi / 2 + (cumulativeShare + share / 2) * 2 * .pi
+            cumulativeShare += share
+
+            guard shouldShowValueLabel(for: row),
+                  shouldPlaceDonutLabelOutside(row, plotSize: plotSize) else {
+                continue
+            }
+
+            candidates.append(
+                DonutExternalLabelCandidate(
+                    row: row,
+                    angle: middleAngle,
+                    isRightSide: cos(middleAngle) >= 0,
+                    preferredY: center.y + CGFloat(sin(middleAngle)) * (radius + 34)
+                )
+            )
+        }
+
+        var resolvedYByID: [IndicatorRow.ID: CGFloat] = [:]
+        for isRightSide in [false, true] {
+            let sideCandidates = candidates
+                .filter { $0.isRightSide == isRightSide }
+                .sorted { $0.preferredY < $1.preferredY }
+            let resolved = DonutLabelPlacementPolicy.distributedVerticalPositions(
+                sideCandidates.map(\.preferredY),
+                bounds: 16...max(16, size.height - 16),
+                minimumSpacing: 28
+            )
+
+            for (candidate, y) in zip(sideCandidates, resolved) {
+                resolvedYByID[candidate.row.id] = y
+            }
+        }
+
+        return candidates.compactMap { candidate in
+            guard let labelY = resolvedYByID[candidate.row.id] else {
+                return nil
+            }
+
+            let cosine = CGFloat(cos(candidate.angle))
+            let sine = CGFloat(sin(candidate.angle))
+            let anchor = CGPoint(
+                x: center.x + cosine * radius,
+                y: center.y + sine * radius
+            )
+            let elbow = CGPoint(
+                x: center.x + cosine * (radius + 9),
+                y: center.y + sine * (radius + 9)
+            )
+            let labelCenter = CGPoint(
+                x: min(
+                    max(center.x + cosine * (radius + 34), 42),
+                    max(42, size.width - 42)
+                ),
+                y: labelY
+            )
+            let connectorX = labelCenter.x - elbow.x
+            let connectorY = labelCenter.y - elbow.y
+            let connectorLength = max(hypot(connectorX, connectorY), 1)
+            let labelClearance = min(24, connectorLength * 0.55)
+            let lineEnd = CGPoint(
+                x: labelCenter.x - connectorX / connectorLength * labelClearance,
+                y: labelCenter.y - connectorY / connectorLength * labelClearance
+            )
+
+            return DonutExternalLabelPosition(
+                row: candidate.row,
+                anchor: anchor,
+                elbow: elbow,
+                lineEnd: lineEnd,
+                labelCenter: labelCenter
+            )
+        }
+    }
+
+    private func donutLabelText(for row: IndicatorRow, showsPercentages: Bool) -> String {
+        guard showsPercentages else {
+            return indicator.formattedNumber(row.value)
+        }
+
+        let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
+        let share = total > 0 ? row.value / total : 0
+        return share.formatted(.percent.precision(.fractionLength(0)))
+    }
+
     private var donutAngularInset: Double {
         guard let valueSpacing = indicator.valueSpacing else {
             return 1.5
@@ -1606,6 +1809,52 @@ enum ChartValueLabelPolicy {
     }
 }
 
+enum DonutLabelPlacementPolicy {
+    static func shouldPlaceOutside(
+        share: Double,
+        labelCharacterCount: Int,
+        radius: CGFloat
+    ) -> Bool {
+        guard share > 0, radius > 0 else {
+            return false
+        }
+
+        let availableArcLength = 2 * Double.pi * Double(radius) * share
+        let estimatedLabelWidth = Double(max(labelCharacterCount, 1)) * 7.2 + 18
+        return share < 0.12 || availableArcLength < estimatedLabelWidth
+    }
+
+    static func distributedVerticalPositions(
+        _ preferredPositions: [CGFloat],
+        bounds: ClosedRange<CGFloat>,
+        minimumSpacing: CGFloat
+    ) -> [CGFloat] {
+        guard !preferredPositions.isEmpty else {
+            return []
+        }
+
+        var positions = preferredPositions.map { min(max($0, bounds.lowerBound), bounds.upperBound) }
+        for index in positions.indices.dropFirst() {
+            positions[index] = max(positions[index], positions[index - 1] + minimumSpacing)
+        }
+
+        if let overflow = positions.last.map({ max($0 - bounds.upperBound, 0) }), overflow > 0 {
+            for index in positions.indices {
+                positions[index] -= overflow
+            }
+        }
+
+        if positions[0] < bounds.lowerBound {
+            positions[0] = bounds.lowerBound
+            for index in positions.indices.dropFirst() {
+                positions[index] = max(positions[index], positions[index - 1] + minimumSpacing)
+            }
+        }
+
+        return positions
+    }
+}
+
 enum ChartSelectionPolicy {
     static func matches(
         rowID: IndicatorRow.ID,
@@ -1618,6 +1867,25 @@ enum ChartSelectionPolicy {
         }
 
         return rowID == selectedRowID
+    }
+}
+
+private struct DonutExternalLabelCandidate {
+    let row: IndicatorRow
+    let angle: Double
+    let isRightSide: Bool
+    let preferredY: CGFloat
+}
+
+private struct DonutExternalLabelPosition: Identifiable {
+    let row: IndicatorRow
+    let anchor: CGPoint
+    let elbow: CGPoint
+    let lineEnd: CGPoint
+    let labelCenter: CGPoint
+
+    var id: IndicatorRow.ID {
+        row.id
     }
 }
 

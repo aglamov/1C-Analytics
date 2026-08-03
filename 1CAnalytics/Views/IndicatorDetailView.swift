@@ -118,12 +118,14 @@ struct IndicatorDetailView: View {
 
     private var rowsSection: some View {
         let groups = detailGroups
+        let hasMultipleParameters = DetailPresentationPolicy.hasMultipleParameters(in: groups)
         let maximumValue = groups
             .flatMap { group in
                 group.rows.count > 1 ? group.rows.map(\.value) : [group.totalValue]
             }
             .max() ?? 0
-        let totalValue = groups.reduce(0) { $0 + $1.totalValue }
+        let aggregateTotal = DetailPresentationPolicy.aggregateTotal(for: groups)
+        let seriesTotals = DetailPresentationPolicy.seriesTotals(for: groups)
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
@@ -138,50 +140,36 @@ struct IndicatorDetailView: View {
 
                 Spacer()
 
-                if indicator.showsAggregateValue {
-                    Text(totalText(for: totalValue))
+                if indicator.showsAggregateValue, let aggregateTotal {
+                    Text(totalText(for: aggregateTotal))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
             }
 
-            if indicator.detailsOrientation == .horizontal {
-                ScrollView(.horizontal) {
-                    LazyHStack(alignment: .top, spacing: 12) {
-                        ForEach(groups) { group in
-                            detailGroupRow(group, maximumValue: maximumValue, totalValue: totalValue)
-                                .frame(width: 280, alignment: .topLeading)
-                                .background {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(rowsBackgroundColor)
-                                }
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
-                                }
-                        }
-                    }
-                }
-                .scrollIndicators(.visible)
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(groups) { group in
-                        detailGroupRow(group, maximumValue: maximumValue, totalValue: totalValue)
+            LazyVStack(spacing: 0) {
+                ForEach(groups) { group in
+                    detailGroupRow(
+                        group,
+                        maximumValue: maximumValue,
+                        aggregateTotal: aggregateTotal,
+                        seriesTotals: seriesTotals,
+                        hidesGroupTotal: hasMultipleParameters
+                    )
 
-                        if group.id != groups.last?.id {
-                            Divider()
-                                .padding(.leading, 2)
-                        }
+                    if group.id != groups.last?.id {
+                        Divider()
+                            .padding(.leading, 2)
                     }
                 }
-                .background {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(rowsBackgroundColor)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
-                }
+            }
+            .background {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(rowsBackgroundColor)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
             }
         }
         .padding(16)
@@ -213,12 +201,16 @@ struct IndicatorDetailView: View {
     private func detailGroupRow(
         _ group: IndicatorRowGroup,
         maximumValue: Double,
-        totalValue: Double
+        aggregateTotal: Double?,
+        seriesTotals: [String: Double],
+        hidesGroupTotal: Bool
     ) -> some View {
         DetailGroupRowView(
             group: group,
             maxValue: maximumValue,
-            totalValue: totalValue,
+            aggregateTotal: aggregateTotal,
+            seriesTotals: seriesTotals,
+            hidesGroupTotal: hidesGroupTotal,
             indicator: indicator,
             selectedRowID: selectedRowID,
             animatesOnAppear: indicator.chartType != .geoMap,
@@ -241,7 +233,9 @@ struct IndicatorDetailView: View {
 private struct DetailGroupRowView: View {
     let group: IndicatorRowGroup
     let maxValue: Double
-    let totalValue: Double
+    let aggregateTotal: Double?
+    let seriesTotals: [String: Double]
+    let hidesGroupTotal: Bool
     let indicator: Indicator
     let selectedRowID: IndicatorRow.ID?
     let animatesOnAppear: Bool
@@ -261,10 +255,12 @@ private struct DetailGroupRowView: View {
 
                     Spacer(minLength: 6)
 
-                    Text(group.totalLabel ?? indicator.formattedNumber(group.totalValue))
-                        .font(.caption.monospacedDigit().weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if !hidesGroupTotal {
+                        Text(group.totalLabel ?? indicator.formattedNumber(group.totalValue))
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 ForEach(group.rows) { row in
@@ -305,12 +301,12 @@ private struct DetailGroupRowView: View {
         indicator.chartColor(forGroupLabel: group.label, scheme: chartPaletteScheme)
     }
 
-    private func shareText(for value: Double) -> String {
-        guard totalValue > 0 else {
+    private func shareText(for value: Double, denominator: Double?) -> String {
+        guard let denominator, denominator > 0 else {
             return "0%"
         }
 
-        return (value / totalValue).formatted(.percent.precision(.fractionLength(0)))
+        return (value / denominator).formatted(.percent.precision(.fractionLength(0)))
     }
 
     private func progress(for value: Double) -> Double {
@@ -356,7 +352,8 @@ private struct DetailGroupRowView: View {
             valueHeader(
                 title: row.series ?? "Значение",
                 value: row.value,
-                color: segmentColor(for: row)
+                color: segmentColor(for: row),
+                shareDenominator: detailDenominator(for: row)
             )
 
             progressBar(value: row.value, color: segmentColor(for: row))
@@ -375,7 +372,8 @@ private struct DetailGroupRowView: View {
                 title: group.label,
                 value: group.totalValue,
                 color: groupColor,
-                displayValue: group.totalLabel
+                displayValue: group.totalLabel,
+                shareDenominator: aggregateTotal
             )
             progressBar(value: group.totalValue, color: groupColor)
         }
@@ -385,7 +383,8 @@ private struct DetailGroupRowView: View {
         title: String,
         value: Double,
         color: Color,
-        displayValue: String? = nil
+        displayValue: String? = nil,
+        shareDenominator: Double?
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             HStack(spacing: 7) {
@@ -407,7 +406,7 @@ private struct DetailGroupRowView: View {
                     .foregroundStyle(.primary)
                     .contentTransition(.numericText())
 
-                Text(shareText(for: value))
+                Text(shareText(for: value, denominator: shareDenominator))
                     .font(.caption2.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -428,7 +427,41 @@ private struct DetailGroupRowView: View {
         .frame(height: 6)
     }
 
+    private func detailDenominator(for row: IndicatorRow) -> Double? {
+        guard let series = row.series else {
+            return aggregateTotal
+        }
+
+        return seriesTotals[series]
+    }
+
     private func segmentColor(for row: IndicatorRow) -> Color {
         indicator.chartColor(for: row, scheme: chartPaletteScheme)
+    }
+}
+
+enum DetailPresentationPolicy {
+    static func hasMultipleParameters(in groups: [IndicatorRowGroup]) -> Bool {
+        groups.contains { $0.rows.count > 1 }
+    }
+
+    static func aggregateTotal(for groups: [IndicatorRowGroup]) -> Double? {
+        guard !hasMultipleParameters(in: groups) else {
+            return nil
+        }
+
+        return groups.reduce(0) { $0 + $1.totalValue }
+    }
+
+    static func seriesTotals(for groups: [IndicatorRowGroup]) -> [String: Double] {
+        groups
+            .flatMap(\.rows)
+            .reduce(into: [:]) { totals, row in
+                guard let series = row.series else {
+                    return
+                }
+
+                totals[series, default: 0] += row.value
+            }
     }
 }

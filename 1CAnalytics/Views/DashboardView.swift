@@ -648,6 +648,7 @@ private struct IndicatorDashboardCard: View {
         .frame(
             maxWidth: .infinity,
             minHeight: indicator.chartType == .oneValue ? 164 : nil,
+            maxHeight: .infinity,
             alignment: .topLeading
         )
         .background(
