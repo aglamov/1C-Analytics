@@ -639,6 +639,48 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(indicators[1].showsAggregateValue)
     }
 
+    func testExpandedChartCatalogContractMapsValueLabelsGroupTotalsAndDetailsOrientation() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [{
+                "name": "Образование",
+                "values": [{
+                  "name": "Контингент",
+                  "type": "BarMarkStacking",
+                  "showValueLabels": false,
+                  "detailsOrientation": "horizontal",
+                  "values": [{
+                    "group": "БАК",
+                    "totalLabel": "16161/3220",
+                    "subgroup": [
+                      {"name": "РФ", "value": 16161},
+                      {"name": "ИГ", "value": 3220}
+                    ]
+                  }]
+                }, {
+                  "name": "Алиас подписей",
+                  "type": "BarMark",
+                  "showLabels": false,
+                  "values": [{"group": "2026", "value": 1}]
+                }]
+              }]
+            }
+            """#.utf8
+        )
+
+        let indicators = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+        let stacked = try XCTUnwrap(indicators.first)
+
+        XCTAssertFalse(stacked.showsValueLabels)
+        XCTAssertEqual(stacked.detailsOrientation, .horizontal)
+        XCTAssertEqual(stacked.rowGroups.first?.totalLabel, "16161/3220")
+        XCTAssertEqual(stacked.rowGroups.first?.totalValue, 19_381)
+        XCTAssertFalse(indicators[1].showsValueLabels)
+    }
+
     func testAndroidContractAliasesFlexibleNumbersNestedValuesAndStableIDs() throws {
         let data = Data(
             #"""

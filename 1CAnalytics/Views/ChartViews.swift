@@ -170,9 +170,11 @@ struct AnalyticsChart: View {
 
                         Spacer(minLength: 6)
 
-                        Text(indicator.formattedNumber(row.value))
-                            .font(.caption.monospacedDigit().weight(.bold))
-                            .foregroundStyle(.primary)
+                        if indicator.showsValueLabels {
+                            Text(indicator.formattedNumber(row.value))
+                                .font(.caption.monospacedDigit().weight(.bold))
+                                .foregroundStyle(.primary)
+                        }
                     }
 
                     GeometryReader { proxy in
@@ -257,9 +259,11 @@ struct AnalyticsChart: View {
                     }
                     .frame(height: 9)
 
-                    Text(isPercent ? "\(indicator.formattedNumber(row.value))%" : indicator.formattedNumber(row.value))
-                        .font(.caption.monospacedDigit().weight(.bold))
-                        .frame(minWidth: 48, alignment: .trailing)
+                    if indicator.showsValueLabels {
+                        Text(isPercent ? "\(indicator.formattedNumber(row.value))%" : indicator.formattedNumber(row.value))
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .frame(minWidth: 48, alignment: .trailing)
+                    }
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -286,8 +290,19 @@ struct AnalyticsChart: View {
             .cornerRadius(2)
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
-                if compositionShare(for: row) >= 0.10 {
+                if shouldShowBarValueLabel(for: row), compositionShare(for: row) >= 0.10 {
                     valueLabel(for: row, usesContrastingForeground: true)
+                }
+            }
+
+            if isLastRowInGroup(row), let group = rowGroup(for: row) {
+                PointMark(
+                    x: .value("Итого", group.totalValue),
+                    y: .value("Период", group.label)
+                )
+                .symbolSize(0)
+                .annotation(position: .trailing, alignment: .center, spacing: 6) {
+                    groupTotalLabel(group)
                 }
             }
         }
@@ -407,6 +422,17 @@ struct AnalyticsChart: View {
                         valueLabel(for: row, usesContrastingForeground: true)
                     }
                 }
+
+                if isLastRowInGroup(row), let group = rowGroup(for: row) {
+                    PointMark(
+                        x: .value("Группа", group.label),
+                        y: .value("Итого", group.totalValue)
+                    )
+                    .symbolSize(0)
+                    .annotation(position: .top, alignment: .center, spacing: 5) {
+                        groupTotalLabel(group)
+                    }
+                }
             }
             .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
             .chartYAxis {
@@ -434,7 +460,7 @@ struct AnalyticsChart: View {
             .alignsMarkStylesWithPlotArea(false)
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
-                if showsValueLabels, selectedRowID == row.id {
+                if showsValueLabels, indicator.showsValueLabels, selectedRowID == row.id {
                     if showsPercentages {
                         percentLabel(for: row)
                     } else {
@@ -884,7 +910,7 @@ struct AnalyticsChart: View {
     }
 
     private func shouldShowBarValueLabel(for row: IndicatorRow) -> Bool {
-        guard showsValueLabels else {
+        guard showsValueLabels, indicator.showsValueLabels else {
             return false
         }
 
@@ -893,6 +919,21 @@ struct AnalyticsChart: View {
         }
 
         return selectedRowID == row.id
+    }
+
+    private func rowGroup(for row: IndicatorRow) -> IndicatorRowGroup? {
+        indicator.rowGroups.first { $0.label == row.label }
+    }
+
+    private func isLastRowInGroup(_ row: IndicatorRow) -> Bool {
+        rowGroup(for: row)?.rows.last?.id == row.id
+    }
+
+    private func groupTotalLabel(_ group: IndicatorRowGroup) -> some View {
+        Text(group.totalLabel ?? indicator.formattedNumber(group.totalValue))
+            .font(.caption2.monospacedDigit().weight(.bold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
     }
 
     private func percentLabel(for row: IndicatorRow) -> some View {

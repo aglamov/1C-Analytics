@@ -689,7 +689,7 @@ private struct IndicatorDashboardCard: View {
                     .frame(height: chartHeight, alignment: .top)
                     .padding(.top, 2)
 
-                if !indicator.prefersHorizontalGroupedBars {
+                if !indicator.prefersHorizontalGroupedBars, indicator.showsValueLabels {
                     CompactBarValues(indicator: indicator)
                 }
             }

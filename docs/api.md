@@ -92,6 +92,12 @@ API или модель показателя должны указывать т�
 | `BarMarkCompact` | Вертикальный `BarMark` | Компактное сравнение с отдельным экраном детализации |
 | `Gauge`, `GaugeIndicator`, `Speedometer`, `CircularProgressIndicator` | Круговой индикатор | Доля текущего `value` от `valueMax` |
 | `GeoMap`, `WorldMap`, `Map`, `GeoChoropleth` | Контурный хороплет мира | Распределение значений по странам |
+| `PercentDonut`, `DonutPercent`, `SectorMarkPercent` | `SectorMark` с процентами | Доли с процентными подписями |
+| `LineMark`, `LineChart`, `Line` | `LineMark` | Линейная динамика по категориям |
+| `AreaMark`, `AreaChart`, `Area` | `AreaMark` и `LineMark` | Динамика с заливкой области |
+| `SplineLineMark`, `SmoothLineMark` | Сглаженный `LineMark` | Плавная линейная динамика |
+| `SplineAreaMark`, `LayeredAreaMark`, `SmoothAreaMark` | Сглаженные `AreaMark` | Плавные наложенные области |
+| `ForecastLineMark`, `PredictionLineMark` | Сплошной и пунктирный `LineMark` | Факт и прогноз с `forecastFromIndex` |
 
 Неизвестный тип отображается как обычный `BarMark`, чтобы изменение серверного
 контракта не делало всю секцию недоступной.
@@ -125,8 +131,14 @@ API или модель показателя должны указывать т�
 - `showLegend` управляет легендой;
 - `showTotal` управляет выводом агрегированного значения;
 - `showDetails` управляет переходом к детализации;
+- `showValueLabels` (алиас `showLabels`) управляет числовыми подписями элементов графика;
+- `detailsOrientation` принимает `vertical` или `horizontal` и задаёт направление списка детализации;
 - `widthPercent`, `width` или `halfWidth` задают ширину карточки; клиент
   нормализует её к `50` или `100` процентам.
+
+Внутри элемента `values` поле `totalLabel` может переопределить вычисленную
+сумму группы произвольной строкой. При `showValueLabels: false` подписи отдельных
+сегментов скрываются, но групповой итог остаётся видимым.
 
 ## API Response Shape
 

@@ -285,6 +285,8 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showLegend: Bool?
     let showTotal: Bool?
     let showDetails: Bool?
+    let showValueLabels: Bool?
+    let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
     let useCompactNumbers: Bool?
     let valueSpacing: Double?
@@ -310,6 +312,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case showDetails
         case showDetailsSnake = "show_details"
         case displayDetails
+        case showValueLabels
+        case showLabels
+        case detailsOrientation
         case useCompactNumbers
         case useAbbreviations
         case compactValues
@@ -344,6 +349,14 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         showDetails = container.decodeFlexibleBool(forKey: .showDetails)
             ?? container.decodeFlexibleBool(forKey: .showDetailsSnake)
             ?? container.decodeFlexibleBool(forKey: .displayDetails)
+        showValueLabels = container.decodeFlexibleBool(forKey: .showValueLabels)
+            ?? container.decodeFlexibleBool(forKey: .showLabels)
+        detailsOrientation = container.decodeFlexibleString(forKey: .detailsOrientation)
+            .flatMap {
+                DetailsOrientation(
+                    rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                )
+            }
         useCompactNumbers = container.decodeFlexibleBool(forKey: .useCompactNumbers)
             ?? container.decodeFlexibleBool(forKey: .useAbbreviations)
             ?? container.decodeFlexibleBool(forKey: .compactValues)
@@ -415,6 +428,8 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             showLegend: showLegend,
             showTotal: showTotal,
             showDetails: showDetails,
+            showValueLabels: showValueLabels,
+            detailsOrientation: detailsOrientation,
             widthPercent: widthPercent,
             useCompactNumbers: useCompactNumbers,
             valueSpacing: valueSpacing,
@@ -445,6 +460,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
     let colorGraph: String?
     let colorValue: String?
     let lineStyle: ChartLineStyle?
+    let totalLabel: String?
     let subgroup: [AnalyticsAPISubgroup]?
 
     private enum CodingKeys: String, CodingKey {
@@ -457,6 +473,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         case colorValue
         case lineStyle
         case dashed
+        case totalLabel
         case subgroup
         case values
     }
@@ -474,6 +491,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
             container.decodeFlexibleString(forKey: .lineStyle),
             dashed: container.decodeFlexibleBool(forKey: .dashed)
         )
+        totalLabel = container.decodeFlexibleString(forKey: .totalLabel)
 
         let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
         let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
@@ -506,7 +524,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                         sortOrder: index * 100 + subgroupIndex,
                         colorGraph: subgroup.colorGraph ?? colorGraph,
                         colorValue: subgroup.colorValue ?? colorValue,
-                        lineStyle: subgroup.lineStyle ?? lineStyle
+                        lineStyle: subgroup.lineStyle ?? lineStyle,
+                        totalLabel: totalLabel
                     )
                 }
             }
@@ -521,7 +540,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                     sortOrder: index * 100 + subgroupIndex,
                     colorGraph: subgroup.colorGraph ?? colorGraph,
                     colorValue: subgroup.colorValue ?? colorValue,
-                    lineStyle: subgroup.lineStyle ?? lineStyle
+                    lineStyle: subgroup.lineStyle ?? lineStyle,
+                    totalLabel: totalLabel
                 )
             }
         }
@@ -536,7 +556,8 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                 sortOrder: index,
                 colorGraph: colorGraph,
                 colorValue: colorValue,
-                lineStyle: lineStyle
+                lineStyle: lineStyle,
+                totalLabel: totalLabel
             )
         ]
     }

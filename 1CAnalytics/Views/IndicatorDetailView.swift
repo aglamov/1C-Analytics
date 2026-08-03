@@ -145,32 +145,43 @@ struct IndicatorDetailView: View {
                 }
             }
 
-            LazyVStack(spacing: 0) {
-                ForEach(groups) { group in
-                    DetailGroupRowView(
-                        group: group,
-                        maxValue: maximumValue,
-                        totalValue: totalValue,
-                        indicator: indicator,
-                        selectedRowID: selectedRowID,
-                        animatesOnAppear: indicator.chartType != .geoMap,
-                        selectionEnabled: indicator.chartType != .geoMap,
-                        onSelect: selectRow
-                    )
-
-                    if group.id != groups.last?.id {
-                        Divider()
-                            .padding(.leading, 2)
+            if indicator.detailsOrientation == .horizontal {
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 12) {
+                        ForEach(groups) { group in
+                            detailGroupRow(group, maximumValue: maximumValue, totalValue: totalValue)
+                                .frame(width: 280, alignment: .topLeading)
+                                .background {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(rowsBackgroundColor)
+                                }
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+                                }
+                        }
                     }
                 }
-            }
-            .background {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(rowsBackgroundColor)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+                .scrollIndicators(.visible)
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(groups) { group in
+                        detailGroupRow(group, maximumValue: maximumValue, totalValue: totalValue)
+
+                        if group.id != groups.last?.id {
+                            Divider()
+                                .padding(.leading, 2)
+                        }
+                    }
+                }
+                .background {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(rowsBackgroundColor)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.secondary.opacity(0.10), lineWidth: 1)
+                }
             }
         }
         .padding(16)
@@ -199,6 +210,23 @@ struct IndicatorDetailView: View {
         colorScheme == .dark ? Color(.tertiarySystemGroupedBackground).opacity(0.44) : Color(.systemBackground).opacity(0.56)
     }
 
+    private func detailGroupRow(
+        _ group: IndicatorRowGroup,
+        maximumValue: Double,
+        totalValue: Double
+    ) -> some View {
+        DetailGroupRowView(
+            group: group,
+            maxValue: maximumValue,
+            totalValue: totalValue,
+            indicator: indicator,
+            selectedRowID: selectedRowID,
+            animatesOnAppear: indicator.chartType != .geoMap,
+            selectionEnabled: indicator.chartType != .geoMap,
+            onSelect: selectRow
+        )
+    }
+
     private func totalText(for totalValue: Double) -> String {
         "Итого \(indicator.formattedNumber(totalValue))"
     }
@@ -225,10 +253,19 @@ private struct DetailGroupRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: group.rows.count > 1 ? 14 : 8) {
             if group.rows.count > 1 {
-                Text(group.label)
-                    .font(.body.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(group.label)
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 6)
+
+                    Text(group.totalLabel ?? indicator.formattedNumber(group.totalValue))
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
 
                 ForEach(group.rows) { row in
                     groupedSeriesRow(row)
@@ -334,12 +371,22 @@ private struct DetailGroupRowView: View {
 
     private var singleValueRowContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            valueHeader(title: group.label, value: group.totalValue, color: groupColor)
+            valueHeader(
+                title: group.label,
+                value: group.totalValue,
+                color: groupColor,
+                displayValue: group.totalLabel
+            )
             progressBar(value: group.totalValue, color: groupColor)
         }
     }
 
-    private func valueHeader(title: String, value: Double, color: Color) -> some View {
+    private func valueHeader(
+        title: String,
+        value: Double,
+        color: Color,
+        displayValue: String? = nil
+    ) -> some View {
         HStack(alignment: .top, spacing: 12) {
             HStack(spacing: 7) {
                 Circle()
@@ -355,7 +402,7 @@ private struct DetailGroupRowView: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2) {
-                Text(indicator.formattedNumber(value))
+                Text(displayValue ?? indicator.formattedNumber(value))
                     .font(.body.monospacedDigit().weight(.bold))
                     .foregroundStyle(.primary)
                     .contentTransition(.numericText())

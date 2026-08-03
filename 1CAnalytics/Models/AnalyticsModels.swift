@@ -79,6 +79,8 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showLegend: Bool?
     let showTotal: Bool?
     let showDetails: Bool?
+    let showValueLabels: Bool?
+    let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
     let useCompactNumbers: Bool?
     let valueSpacing: Double?
@@ -100,6 +102,8 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showLegend: Bool? = nil,
         showTotal: Bool? = nil,
         showDetails: Bool? = nil,
+        showValueLabels: Bool? = nil,
+        detailsOrientation: DetailsOrientation? = nil,
         widthPercent: Double? = nil,
         useCompactNumbers: Bool? = nil,
         valueSpacing: Double? = nil,
@@ -120,6 +124,8 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showLegend = showLegend
         self.showTotal = showTotal
         self.showDetails = showDetails
+        self.showValueLabels = showValueLabels
+        self.detailsOrientation = detailsOrientation
         self.widthPercent = widthPercent
         self.useCompactNumbers = useCompactNumbers
         self.valueSpacing = valueSpacing
@@ -139,6 +145,7 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
     let colorGraph: String?
     let colorValue: String?
     let lineStyle: ChartLineStyle?
+    let totalLabel: String?
 
     init(
         id: String,
@@ -148,7 +155,8 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
         sortOrder: Int?,
         colorGraph: String? = nil,
         colorValue: String? = nil,
-        lineStyle: ChartLineStyle? = nil
+        lineStyle: ChartLineStyle? = nil,
+        totalLabel: String? = nil
     ) {
         self.id = id
         self.label = label
@@ -158,6 +166,7 @@ struct IndicatorRow: Identifiable, Codable, Equatable, Sendable {
         self.colorGraph = colorGraph
         self.colorValue = colorValue
         self.lineStyle = lineStyle
+        self.totalLabel = totalLabel
     }
 }
 
@@ -172,6 +181,11 @@ enum ChartLineStyle: String, Codable, Sendable {
     case dashed
 }
 
+enum DetailsOrientation: String, Codable, Sendable {
+    case vertical
+    case horizontal
+}
+
 struct IndicatorRowGroup: Identifiable, Equatable, Sendable {
     let label: String
     let rows: [IndicatorRow]
@@ -182,6 +196,10 @@ struct IndicatorRowGroup: Identifiable, Equatable, Sendable {
 
     var totalValue: Double {
         rows.reduce(0) { $0 + $1.value }
+    }
+
+    var totalLabel: String? {
+        rows.lazy.compactMap(\.totalLabel).first
     }
 
     var selectedFallbackRowID: IndicatorRow.ID? {
@@ -320,6 +338,10 @@ extension Indicator {
 
     var showsLegend: Bool {
         showLegend ?? false
+    }
+
+    var showsValueLabels: Bool {
+        showValueLabels ?? true
     }
 
     func formattedNumber(_ value: Double) -> String {
