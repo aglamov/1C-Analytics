@@ -1,5 +1,6 @@
 import Charts
 import SwiftUI
+import UIKit
 
 struct AnalyticsChart: View {
     let indicator: Indicator
@@ -102,6 +103,8 @@ struct AnalyticsChart: View {
             personnelComposition
         } else if indicator.usesRankedCategoryPresentation {
             rankedCategoryBars
+        } else if indicator.usesCitizenshipCompositionPresentation {
+            citizenshipComposition
         } else if indicator.usesDenseEnrollmentCompositionPresentation {
             horizontalStackedComposition
         } else if indicator.prefersTrendPresentation {
@@ -353,6 +356,114 @@ struct AnalyticsChart: View {
         }
     }
 
+    private var citizenshipComposition: some View {
+        let groups = indicator.rowGroups
+        let maximumTotal = max(groups.map(\.totalValue).max() ?? 0, 1)
+
+        return VStack(alignment: .leading, spacing: 18) {
+            ForEach(groups) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(group.label)
+                            .font(histogramYAxisFont.weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 8)
+
+                        Text(citizenshipValuesLabel(for: group))
+                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+
+                    GeometryReader { geometry in
+                        let filledWidth = geometry.size.width
+                            * min(max(group.totalValue / maximumTotal, 0), 1)
+
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.secondary.opacity(colorScheme == .dark ? 0.16 : 0.10))
+
+                            HStack(spacing: 0) {
+                                ForEach(group.rows) { row in
+                                    Rectangle()
+                                        .fill(horizontalGradient(for: row))
+                                        .frame(
+                                            width: filledWidth
+                                                * max(row.value, 0)
+                                                / max(group.totalValue, 1)
+                                        )
+                                        .opacity(opacity(for: row))
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            toggleSelection(row.id)
+                                        }
+                                }
+                            }
+                            .frame(width: filledWidth, alignment: .leading)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                            ForEach(group.rows.filter(rowMatchesSelection)) { row in
+                                Text(displayValue(for: row))
+                                    .font(.headline.monospacedDigit().weight(.bold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(opaqueLabelBackground, in: Capsule())
+                                    .overlay {
+                                        Capsule()
+                                            .strokeBorder(chartColor(for: row).opacity(0.42), lineWidth: 1)
+                                    }
+                                    .position(
+                                        x: citizenshipSelectedLabelX(
+                                            for: row,
+                                            in: group,
+                                            filledWidth: filledWidth,
+                                            availableWidth: geometry.size.width
+                                        ),
+                                        y: geometry.size.height / 2
+                                    )
+                                    .subtleTextShadow()
+                                    .allowsHitTesting(false)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
+                        }
+                    }
+                    .frame(height: 26)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
+    private func citizenshipSelectedLabelX(
+        for row: IndicatorRow,
+        in group: IndicatorRowGroup,
+        filledWidth: CGFloat,
+        availableWidth: CGFloat
+    ) -> CGFloat {
+        let leadingValue = group.rows
+            .prefix { $0.id != row.id }
+            .reduce(0) { $0 + max($1.value, 0) }
+        let centerValue = leadingValue + max(row.value, 0) / 2
+        let naturalX = filledWidth * centerValue / max(group.totalValue, 1)
+        return min(max(naturalX, 42), max(availableWidth - 42, 42))
+    }
+
+    private func citizenshipValuesLabel(for group: IndicatorRowGroup) -> String {
+        group.rows.map { row in
+            let name = row.series?.replacingOccurrences(of: ", чел", with: "")
+            return [name, displayValue(for: row)]
+                .compactMap { $0 }
+                .joined(separator: ": ")
+        }
+        .joined(separator: "  ·  ")
+    }
+
     private func compositionShare(for row: IndicatorRow) -> Double {
         let total = indicator.rowGroups.first { $0.label == row.label }?.totalValue ?? 0
         return total > 0 ? row.value / total : 0
@@ -365,7 +476,8 @@ struct AnalyticsChart: View {
                 categoryCount: categoryLabels.count,
                 seriesCount: max(indicator.barDataShape.series.count, 1),
                 longestValueCharacterCount: longestDisplayValueCharacterCount,
-                style: .groupedBar
+                style: .groupedBar,
+                allowsHorizontalOverflow: allowsHorizontalChartScrolling
             )
 
             ScrollView(.horizontal) {
@@ -393,7 +505,10 @@ struct AnalyticsChart: View {
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
                 .chartYScale(domain: verticalBarValueLabelDomain)
                 .chartYAxis {
-                    humanReadableValueAxis(position: .leading)
+                    humanReadableValueAxis(
+                        position: .leading,
+                        font: histogramYAxisFont
+                    )
                 }
                 .chartXAxis {
                     responsiveCategoryAxis(availableWidth: contentWidth)
@@ -407,6 +522,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
 
@@ -453,7 +569,8 @@ struct AnalyticsChart: View {
                 categoryCount: categoryLabels.count,
                 seriesCount: 1,
                 longestValueCharacterCount: longestDisplayValueCharacterCount,
-                style: .stackedBar
+                style: .stackedBar,
+                allowsHorizontalOverflow: allowsHorizontalChartScrolling
             )
 
             ScrollView(.horizontal) {
@@ -487,7 +604,10 @@ struct AnalyticsChart: View {
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
                 .chartYScale(domain: stackedBarValueLabelDomain)
                 .chartYAxis {
-                    humanReadableValueAxis(position: .leading)
+                    humanReadableValueAxis(
+                        position: .leading,
+                        font: histogramYAxisFont
+                    )
                 }
                 .chartXAxis {
                     responsiveCategoryAxis(availableWidth: contentWidth)
@@ -498,6 +618,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
 
@@ -605,6 +726,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
 
@@ -662,6 +784,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
 
@@ -721,6 +844,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
 
@@ -736,7 +860,10 @@ struct AnalyticsChart: View {
         }
     }
 
-    private func humanReadableValueAxis(position: AxisMarkPosition) -> some AxisContent {
+    private func humanReadableValueAxis(
+        position: AxisMarkPosition,
+        font: Font = .caption2
+    ) -> some AxisContent {
         AxisMarks(position: position) { value in
             AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
                 .foregroundStyle(Color.secondary.opacity(0.16))
@@ -748,7 +875,7 @@ struct AnalyticsChart: View {
                 }
             }
             .foregroundStyle(Color.secondary)
-            .font(.caption2)
+            .font(font)
         }
     }
 
@@ -757,13 +884,13 @@ struct AnalyticsChart: View {
             AxisValueLabel {
                 if let label = value.as(String.self) {
                     Text(wrappedAxisLabel(label))
-                        .font(.caption2)
+                        .font(histogramYAxisFont)
                         .foregroundStyle(Color.secondary)
                         .multilineTextAlignment(.trailing)
                         .lineLimit(2)
                         .minimumScaleFactor(0.78)
                         .allowsTightening(true)
-                        .frame(maxWidth: 112, alignment: .trailing)
+                        .frame(maxWidth: histogramYAxisLabelMaximumWidth, alignment: .trailing)
                 }
             }
         }
@@ -778,6 +905,14 @@ struct AnalyticsChart: View {
             return "\((value / 1_000).formatted(.number.precision(.fractionLength(0...1)))) тыс."
         }
         return value.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    private var histogramYAxisFont: Font {
+        .system(size: UIFont.preferredFont(forTextStyle: .caption2).pointSize * 0.7)
+    }
+
+    private var histogramYAxisLabelMaximumWidth: CGFloat {
+        44
     }
 
     private var interactiveLegend: some View {
@@ -857,7 +992,8 @@ struct AnalyticsChart: View {
     }
 
     private var legendColumnMinimumWidth: CGFloat {
-        if indicator.usesDenseEnrollmentCompositionPresentation {
+        if indicator.usesDenseEnrollmentCompositionPresentation
+            || indicator.usesCitizenshipCompositionPresentation {
             return 140
         }
 
@@ -1222,6 +1358,10 @@ struct AnalyticsChart: View {
     }
 
     private func donutExternalLabelInset(in size: CGSize) -> CGFloat {
+        guard !indicator.usesEducationLevelDonutPresentation else {
+            return 0
+        }
+
         let candidateInset = min(max(size.width * 0.12, 42), 56)
         let plotSize = CGSize(
             width: max(size.width - candidateInset * 2, 1),
@@ -1258,7 +1398,8 @@ struct AnalyticsChart: View {
         in size: CGSize,
         labelInset: CGFloat
     ) -> [DonutExternalLabelPosition] {
-        guard labelInset > 0 else {
+        guard labelInset > 0,
+              !indicator.usesEducationLevelDonutPresentation else {
             return []
         }
 
@@ -1418,19 +1559,22 @@ struct AnalyticsChart: View {
             categoryCount: categoryLabels.count,
             seriesCount: max(indicator.barDataShape.series.count, 1),
             longestValueCharacterCount: longestDisplayValueCharacterCount,
-            style: .trend
+            style: .trend,
+            allowsHorizontalOverflow: allowsHorizontalChartScrolling
         )
     }
 
-    private func trendAnnotationPosition(for row: IndicatorRow) -> AnnotationPosition {
-        guard !rowMatchesSelection(row) else {
-            return .top
-        }
+    private var allowsHorizontalChartScrolling: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
 
-        let categoryIndex = categoryLabels.firstIndex(of: row.label) ?? 0
-        let seriesNames = indicator.barDataShape.series
-        let seriesIndex = row.series.flatMap { seriesNames.firstIndex(of: $0) } ?? 0
-        return (categoryIndex + seriesIndex).isMultiple(of: 2) ? .top : .bottom
+    private func trendAnnotationPosition(for row: IndicatorRow) -> AnnotationPosition {
+        switch TrendLabelPlacementPolicy.placement(for: row, in: indicator.orderedRows) {
+        case .above:
+            return .top
+        case .below:
+            return .bottom
+        }
     }
 
     private var forecastStartIndex: Int? {
@@ -1828,8 +1972,13 @@ enum ChartPresentationPolicy {
         categoryCount: Int,
         seriesCount: Int,
         longestValueCharacterCount: Int,
-        style: Style
+        style: Style,
+        allowsHorizontalOverflow: Bool = true
     ) -> CGFloat {
+        guard allowsHorizontalOverflow else {
+            return availableWidth
+        }
+
         guard categoryCount > 0 else {
             return availableWidth
         }
@@ -1923,6 +2072,45 @@ enum TrendValueLabelScale {
         let headroom = span * headroomFraction
 
         return (baseLowerBound - headroom)...(baseUpperBound + headroom)
+    }
+}
+
+enum TrendLabelPlacement: Equatable {
+    case above
+    case below
+}
+
+enum TrendLabelPlacementPolicy {
+    static func placement(
+        for row: IndicatorRow,
+        in rows: [IndicatorRow]
+    ) -> TrendLabelPlacement {
+        let categoryRows = rows
+            .filter { $0.label == row.label }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value {
+                    return lhs.value > rhs.value
+                }
+
+                return (lhs.sortOrder ?? .max, lhs.series ?? "", lhs.id)
+                    < (rhs.sortOrder ?? .max, rhs.series ?? "", rhs.id)
+            }
+
+        guard categoryRows.count > 1,
+              let index = categoryRows.firstIndex(where: { $0.id == row.id }) else {
+            return .above
+        }
+
+        if index == 0 {
+            return .above
+        }
+        if index == categoryRows.count - 1 {
+            return .below
+        }
+
+        // Keep intermediate labels away from the point center when several
+        // series meet or cross in the same category.
+        return index.isMultiple(of: 2) ? .above : .below
     }
 }
 

@@ -3,6 +3,18 @@ import XCTest
 
 @MainActor
 final class ReleaseReadinessTests: XCTestCase {
+    func testIPadDashboardAlwaysPlacesIndicatorsTwoPerRow() {
+        let rows = DashboardGridLayoutPolicy.rows(for: [1, 2, 3, 4, 5], isPad: true)
+
+        XCTAssertEqual(rows, [[1, 2], [3, 4], [5]])
+    }
+
+    func testIPhoneDashboardKeepsOneIndicatorPerRow() {
+        let rows = DashboardGridLayoutPolicy.rows(for: [1, 2, 3], isPad: false)
+
+        XCTAssertEqual(rows, [[1], [2], [3]])
+    }
+
     func testGroupedBarSelectionResolvesEverySeriesSlot() {
         let bounds: ClosedRange<CGFloat> = 20...120
         let domain = ["План", "Факт"]
@@ -130,13 +142,14 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertLessThanOrEqual(positions[2], 120)
     }
 
-    func testDenseCategoricalChartsGrowInsteadOfCompressingLabels() {
+    func testPhoneChartsFitAvailableWidthWhileIPadCanScrollDenseContent() {
         let compactWidth = ChartPresentationPolicy.contentWidth(
             availableWidth: 320,
-            categoryCount: 2,
-            seriesCount: 1,
-            longestValueCharacterCount: 4,
-            style: .trend
+            categoryCount: 8,
+            seriesCount: 2,
+            longestValueCharacterCount: 8,
+            style: .groupedBar,
+            allowsHorizontalOverflow: false
         )
         let denseWidth = ChartPresentationPolicy.contentWidth(
             availableWidth: 320,
@@ -176,6 +189,28 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertGreaterThan(lineDomain.upperBound, 110)
         XCTAssertLessThan(areaDomain.lowerBound, 0)
         XCTAssertGreaterThan(areaDomain.upperBound, 110)
+    }
+
+    func testTrendLabelsFollowValueOrderAtEveryCategory() {
+        let rows = [
+            IndicatorRow(id: "upper", label: "2026", value: 92, series: "Текущий", sortOrder: 0),
+            IndicatorRow(id: "middle", label: "2026", value: 88, series: "Средний", sortOrder: 1),
+            IndicatorRow(id: "lower", label: "2026", value: 84, series: "Прошлый", sortOrder: 2)
+        ]
+
+        XCTAssertEqual(TrendLabelPlacementPolicy.placement(for: rows[0], in: rows), .above)
+        XCTAssertEqual(TrendLabelPlacementPolicy.placement(for: rows[1], in: rows), .below)
+        XCTAssertEqual(TrendLabelPlacementPolicy.placement(for: rows[2], in: rows), .below)
+    }
+
+    func testEqualTrendValuesArePlacedOnOppositeSides() {
+        let rows = [
+            IndicatorRow(id: "first", label: "2025", value: 88, series: "A", sortOrder: 0),
+            IndicatorRow(id: "second", label: "2025", value: 88, series: "B", sortOrder: 1)
+        ]
+
+        XCTAssertEqual(TrendLabelPlacementPolicy.placement(for: rows[0], in: rows), .above)
+        XCTAssertEqual(TrendLabelPlacementPolicy.placement(for: rows[1], in: rows), .below)
     }
 
     func testHorizontalChartHeightAccountsForEverySeries() {
@@ -457,7 +492,7 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testStackedChartTypeUsesCompositionPresentation() throws {
+    func testEnrollmentByCitizenshipOverridesStaleServerTypeWithHorizontalBar() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Всего обучающихся РФ и ИГ","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":18347},{"name":"ИГ","value":3604}]},{"group":"СПЕЦ","subgroup":[{"name":"РФ","value":5120},{"name":"ИГ","value":920}]},{"group":"МАГ","subgroup":[{"name":"РФ","value":3480},{"name":"ИГ","value":740}]},{"group":"АСП","subgroup":[{"name":"РФ","value":995},{"name":"ИГ","value":115}]}],"type":"BarMarkStacking"}]}]}"#.utf8
         )
@@ -469,9 +504,13 @@ final class ReleaseReadinessTests: XCTestCase {
                 .first
         )
 
-        XCTAssertEqual(indicator.chartType, .stackedBar)
-        XCTAssertTrue(indicator.usesStackedCompositionPresentation)
-        XCTAssertFalse(indicator.prefersHorizontalGroupedBars)
+        XCTAssertEqual(indicator.chartType, .horizontalBar)
+        XCTAssertFalse(indicator.usesStackedCompositionPresentation)
+        XCTAssertTrue(indicator.usesCitizenshipCompositionPresentation)
+        XCTAssertEqual(
+            indicator.barDataShape,
+            .multipleValuesPerGroup(series: ["РФ", "ИГ"])
+        )
         XCTAssertEqual(indicator.rowGroups.map(\.totalValue), [21_951, 6_040, 4_220, 1_110])
     }
 
@@ -707,7 +746,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testRegularBarsKeepPlanFactSubgroupsFromAnEmptyGroup() throws {
-        for chartType in ["BarMark", "BarMarkHorizon"] {
+        for chartType in ["BarMark", "BarMarkHorizon", "OneValue"] {
             let data = Data(
                 """
                 {
@@ -741,9 +780,28 @@ final class ReleaseReadinessTests: XCTestCase {
             XCTAssertEqual(indicator.rows.map(\.series), ["План", "Факт"])
             XCTAssertEqual(indicator.rows.map(\.value), [23_901_704, 13_450_484])
             XCTAssertEqual(indicator.rowGroups.map(\.label), ["Контракт"])
+            XCTAssertEqual(indicator.chartType, .horizontalBar)
             XCTAssertEqual(indicator.value, 37_352_188)
             XCTAssertTrue(indicator.showsAggregateValue)
         }
+    }
+
+    func testAverageUnifiedStateExamScoreKeepsTwoUnlabelledValues() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Образование","values":[{"name":"Средний балл ЕГЭ","values":[{"value":86.4},{"value":88.1}],"type":"OneValue"}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertEqual(indicator.chartType, .bar)
+        XCTAssertEqual(indicator.rows.map(\.label), ["1", "2"])
+        XCTAssertEqual(indicator.rows.map(\.value), [86.4, 88.1])
+        XCTAssertEqual(indicator.value, Decimal(string: "174.5"))
     }
 
     func testCompactBarAcceptsNumericGroupsFromScienceSection() throws {

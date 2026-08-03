@@ -410,6 +410,19 @@ extension Indicator {
             && rowGroups.count >= 2
     }
 
+    var usesCitizenshipCompositionPresentation: Bool {
+        title.lowercased().contains("всего обучающихся рф и иг")
+            && barDataShape.series.count >= 2
+            && !rowGroups.isEmpty
+    }
+
+    var usesEducationLevelDonutPresentation: Bool {
+        let normalizedTitle = title.lowercased()
+        return (chartType == .donut || chartType == .percentDonut)
+            && orderedRows.count >= 6
+            && normalizedTitle.contains("иг по уровням подготовки")
+    }
+
     var usesStackedCompositionPresentation: Bool {
         chartType == .stackedBar
             && !rowGroups.isEmpty

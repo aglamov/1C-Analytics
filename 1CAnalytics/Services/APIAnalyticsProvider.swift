@@ -416,16 +416,30 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     }
 
     func toIndicator(layoutID: String, sectionID: String) -> Indicator {
-        let totalRow = values.first {
+        let chartType = resolvedChartType
+        let categorizedValues = values.filter { $0.hasCategoryLabel || $0.hasSubgroupValues }
+        let uncategorizedValues = values.filter {
             !$0.hasCategoryLabel && !$0.hasSubgroupValues
         }
-        let rowValues = type == .compactBar
-            ? values.filter(\.hasCompactBarValues)
-            : values.filter { $0.hasCategoryLabel || $0.hasSubgroupValues }
+        let totalRow = categorizedValues.isEmpty
+            ? (chartType.displaysRows ? nil : uncategorizedValues.first)
+            : uncategorizedValues.first
+        let rowValues: [AnalyticsAPIValue]
+        if chartType == .compactBar {
+            rowValues = values.filter(\.hasCompactBarValues)
+        } else if !categorizedValues.isEmpty {
+            rowValues = categorizedValues
+        } else if chartType.displaysRows {
+            // Some 1C responses contain several numeric values without group
+            // labels. They are separate data points, not duplicate total rows.
+            rowValues = uncategorizedValues.filter { $0.value != nil }
+        } else {
+            rowValues = []
+        }
         var rows = rowValues
             .enumerated()
             .flatMap { rowIndex, value in
-                value.toRows(index: rowIndex, chartType: type)
+                value.toRows(index: rowIndex, chartType: chartType)
             }
         let calculatedTotal = rows.isEmpty
             ? nil
@@ -437,7 +451,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
 
         if rows.isEmpty,
            let scalarValue,
-           type == .oneValue || type == .linearProgress || type == .gauge {
+           chartType == .oneValue || chartType == .linearProgress || chartType == .gauge {
             rows = [
                 IndicatorRow(
                     id: "scalar-value",
@@ -459,7 +473,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             value: scalarValue.map { Decimal($0) },
             valueMax: valueMax ?? totalRow?.valueMax ?? primaryValue?.valueMax,
             unit: unit ?? totalRow?.unit ?? defaultUnit,
-            chartType: type,
+            chartType: chartType,
             source: "DGU_APP_Mobile_Client/analitycs",
             colorGraph: colorGraph ?? totalRow?.colorGraph ?? primaryValue?.colorGraph,
             colorValue: colorValue ?? totalRow?.colorValue ?? primaryValue?.colorValue,
@@ -479,6 +493,33 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         )
     }
 
+    private var resolvedChartType: ChartType {
+        let normalizedName = AnalyticsAPIContract.normalize(name)
+        let citizenshipIndicatorName = AnalyticsAPIContract.normalize("Всего обучающихся РФ и ИГ")
+
+        if normalizedName == citizenshipIndicatorName {
+            return .horizontalBar
+        }
+
+        let hasMultipleValues = values.reduce(0) { count, value in
+            count + max(value.subgroup?.count ?? 0, value.value == nil ? 0 : 1)
+        } >= 2
+
+        if name.isPlanFactIndicatorTitle,
+           normalizedName.contains(AnalyticsAPIContract.normalize("контракт")),
+           hasMultipleValues {
+            return .horizontalBar
+        }
+
+        if normalizedName.contains(AnalyticsAPIContract.normalize("средний балл егэ")),
+           hasMultipleValues,
+           !type.displaysRows {
+            return .bar
+        }
+
+        return type
+    }
+
     private var defaultUnit: String? {
         switch type {
         case .oneValue, .linearProgress, .gauge, .geoMap, .compactBar:
@@ -486,6 +527,18 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
              .line, .area, .splineLine, .splineArea, .forecastLine:
             "чел."
+        }
+    }
+}
+
+private extension ChartType {
+    var displaysRows: Bool {
+        switch self {
+        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .percentDonut,
+             .line, .area, .splineLine, .splineArea, .forecastLine, .geoMap:
+            true
+        case .oneValue, .linearProgress, .gauge:
+            false
         }
     }
 }

@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct DashboardView: View {
@@ -195,9 +196,7 @@ struct DashboardView: View {
                                     .frame(maxWidth: .infinity, alignment: .topLeading)
                             }
 
-                            if horizontalSizeClass == .regular,
-                               row.indicators.count == 1,
-                               row.indicators[0].resolvedWidthPercent <= 50 {
+                            if isPad, row.indicators.count == 1 {
                                 Color.clear
                                     .frame(maxWidth: .infinity)
                                     .accessibilityHidden(true)
@@ -288,39 +287,13 @@ struct DashboardView: View {
     }
 
     private func layoutRows(for indicators: [Indicator]) -> [DashboardIndicatorLayoutRow] {
-        guard horizontalSizeClass == .regular else {
-            return indicators.map { DashboardIndicatorLayoutRow(indicators: [$0]) }
+        DashboardGridLayoutPolicy.rows(for: indicators, isPad: isPad).map {
+            DashboardIndicatorLayoutRow(indicators: $0)
         }
+    }
 
-        var rows: [DashboardIndicatorLayoutRow] = []
-        var pendingHalfWidthIndicator: Indicator?
-
-        for indicator in indicators {
-            if indicator.resolvedWidthPercent <= 50 {
-                if let pending = pendingHalfWidthIndicator {
-                    rows.append(
-                        DashboardIndicatorLayoutRow(
-                            indicators: [pending, indicator]
-                        )
-                    )
-                    pendingHalfWidthIndicator = nil
-                } else {
-                    pendingHalfWidthIndicator = indicator
-                }
-            } else {
-                if let pending = pendingHalfWidthIndicator {
-                    rows.append(DashboardIndicatorLayoutRow(indicators: [pending]))
-                    pendingHalfWidthIndicator = nil
-                }
-                rows.append(DashboardIndicatorLayoutRow(indicators: [indicator]))
-            }
-        }
-
-        if let pendingHalfWidthIndicator {
-            rows.append(DashboardIndicatorLayoutRow(indicators: [pendingHalfWidthIndicator]))
-        }
-
-        return rows
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
     }
 
     private var chartPaletteScheme: ChartPaletteScheme {
@@ -409,6 +382,17 @@ private struct DashboardIndicatorLayoutRow: Identifiable {
 
     var id: String {
         indicators.map(\.id).joined(separator: "|")
+    }
+}
+
+enum DashboardGridLayoutPolicy {
+    static func rows<Element>(for elements: [Element], isPad: Bool) -> [[Element]] {
+        let itemsPerRow = isPad ? 2 : 1
+
+        return stride(from: 0, to: elements.count, by: itemsPerRow).map { startIndex in
+            let endIndex = min(startIndex + itemsPerRow, elements.count)
+            return Array(elements[startIndex..<endIndex])
+        }
     }
 }
 
