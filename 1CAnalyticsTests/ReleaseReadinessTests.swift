@@ -25,6 +25,98 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testContractValueLabelPreferenceTakesPriority() {
+        XCTAssertFalse(
+            ChartValueLabelPolicy.isVisible(
+                rowMatchesSelection: true,
+                hasSelection: true,
+                contractPreference: false,
+                defaultLabelsEnabled: true
+            )
+        )
+        XCTAssertTrue(
+            ChartValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                hasSelection: false,
+                contractPreference: true,
+                defaultLabelsEnabled: false
+            )
+        )
+        XCTAssertFalse(
+            ChartValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                hasSelection: true,
+                contractPreference: true,
+                defaultLabelsEnabled: true
+            )
+        )
+    }
+
+    func testMissingContractValueLabelPreferenceKeepsPresentationDefaults() {
+        XCTAssertTrue(
+            ChartValueLabelPolicy.isVisible(
+                rowMatchesSelection: true,
+                hasSelection: true,
+                contractPreference: nil,
+                defaultLabelsEnabled: false
+            )
+        )
+        XCTAssertFalse(
+            ChartValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                hasSelection: false,
+                contractPreference: nil,
+                defaultLabelsEnabled: false
+            )
+        )
+    }
+
+    func testLegendSelectionMatchesEveryRowInSelectedSeries() {
+        XCTAssertTrue(
+            ChartSelectionPolicy.matches(
+                rowID: "previous-fact",
+                rowSeriesKey: "Факт",
+                selectedRowID: "current-fact",
+                selectedSeriesKey: "Факт"
+            )
+        )
+        XCTAssertTrue(
+            ChartSelectionPolicy.matches(
+                rowID: "current-fact",
+                rowSeriesKey: "Факт",
+                selectedRowID: "current-fact",
+                selectedSeriesKey: "Факт"
+            )
+        )
+        XCTAssertFalse(
+            ChartSelectionPolicy.matches(
+                rowID: "previous-plan",
+                rowSeriesKey: "План",
+                selectedRowID: "current-fact",
+                selectedSeriesKey: "Факт"
+            )
+        )
+    }
+
+    func testDirectChartSelectionMatchesOnlyTappedRow() {
+        XCTAssertTrue(
+            ChartSelectionPolicy.matches(
+                rowID: "current-fact",
+                rowSeriesKey: "Факт",
+                selectedRowID: "current-fact",
+                selectedSeriesKey: nil
+            )
+        )
+        XCTAssertFalse(
+            ChartSelectionPolicy.matches(
+                rowID: "previous-fact",
+                rowSeriesKey: "Факт",
+                selectedRowID: "current-fact",
+                selectedSeriesKey: nil
+            )
+        )
+    }
+
     func testDashboardLayoutReconcilesSavedOrderWithFreshIndicators() {
         XCTAssertEqual(
             DashboardLayoutStore.reconciledOrder(
@@ -217,7 +309,7 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testDenseStackedChartWithFullValuesUsesReadableHorizontalLayout() throws {
+    func testStackedChartTypeUsesCompositionPresentation() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Всего обучающихся РФ и ИГ","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":18347},{"name":"ИГ","value":3604}]},{"group":"СПЕЦ","subgroup":[{"name":"РФ","value":5120},{"name":"ИГ","value":920}]},{"group":"МАГ","subgroup":[{"name":"РФ","value":3480},{"name":"ИГ","value":740}]},{"group":"АСП","subgroup":[{"name":"РФ","value":995},{"name":"ИГ","value":115}]}],"type":"BarMarkStacking"}]}]}"#.utf8
         )
@@ -229,7 +321,10 @@ final class ReleaseReadinessTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(indicator.prefersHorizontalGroupedBars)
+        XCTAssertEqual(indicator.chartType, .stackedBar)
+        XCTAssertTrue(indicator.usesStackedCompositionPresentation)
+        XCTAssertFalse(indicator.prefersHorizontalGroupedBars)
+        XCTAssertEqual(indicator.rowGroups.map(\.totalValue), [21_951, 6_040, 4_220, 1_110])
     }
 
     func testGroupedValuesDoNotPopulateMissingSummaryValue() throws {
@@ -461,6 +556,46 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(indicator.rows.map(\.label), ["План 2025", "Факт 2025", "План 2026", "Факт 2026"])
         XCTAssertEqual(indicator.rows.map(\.value), [21_823_210, 21_767_084, 23_901_704, 13_450_484])
         XCTAssertEqual(indicator.rows.map(\.colorGraph), ["#168AF2", "#66B547", "#168AF2", "#66B547"])
+    }
+
+    func testRegularBarsKeepPlanFactSubgroupsFromAnEmptyGroup() throws {
+        for chartType in ["BarMark", "BarMarkHorizon"] {
+            let data = Data(
+                """
+                {
+                  "sections": [{
+                    "name": "Финансы",
+                    "values": [{
+                      "name": "План-Факт (контракт), тыс. руб",
+                      "values": [{
+                        "name": "Контракт",
+                        "group": "",
+                        "subgroup": [
+                          {"name": "План", "value": 23901704, "colorGraph": "#168AF2"},
+                          {"name": "Факт", "value": 13450484, "colorGraph": "#66B547"}
+                        ]
+                      }],
+                      "type": "\(chartType)"
+                    }]
+                  }]
+                }
+                """.utf8
+            )
+
+            let indicator = try XCTUnwrap(
+                JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                    .toDashboard()
+                    .indicators
+                    .first
+            )
+
+            XCTAssertEqual(indicator.rows.map(\.label), ["Контракт", "Контракт"])
+            XCTAssertEqual(indicator.rows.map(\.series), ["План", "Факт"])
+            XCTAssertEqual(indicator.rows.map(\.value), [23_901_704, 13_450_484])
+            XCTAssertEqual(indicator.rowGroups.map(\.label), ["Контракт"])
+            XCTAssertNil(indicator.value)
+            XCTAssertFalse(indicator.showsAggregateValue)
+        }
     }
 
     func testCompactBarAcceptsNumericGroupsFromScienceSection() throws {

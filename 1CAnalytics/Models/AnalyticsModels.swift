@@ -396,6 +396,12 @@ extension Indicator {
             && rowGroups.count >= 2
     }
 
+    var usesStackedCompositionPresentation: Bool {
+        chartType == .stackedBar
+            && !rowGroups.isEmpty
+            && !barDataShape.series.isEmpty
+    }
+
     var prefersTrendPresentation: Bool {
         guard chartType == .bar || chartType == .compactBar,
               barDataShape.series.isEmpty,
@@ -436,7 +442,7 @@ extension Indicator {
 
     var prefersHorizontalGroupedBars: Bool {
         guard useCompactNumbers != true,
-              chartType == .bar || chartType == .compactBar || chartType == .stackedBar else {
+              chartType == .bar || chartType == .compactBar else {
             return false
         }
 
@@ -456,8 +462,7 @@ extension Indicator {
             }
         }
 
-        let isStacked = chartType == .stackedBar || barLayout == .stacked
-        guard isStacked,
+        guard barLayout == .stacked,
               seriesCount > 1 else {
             return false
         }

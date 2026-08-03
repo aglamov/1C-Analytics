@@ -398,10 +398,12 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     }
 
     func toIndicator(layoutID: String, sectionID: String) -> Indicator {
-        let totalRow = values.first { $0.normalizedGroup.isEmpty }
+        let totalRow = values.first {
+            $0.normalizedGroup.isEmpty && !$0.hasSubgroupValues
+        }
         let rowValues = type == .compactBar
             ? values.filter(\.hasCompactBarValues)
-            : values.filter { !$0.normalizedGroup.isEmpty }
+            : values.filter { !$0.normalizedGroup.isEmpty || $0.hasSubgroupValues }
         let rows = rowValues
             .enumerated()
             .flatMap { rowIndex, value in
@@ -508,7 +510,11 @@ struct AnalyticsAPIValue: Decodable, Sendable {
     }
 
     var hasCompactBarValues: Bool {
-        value != nil || subgroup?.isEmpty == false
+        value != nil || hasSubgroupValues
+    }
+
+    var hasSubgroupValues: Bool {
+        subgroup?.isEmpty == false
     }
 
     func toRows(index: Int, chartType: ChartType) -> [IndicatorRow] {

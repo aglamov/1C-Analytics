@@ -292,22 +292,24 @@ struct PremiumPanelModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(backgroundShape)
+            .background {
+                backgroundShape
+                    .shadow(
+                        color: isElevated ? .clear : directionalShadowColor,
+                        radius: isElevated ? 0 : 2,
+                        x: isElevated ? 0 : 6,
+                        y: isElevated ? 0 : 6
+                    )
+                    .shadow(
+                        color: shadowColor,
+                        radius: isElevated ? 18 : 8,
+                        x: isElevated ? 0 : 4,
+                        y: isElevated ? 10 : 5
+                    )
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(borderColor, lineWidth: 1)
-            )
-            .shadow(
-                color: isElevated ? .clear : directionalShadowColor,
-                radius: isElevated ? 0 : 2,
-                x: isElevated ? 0 : 6,
-                y: isElevated ? 0 : 6
-            )
-            .shadow(
-                color: shadowColor,
-                radius: isElevated ? 18 : 8,
-                x: isElevated ? 0 : 4,
-                y: isElevated ? 10 : 5
             )
     }
 
@@ -343,6 +345,23 @@ struct PremiumPanelModifier: ViewModifier {
 extension View {
     func premiumPanel(accent: AppAccent? = nil, isElevated: Bool = true) -> some View {
         modifier(PremiumPanelModifier(accent: accent, isElevated: isElevated))
+    }
+
+    func subtleTextShadow() -> some View {
+        modifier(SubtleTextShadowModifier())
+    }
+}
+
+private struct SubtleTextShadowModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.shadow(
+            color: .black.opacity(colorScheme == .dark ? 0.28 : 0.14),
+            radius: 2,
+            x: 0,
+            y: 1
+        )
     }
 }
 
@@ -418,22 +437,9 @@ struct IndicatorHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: iconName)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(indicator.graphColor, in: RoundedRectangle(cornerRadius: 8))
-                    .shadow(color: .black.opacity(0.10), radius: 8, x: 0, y: 4)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(indicator.title)
-                        .font(.title2.weight(.bold))
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 0)
-            }
+            Text(indicator.title)
+                .font(.title2.weight(.bold))
+                .lineLimit(2)
 
             if indicator.showsAggregateValue, let value = indicator.value {
                 Text("\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")")
@@ -450,92 +456,70 @@ struct IndicatorHero: View {
         .premiumPanel()
     }
 
-    private var iconName: String {
-        switch indicator.chartType {
-        case .bar, .compactBar, .horizontalBar, .stackedBar:
-            "chart.bar.fill"
-        case .donut, .percentDonut:
-            "chart.pie.fill"
-        case .line, .splineLine, .forecastLine:
-            "chart.xyaxis.line"
-        case .area, .splineArea:
-            "chart.xyaxis.line"
-        case .oneValue:
-            "waveform.path.ecg"
-        case .linearProgress:
-            "chart.xyaxis.line"
-        case .gauge:
-            "gauge.with.dots.needle.67percent"
-        case .geoMap:
-            "map.fill"
-        }
-    }
 }
 
-struct DashboardConnectionBar: View {
+struct DashboardOfflineNotice: View {
     let date: Date?
     var isCached = false
-    var isRefreshing = false
+    var errorMessage: String?
+    @State private var isShowingOfflineDetails = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            if isCached {
-                cachedContent
-            } else {
-                currentContent
+        Group {
+            if isShowingOfflineDetails, let errorMessage {
+                offlineDetails(errorMessage)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.easeInOut(duration: 0.3), value: isShowingOfflineDetails)
+        .task(id: errorMessage) {
+            guard isCached, errorMessage != nil else {
+                isShowingOfflineDetails = false
+                return
             }
 
-            Spacer(minLength: 8)
+            isShowingOfflineDetails = true
+            try? await Task.sleep(for: .seconds(4))
 
-            Color.clear
-                .frame(width: 16, height: 16)
-                .overlay {
-                    if isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel("Обновление данных")
-                    }
-                }
+            guard !Task.isCancelled else {
+                return
+            }
+            isShowingOfflineDetails = false
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.78)
+    }
+
+    private func offlineDetails(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "icloud.slash.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.orange)
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Офлайн-режим")
+                    .font(.subheadline.weight(.semibold))
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(cachedDateText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
         .padding(.horizontal)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
+        .padding(.vertical, 12)
         .background(.bar)
         .overlay(alignment: .top) {
             Divider()
         }
-        .frame(minHeight: 44)
-        .animation(.easeInOut(duration: 0.2), value: isRefreshing)
-    }
-
-    private var currentContent: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-
-            Text(dateText)
-        }
-    }
-
-    private var cachedContent: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "icloud.slash.fill")
-                .foregroundStyle(.orange)
-
-            Text(cachedDateText)
-        }
-    }
-
-    private var dateText: String {
-        guard let date else {
-            return "Срез не указан"
-        }
-
-        return "Данные актуальны на \(date.formatted(date: .abbreviated, time: .shortened))"
+        .accessibilityElement(children: .contain)
     }
 
     private var cachedDateText: String {
@@ -544,6 +528,58 @@ struct DashboardConnectionBar: View {
         }
 
         return "Последнее обновление: \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
+}
+
+struct DashboardConnectionStatus: View {
+    let date: Date?
+    var isCached = false
+    var isRefreshing = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            statusIcon
+
+            Text(isRefreshing ? "Обновляем данные…" : lastSynchronizationText)
+
+            if isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.78)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        if isCached {
+            Image(systemName: "icloud.slash.fill")
+                .foregroundStyle(.orange)
+        } else {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        }
+    }
+
+    private var accessibilityLabel: String {
+        if isRefreshing {
+            return "Обновление данных"
+        }
+
+        return isCached ? "Офлайн. \(lastSynchronizationText)" : lastSynchronizationText
+    }
+
+    private var lastSynchronizationText: String {
+        guard let date else {
+            return "Время последней синхронизации неизвестно"
+        }
+
+        return "Последняя синхронизация: \(date.formatted(date: .abbreviated, time: .shortened))"
     }
 }
 

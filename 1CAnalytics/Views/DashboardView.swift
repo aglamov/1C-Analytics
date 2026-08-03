@@ -127,11 +127,25 @@ struct DashboardView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                DashboardConnectionBar(
+                DashboardOfflineNotice(
                     date: dashboard.fetchedAt,
                     isCached: viewModel.isShowingCachedData,
-                    isRefreshing: viewModel.isRefreshing
+                    errorMessage: viewModel.refreshErrorMessage
                 )
+            }
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    HStack(spacing: 0) {
+                        DashboardConnectionStatus(
+                            date: dashboard.fetchedAt,
+                            isCached: viewModel.isShowingCachedData,
+                            isRefreshing: viewModel.isRefreshing
+                        )
+
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .background(Color(.systemBackground).ignoresSafeArea())
         }
@@ -723,6 +737,10 @@ private struct IndicatorDashboardCard: View {
             return min(max(CGFloat(categoryCount) * 48 + 142, 286), 360)
         }
 
+        if indicator.usesStackedCompositionPresentation {
+            return min(max(CGFloat(categoryCount) * 56 + 48, 216), 384)
+        }
+
         if indicator.prefersHorizontalGroupedBars {
             return min(max(CGFloat(categoryCount) * 54 + 64, 240), 420)
         }
@@ -747,17 +765,12 @@ private struct IndicatorDashboardCard: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: iconName)
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(indicator.graphColor, in: RoundedRectangle(cornerRadius: 8))
-
+            HStack(alignment: .top) {
                 Text(indicator.title)
                     .font(.headline)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .subtleTextShadow()
 
                 Spacer(minLength: 0)
             }
@@ -772,6 +785,7 @@ private struct IndicatorDashboardCard: View {
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .subtleTextShadow()
             }
 
         }
@@ -785,26 +799,6 @@ private struct IndicatorDashboardCard: View {
         return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
     }
 
-    private var iconName: String {
-        switch indicator.chartType {
-        case .bar, .compactBar, .horizontalBar, .stackedBar:
-            "chart.bar.fill"
-        case .donut, .percentDonut:
-            "chart.pie.fill"
-        case .line, .splineLine, .forecastLine:
-            "chart.xyaxis.line"
-        case .area, .splineArea:
-            "chart.xyaxis.line"
-        case .oneValue:
-            "waveform.path.ecg"
-        case .linearProgress:
-            "chart.xyaxis.line"
-        case .gauge:
-            "gauge.with.dots.needle.67percent"
-        case .geoMap:
-            "map.fill"
-        }
-    }
 }
 
 private struct CompactBarValues: View {
@@ -827,6 +821,7 @@ private struct CompactBarValues: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .subtleTextShadow()
 
                     Spacer(minLength: 4)
 
@@ -835,6 +830,7 @@ private struct CompactBarValues: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
+                        .subtleTextShadow()
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -855,25 +851,12 @@ private struct OneValueDashboardContent: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .center, spacing: 13) {
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 46, height: 46)
-                        .background(
-                            LinearGradient(
-                                colors: [indicator.graphColor, indicator.graphColor.opacity(0.78)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            in: RoundedRectangle(cornerRadius: 11)
-                        )
-                        .shadow(color: indicator.graphColor.opacity(0.22), radius: 8, x: 0, y: 4)
-
+                HStack(alignment: .center) {
                     Text(indicator.title)
                         .font(.headline.weight(.bold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .subtleTextShadow()
 
                     Spacer(minLength: 0)
                 }
@@ -886,6 +869,7 @@ private struct OneValueDashboardContent: View {
                     .minimumScaleFactor(0.58)
                     .lineLimit(1)
                     .allowsTightening(true)
+                    .subtleTextShadow()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -991,7 +975,6 @@ private struct GaugeIndicatorView: View {
                     .frame(width: 4, height: size * 0.29)
                     .offset(y: -(size * 0.145))
                     .rotationEffect(.degrees(-135 + 270 * progress))
-                    .shadow(color: .black.opacity(0.16), radius: 2, y: 1)
 
                 Circle()
                     .fill(indicator.graphColor)
