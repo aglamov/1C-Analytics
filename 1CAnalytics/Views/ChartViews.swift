@@ -637,7 +637,7 @@ struct AnalyticsChart: View {
                     responsiveTrendAxis(availableWidth: contentWidth)
                 }
                 .chartOverlay { proxy in
-                    chartTapOverlay(proxy: proxy, mode: .point)
+                    trendChartOverlay(proxy: proxy)
                 }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
@@ -704,7 +704,7 @@ struct AnalyticsChart: View {
                     responsiveTrendAxis(availableWidth: contentWidth)
                 }
                 .chartOverlay { proxy in
-                    chartTapOverlay(proxy: proxy, mode: .point)
+                    trendChartOverlay(proxy: proxy)
                 }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
@@ -773,7 +773,7 @@ struct AnalyticsChart: View {
                     responsiveTrendAxis(availableWidth: contentWidth)
                 }
                 .chartOverlay { proxy in
-                    chartTapOverlay(proxy: proxy, mode: .point)
+                    trendChartOverlay(proxy: proxy)
                 }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
@@ -874,15 +874,15 @@ struct AnalyticsChart: View {
                 } label: {
                     HStack(alignment: .top, spacing: 6) {
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(chartColor(for: row).opacity(rowMatchesSelection(row) ? 1 : 0.72))
+                            .fill(chartColor(for: row).opacity(legendRowMatchesSelection(row) ? 1 : 0.72))
                             .frame(width: 7, height: 7)
                             .padding(.top, 4)
 
                         Text(legendTitle(for: row))
-                            .font(rowMatchesSelection(row) ? .caption.weight(.semibold) : .caption2.weight(.semibold))
-                            .lineLimit(rowMatchesSelection(row) ? nil : legendTitleLineLimit)
-                            .minimumScaleFactor(rowMatchesSelection(row) ? 1 : 0.78)
-                            .fixedSize(horizontal: false, vertical: rowMatchesSelection(row))
+                            .font(legendRowMatchesSelection(row) ? .caption.weight(.semibold) : .caption2.weight(.semibold))
+                            .lineLimit(legendRowMatchesSelection(row) ? nil : legendTitleLineLimit)
+                            .minimumScaleFactor(legendRowMatchesSelection(row) ? 1 : 0.78)
+                            .fixedSize(horizontal: false, vertical: legendRowMatchesSelection(row))
 
                         Spacer(minLength: 0)
 
@@ -903,7 +903,7 @@ struct AnalyticsChart: View {
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(rowMatchesSelection(row) ? chartColor(for: row).opacity(0.22) : .clear, lineWidth: 1)
+                            .strokeBorder(legendRowMatchesSelection(row) ? chartColor(for: row).opacity(0.22) : .clear, lineWidth: 1)
                     }
                     .shadow(
                         color: .black.opacity(colorScheme == .dark ? 0.28 : 0.14),
@@ -1024,7 +1024,7 @@ struct AnalyticsChart: View {
         ZStack {
             opaqueLabelBackground
 
-            if rowMatchesSelection(row) {
+            if legendRowMatchesSelection(row) {
                 chartColor(for: row).opacity(0.12)
             }
         }
@@ -1539,19 +1539,16 @@ struct AnalyticsChart: View {
         let values = labels.indices.map(Double.init)
 
         return AxisMarks(values: values) { value in
-            AxisValueLabel(centered: true, collisionResolution: .truncate) {
+            AxisValueLabel(centered: false) {
                 if let xValue = value.as(Double.self) {
                     let index = Int(xValue.rounded())
                     if labels.indices.contains(index) {
                         Text(wrappedAxisLabel(labels[index]))
                             .font(.caption2)
-                            .foregroundStyle(Color.secondary)
-                            .multilineTextAlignment(.center)
                             .lineLimit(2)
-                            .minimumScaleFactor(0.72)
-                            .allowsTightening(true)
                             .frame(width: labelWidth)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .hidden()
+                            .accessibilityHidden(true)
                     }
                 }
             }
@@ -1624,6 +1621,14 @@ struct AnalyticsChart: View {
         )
     }
 
+    private func legendRowMatchesSelection(_ row: IndicatorRow) -> Bool {
+        LegendSelectionPolicy.isSelected(
+            usesSeriesLegend: usesSeriesLegend,
+            rowMatchesSelection: rowMatchesSelection(row),
+            selectedSeriesKey: selectedSeriesKey
+        )
+    }
+
     private func selectionSeriesKey(for row: IndicatorRow) -> String {
         row.series ?? indicator.title
     }
@@ -1661,6 +1666,41 @@ struct AnalyticsChart: View {
                             }
                         }
                 )
+        }
+    }
+
+    private func trendChartOverlay(proxy: ChartProxy) -> some View {
+        ZStack {
+            GeometryReader { geometry in
+                if let plotFrame = proxy.plotFrame {
+                    let frame = geometry[plotFrame]
+                    let axisHeight = max(geometry.size.height - frame.maxY, 1)
+                    let labelWidth = min(
+                        120,
+                        max(40, frame.width / CGFloat(max(categoryLabels.count, 1)) - 4)
+                    )
+
+                    ForEach(Array(categoryLabels.enumerated()), id: \.offset) { index, label in
+                        if let position = proxy.position(forX: Double(index)) {
+                            Text(wrappedAxisLabel(label))
+                                .font(.caption2)
+                                .foregroundStyle(Color.secondary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.72)
+                                .allowsTightening(true)
+                                .frame(width: labelWidth)
+                                .position(
+                                    x: frame.minX + position,
+                                    y: frame.maxY + axisHeight / 2
+                                )
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+
+            chartTapOverlay(proxy: proxy, mode: .point)
         }
     }
 
@@ -2140,6 +2180,18 @@ enum ChartSelectionPolicy {
         }
 
         return rowID == selectedRowID
+    }
+}
+
+enum LegendSelectionPolicy {
+    static func isSelected(
+        usesSeriesLegend: Bool,
+        rowMatchesSelection: Bool,
+        selectedSeriesKey: String?
+    ) -> Bool {
+        usesSeriesLegend
+            ? selectedSeriesKey != nil && rowMatchesSelection
+            : rowMatchesSelection
     }
 }
 

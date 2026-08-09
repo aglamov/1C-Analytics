@@ -263,6 +263,25 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testDetailSeriesTitleHidesMatchingAggregateSuffix() {
+        XCTAssertEqual(
+            DetailPresentationPolicy.seriesTitle("Всего: 37 093", aggregateValue: 37_093),
+            "Всего"
+        )
+        XCTAssertEqual(
+            DetailPresentationPolicy.seriesTitle("Очно: 31 542", aggregateValue: 31_542),
+            "Очно"
+        )
+        XCTAssertEqual(
+            DetailPresentationPolicy.seriesTitle("План: 2024", aggregateValue: 100),
+            "План: 2024"
+        )
+        XCTAssertEqual(
+            DetailPresentationPolicy.seriesTitle("Текущий год: План", aggregateValue: 100),
+            "Текущий год: План"
+        )
+    }
+
     func testLegendSelectionMatchesEveryRowInSelectedSeries() {
         XCTAssertTrue(
             ChartSelectionPolicy.matches(
@@ -286,6 +305,30 @@ final class ReleaseReadinessTests: XCTestCase {
                 rowSeriesKey: "План",
                 selectedRowID: "current-fact",
                 selectedSeriesKey: "Факт"
+            )
+        )
+    }
+
+    func testDirectRowSelectionDoesNotHighlightSeriesLegend() {
+        XCTAssertFalse(
+            LegendSelectionPolicy.isSelected(
+                usesSeriesLegend: true,
+                rowMatchesSelection: true,
+                selectedSeriesKey: nil
+            )
+        )
+        XCTAssertTrue(
+            LegendSelectionPolicy.isSelected(
+                usesSeriesLegend: true,
+                rowMatchesSelection: true,
+                selectedSeriesKey: "Всего: 37 093"
+            )
+        )
+        XCTAssertTrue(
+            LegendSelectionPolicy.isSelected(
+                usesSeriesLegend: false,
+                rowMatchesSelection: true,
+                selectedSeriesKey: nil
             )
         )
     }

@@ -434,7 +434,7 @@ private struct DetailGroupRowView: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "Значение")")
+            .accessibilityLabel("Выбрать \(group.label) \(seriesTitle(for: row))")
         } else {
             groupedSeriesRowContent(row)
         }
@@ -461,7 +461,7 @@ private struct DetailGroupRowView: View {
     private func groupedSeriesRowContent(_ row: IndicatorRow) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             valueHeader(
-                title: row.series ?? "Значение",
+                title: seriesTitle(for: row),
                 value: row.value,
                 color: segmentColor(for: row),
                 valueColor: indicator.valueColor(for: row),
@@ -554,6 +554,17 @@ private struct DetailGroupRowView: View {
         return seriesTotals[series]
     }
 
+    private func seriesTitle(for row: IndicatorRow) -> String {
+        guard let series = row.series else {
+            return "Значение"
+        }
+
+        return DetailPresentationPolicy.seriesTitle(
+            series,
+            aggregateValue: seriesTotals[series]
+        )
+    }
+
     private func segmentColor(for row: IndicatorRow) -> Color {
         indicator.chartColor(for: row, scheme: chartPaletteScheme)
     }
@@ -582,5 +593,32 @@ enum DetailPresentationPolicy {
 
                 totals[series, default: 0] += row.value
             }
+    }
+
+    static func seriesTitle(_ title: String, aggregateValue: Double?) -> String {
+        guard let aggregateValue,
+              aggregateValue.isFinite,
+              let separatorIndex = title.lastIndex(of: ":") else {
+            return title
+        }
+
+        let prefix = title[..<separatorIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = title[title.index(after: separatorIndex)...]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let groupingCharacters: Set<Character> = [" ", " ", " ", ",", ".", "'", "_"]
+
+        guard !prefix.isEmpty,
+              !suffix.isEmpty,
+              suffix.allSatisfy({ $0.isNumber || groupingCharacters.contains($0) }) else {
+            return title
+        }
+
+        let digits = suffix.filter(\.isNumber)
+        guard let displayedAggregate = Double(digits),
+              abs(displayedAggregate - abs(aggregateValue)) < 0.5 else {
+            return title
+        }
+
+        return prefix
     }
 }
