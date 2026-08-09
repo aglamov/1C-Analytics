@@ -100,6 +100,38 @@ final class EmptyDashboardCache: DashboardCaching {
 enum DashboardCacheFactory {
     @MainActor
     static func makeCache() -> any DashboardCaching {
-        (try? DashboardCache()) ?? EmptyDashboardCache()
+        do {
+            return try DashboardCache()
+        } catch {
+            return UnavailableDashboardCache(underlyingError: error)
+        }
+    }
+}
+
+enum DashboardCacheError: LocalizedError {
+    case unavailable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .unavailable(message):
+            "Локальное хранилище недоступно: \(message)"
+        }
+    }
+}
+
+@MainActor
+private final class UnavailableDashboardCache: DashboardCaching {
+    private let error: DashboardCacheError
+
+    init(underlyingError: Error) {
+        self.error = .unavailable(underlyingError.localizedDescription)
+    }
+
+    func loadDashboard() throws -> Dashboard? {
+        throw error
+    }
+
+    func save(_ dashboard: Dashboard) throws {
+        throw error
     }
 }

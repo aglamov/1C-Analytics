@@ -50,6 +50,19 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(rows, [[1], [2], [3]])
     }
 
+    func testErrorNoticeCanBePresentedAgainForTheSameMessage() {
+        let initialPresentation = DashboardOfflineNoticeTaskID(
+            errorMessage: "Не удалось обновить данные",
+            presentationRequest: 0
+        )
+        let repeatedPresentation = DashboardOfflineNoticeTaskID(
+            errorMessage: "Не удалось обновить данные",
+            presentationRequest: 1
+        )
+
+        XCTAssertNotEqual(initialPresentation, repeatedPresentation)
+    }
+
     func testGroupedBarSelectionResolvesEverySeriesSlot() {
         let bounds: ClosedRange<CGFloat> = 20...120
         let domain = ["План", "Факт"]
@@ -1370,7 +1383,7 @@ final class ReleaseReadinessTests: XCTestCase {
                   {
                     "identifier": "fallback-identifier",
                     "name": "Новый серверный тип",
-                    "type": "UnknownChart",
+                    "type": "BarMark",
                     "values": {"group": 2026, "value": "12,5"}
                   },
                   {
@@ -1409,6 +1422,28 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(indicators[1].id.hasSuffix("-stable-chart#2"))
         XCTAssertTrue(indicators[2].id.hasSuffix("-fallback-identifier"))
         XCTAssertTrue(indicators[3].id.hasSuffix("-3"))
+    }
+
+    func testUnknownChartTypeIsRejectedInsteadOfSilentlyRenderingAsBar() {
+        let data = Data(
+            #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"UnknownChart","values":[]}]}]}"#.utf8
+        )
+
+        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
+    }
+
+    func testMalformedNumericValueIsRejectedInsteadOfBecomingZero() {
+        let data = Data(
+            #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"BarMark","values":[{"group":"A","value":"not-a-number"}]}]}]}"#.utf8
+        )
+
+        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
+    }
+
+    func testMalformedFlexibleArrayIsRejectedInsteadOfBecomingEmpty() {
+        let data = Data(#"{"sections":{"name":"Test","values":"broken"}}"#.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
     }
 
     func testSectionCanContainSingleIndicatorObject() throws {
@@ -1524,11 +1559,68 @@ final class ReleaseReadinessTests: XCTestCase {
         await viewModel.load()
 
         XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование", "Финансы"])
-        XCTAssertFalse(viewModel.isShowingCachedData)
+        XCTAssertTrue(viewModel.isShowingCachedData)
+        XCTAssertEqual(viewModel.dashboard?.fetchedAt, .distantPast)
+        XCTAssertEqual(viewModel.staleSectionIDs, [cachedSection.id])
+        XCTAssertNotNil(viewModel.dashboard?.sections.first(where: { $0.id == freshSection.id })?.fetchedAt)
         XCTAssertEqual(
             viewModel.refreshErrorMessage,
             "Не удалось обновить разделы: Кадры. Уже полученные данные сохранены."
         )
+    }
+
+    func testProgressiveLoadingPublishesSectionBeforeRequestCompletes() async {
+        let firstSection = DashboardSection(
+            id: "образование",
+            title: "Образование",
+            indicators: []
+        )
+        let secondSection = DashboardSection(
+            id: "финансы",
+            title: "Финансы",
+            indicators: []
+        )
+        let finalDashboard = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: Date(),
+            sections: [firstSection, secondSection]
+        )
+        let provider = PausingProgressiveProvider(
+            firstSection: firstSection,
+            finalDashboard: finalDashboard
+        )
+        let viewModel = DashboardViewModel(
+            provider: provider,
+            cache: StubDashboardCache(dashboard: nil)
+        )
+
+        let loadTask = Task { await viewModel.load() }
+        while !provider.isPaused {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование"])
+        XCTAssertTrue(viewModel.isRefreshing)
+
+        provider.finish()
+        await loadTask.value
+
+        XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование", "Финансы"])
+        XCTAssertFalse(viewModel.isRefreshing)
+    }
+
+    func testCacheWriteFailureIsVisibleAfterSuccessfulRefresh() async {
+        let dashboard = Dashboard(id: "fresh", title: "Fresh", fetchedAt: Date(), indicators: [])
+        let viewModel = DashboardViewModel(
+            provider: StaticDashboardProvider(dashboard: dashboard),
+            cache: FailingWriteDashboardCache()
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.dashboard, dashboard)
+        XCTAssertTrue(viewModel.refreshErrorMessage?.contains("сохранить") == true)
     }
 }
 
@@ -1600,4 +1692,53 @@ private final class StubDashboardCache: DashboardCaching {
 
     func loadDashboard() throws -> Dashboard? { dashboard }
     func save(_ dashboard: Dashboard) throws {}
+}
+
+@MainActor
+private final class PausingProgressiveProvider: AnalyticsProvider {
+    let firstSection: DashboardSection
+    let finalDashboard: Dashboard
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(firstSection: DashboardSection, finalDashboard: Dashboard) {
+        self.firstSection = firstSection
+        self.finalDashboard = finalDashboard
+    }
+
+    var isPaused: Bool { continuation != nil }
+
+    func fetchDashboard() async throws -> Dashboard {
+        finalDashboard
+    }
+
+    func fetchDashboard(
+        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+    ) async throws -> Dashboard {
+        onSectionReceived(firstSection)
+        await withCheckedContinuation { continuation = $0 }
+        return finalDashboard
+    }
+
+    func finish() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
+private struct StaticDashboardProvider: AnalyticsProvider {
+    let dashboard: Dashboard
+
+    func fetchDashboard() async throws -> Dashboard {
+        dashboard
+    }
+}
+
+@MainActor
+private struct FailingWriteDashboardCache: DashboardCaching {
+    func loadDashboard() throws -> Dashboard? { nil }
+
+    func save(_ dashboard: Dashboard) throws {
+        throw DashboardCacheError.unavailable("test")
+    }
 }

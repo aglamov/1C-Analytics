@@ -13,6 +13,7 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var isShowingCachedData = false
     @Published private(set) var refreshErrorMessage: String?
     @Published private(set) var isRefreshing = false
+    @Published private(set) var staleSectionIDs: Set<DashboardSection.ID> = []
     @Published var selectedIndicatorID: Indicator.ID?
 
     private let provider: any AnalyticsProvider
@@ -47,11 +48,21 @@ final class DashboardViewModel: ObservableObject {
 
     func load() async {
         refreshErrorMessage = nil
-        let cachedDashboard = try? cache.loadDashboard()
+        let cachedDashboard: Dashboard?
+        do {
+            cachedDashboard = try cache.loadDashboard()
+        } catch {
+            cachedDashboard = nil
+            refreshErrorMessage = Self.cacheReadMessage(for: error)
+        }
         let receivedSections = DashboardSectionAccumulator()
 
         if let cachedDashboard {
-            show(cachedDashboard, isCached: true)
+            show(
+                cachedDashboard,
+                isCached: true,
+                staleSectionIDs: Set(cachedDashboard.sections.map(\.id))
+            )
         } else {
             state = .loading
         }
@@ -62,14 +73,18 @@ final class DashboardViewModel: ObservableObject {
         do {
             let dashboard = try await provider.fetchDashboard { section in
                 receivedSections.append(section)
+                self.publishReceivedSections(receivedSections.sections)
             }
-            try? cache.save(dashboard)
-            show(dashboard, isCached: false)
+            show(dashboard, isCached: false, staleSectionIDs: [])
+            refreshErrorMessage = nil
+            saveToCache(dashboard)
         } catch AnalyticsError.authenticationRequired {
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
             onAuthenticationRequired()
+        } catch is CancellationError {
+            return
         } catch {
-            publishReceivedSections(receivedSections.sections)
+            publishReceivedSections(receivedSections.sections, refreshFailed: true)
 
             if dashboard == nil {
                 state = .failed(error.localizedDescription)
@@ -89,18 +104,24 @@ final class DashboardViewModel: ObservableObject {
         do {
             let dashboard = try await provider.fetchDashboard { section in
                 receivedSections.append(section)
+                self.publishReceivedSections(receivedSections.sections)
             }
-            try? cache.save(dashboard)
-            show(dashboard, isCached: false)
+            show(dashboard, isCached: false, staleSectionIDs: [])
+            refreshErrorMessage = nil
+            saveToCache(dashboard)
         } catch AnalyticsError.authenticationRequired {
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
             onAuthenticationRequired()
+        } catch is CancellationError {
+            return
         } catch {
-            publishReceivedSections(receivedSections.sections)
+            publishReceivedSections(receivedSections.sections, refreshFailed: true)
 
             if dashboard != nil {
-                isShowingCachedData = receivedSections.sections.isEmpty
-                    && dashboard == dashboardBeforeRefresh
+                if receivedSections.sections.isEmpty, dashboard == dashboardBeforeRefresh {
+                    isShowingCachedData = true
+                    staleSectionIDs = Set(dashboard?.sections.map(\.id) ?? [])
+                }
                 refreshErrorMessage = Self.offlineMessage(for: error)
             } else {
                 state = .failed(error.localizedDescription)
@@ -108,13 +129,25 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    private func publishReceivedSections(_ receivedSections: [DashboardSection]) {
+    private func publishReceivedSections(
+        _ receivedSections: [DashboardSection],
+        refreshFailed: Bool = false
+    ) {
         guard !receivedSections.isEmpty else {
             return
         }
 
+        let receivedAt = Date()
+        let normalizedReceivedSections = receivedSections.map { section in
+            DashboardSection(
+                id: section.id,
+                title: section.title,
+                indicators: section.indicators,
+                fetchedAt: section.fetchedAt ?? receivedAt
+            )
+        }
         var sections = dashboard?.sections ?? []
-        for section in receivedSections {
+        for section in normalizedReceivedSections {
             if let index = sections.firstIndex(where: {
                 $0.id == section.id
                     || AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(section.title)
@@ -136,16 +169,28 @@ final class DashboardViewModel: ObservableObject {
         let partialDashboard = Dashboard(
             id: "analytics",
             title: "Аналитика",
-            fetchedAt: Date(),
+            fetchedAt: dashboard?.fetchedAt
+                ?? normalizedReceivedSections.compactMap(\.fetchedAt).max(),
             sections: sections
         )
-        try? cache.save(partialDashboard)
-        show(partialDashboard, isCached: false)
+        let receivedIDs = Set(normalizedReceivedSections.map(\.id))
+        let staleIDs = Set(sections.map(\.id)).subtracting(receivedIDs)
+        show(
+            partialDashboard,
+            isCached: refreshFailed || !staleIDs.isEmpty,
+            staleSectionIDs: staleIDs
+        )
+        saveToCache(partialDashboard)
     }
 
-    private func show(_ dashboard: Dashboard, isCached: Bool) {
+    private func show(
+        _ dashboard: Dashboard,
+        isCached: Bool,
+        staleSectionIDs: Set<DashboardSection.ID>
+    ) {
         state = .loaded(dashboard)
         isShowingCachedData = isCached
+        self.staleSectionIDs = staleSectionIDs
 
         if !dashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
             selectedIndicatorID = dashboard.indicators.first?.id
@@ -167,6 +212,22 @@ final class DashboardViewModel: ObservableObject {
         default:
             return urlError.localizedDescription
         }
+    }
+
+    private func saveToCache(_ dashboard: Dashboard) {
+        do {
+            try cache.save(dashboard)
+        } catch {
+            refreshErrorMessage = Self.cacheWriteMessage(for: error)
+        }
+    }
+
+    private static func cacheReadMessage(for error: Error) -> String {
+        "Не удалось прочитать сохранённые данные. \(error.localizedDescription)"
+    }
+
+    private static func cacheWriteMessage(for error: Error) -> String {
+        "Данные обновлены, но сохранить их для офлайн-режима не удалось. \(error.localizedDescription)"
     }
 }
 

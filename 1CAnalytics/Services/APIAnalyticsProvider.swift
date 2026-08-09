@@ -34,8 +34,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
 
         let session = urlSession
         var receivedSections = [Int: DashboardSection]()
-        var failedSections = [(index: Int, name: String)]()
-        var authenticationFailed = false
+        var failedSections = [(index: Int, name: String, failure: SectionFetchFailure)]()
 
         await withTaskGroup(of: SectionFetchOutcome.self) { group in
             for (index, section, request) in preparedRequests {
@@ -53,18 +52,25 @@ final class APIAnalyticsProvider: AnalyticsProvider {
                 if let section = outcome.section {
                     receivedSections[outcome.index] = section
                     onSectionReceived(section)
-                } else {
-                    failedSections.append((outcome.index, outcome.displayName))
-                    authenticationFailed = authenticationFailed || outcome.authenticationFailed
+                } else if let failure = outcome.failure {
+                    failedSections.append((outcome.index, outcome.displayName, failure))
                 }
             }
         }
 
-        if authenticationFailed {
+        if Task.isCancelled || failedSections.contains(where: { $0.failure == .cancelled }) {
+            throw CancellationError()
+        }
+
+        if failedSections.contains(where: { $0.failure == .authenticationRequired }) {
             throw AnalyticsError.authenticationRequired
         }
 
         if !failedSections.isEmpty {
+            if receivedSections.isEmpty, let failure = failedSections.sorted(by: { $0.index < $1.index }).first?.failure {
+                throw failure.error
+            }
+
             let sectionNames = failedSections
                 .sorted { $0.index < $1.index }
                 .map(\.name)
@@ -123,26 +129,64 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
-            let section = try analyticsResponse.dashboardSection(preferredTitle: contract.displayName)
+            let section = try analyticsResponse.dashboardSection(
+                preferredTitle: contract.displayName,
+                fetchedAt: Date()
+            )
             return SectionFetchOutcome(
                 index: index,
                 displayName: contract.displayName,
                 section: section,
-                authenticationFailed: false
+                failure: nil
             )
         } catch AnalyticsError.authenticationRequired {
             return SectionFetchOutcome(
                 index: index,
                 displayName: contract.displayName,
                 section: nil,
-                authenticationFailed: true
+                failure: .authenticationRequired
+            )
+        } catch let error as URLError where error.code == .cancelled {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                failure: .cancelled
+            )
+        } catch let error as URLError {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                failure: .network(error.code)
+            )
+        } catch let error as AnalyticsError {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                failure: .analytics(error)
+            )
+        } catch is DecodingError {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                failure: .invalidPayload
+            )
+        } catch is CancellationError {
+            return SectionFetchOutcome(
+                index: index,
+                displayName: contract.displayName,
+                section: nil,
+                failure: .cancelled
             )
         } catch {
             return SectionFetchOutcome(
                 index: index,
                 displayName: contract.displayName,
                 section: nil,
-                authenticationFailed: false
+                failure: .other(error.localizedDescription)
             )
         }
     }
@@ -176,7 +220,33 @@ private struct SectionFetchOutcome: Sendable {
     let index: Int
     let displayName: String
     let section: DashboardSection?
-    let authenticationFailed: Bool
+    let failure: SectionFetchFailure?
+}
+
+private enum SectionFetchFailure: Sendable, Equatable {
+    case authenticationRequired
+    case network(URLError.Code)
+    case analytics(AnalyticsError)
+    case invalidPayload
+    case cancelled
+    case other(String)
+
+    var error: Error {
+        switch self {
+        case .authenticationRequired:
+            AnalyticsError.authenticationRequired
+        case let .network(code):
+            URLError(code)
+        case let .analytics(error):
+            error
+        case .invalidPayload:
+            AnalyticsError.invalidResponse
+        case .cancelled:
+            CancellationError()
+        case .other:
+            AnalyticsError.invalidResponse
+        }
+    }
 }
 
 struct AnalyticsAPIResponse: Decodable, Sendable {
@@ -188,7 +258,7 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        sections = container.decodeFlexibleArray(AnalyticsAPISection.self, forKey: .sections)
+        sections = try container.decodeFlexibleArray(AnalyticsAPISection.self, forKey: .sections)
     }
 
     func toDashboard() throws -> Dashboard {
@@ -196,12 +266,13 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
             throw AnalyticsError.invalidResponse
         }
 
+        let fetchedAt = Date()
         var sectionIDCounts = [String: Int]()
         let dashboardSections = sections.enumerated().map { index, section in
             let title = section.normalizedName.isEmpty ? "Раздел \(index + 1)" : section.normalizedName
             let baseID = title.stableID.isEmpty ? "section-\(index)" : title.stableID
             let sectionID = Self.uniqueID(baseID, counts: &sectionIDCounts)
-            return section.toDashboardSection(title: title, sectionID: sectionID)
+            return section.toDashboardSection(title: title, sectionID: sectionID, fetchedAt: fetchedAt)
         }
 
         return Dashboard(
@@ -212,7 +283,7 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
         )
     }
 
-    func dashboardSection(preferredTitle: String) throws -> DashboardSection {
+    func dashboardSection(preferredTitle: String, fetchedAt: Date = Date()) throws -> DashboardSection {
         guard !sections.isEmpty else {
             throw AnalyticsError.invalidResponse
         }
@@ -226,7 +297,7 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
             ? preferredTitle
             : rawTitle
         let sectionID = title.stableID.isEmpty ? preferredTitle.stableID : title.stableID
-        return section.toDashboardSection(title: title, sectionID: sectionID)
+        return section.toDashboardSection(title: title, sectionID: sectionID, fetchedAt: fetchedAt)
     }
 
     private static func uniqueID(_ baseID: String, counts: inout [String: Int]) -> String {
@@ -247,15 +318,15 @@ struct AnalyticsAPISection: Decodable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = container.decodeFlexibleString(forKey: .name) ?? ""
-        values = container.decodeFlexibleArray(AnalyticsAPIIndicator.self, forKey: .values)
+        name = try container.decodeFlexibleString(forKey: .name) ?? ""
+        values = try container.decodeFlexibleArray(AnalyticsAPIIndicator.self, forKey: .values)
     }
 
     var normalizedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func toDashboardSection(title: String, sectionID: String) -> DashboardSection {
+    func toDashboardSection(title: String, sectionID: String, fetchedAt: Date?) -> DashboardSection {
         var layoutIDCounts = [String: Int]()
         let indicators = values.enumerated().map { index, indicator in
             let baseLayoutID = indicator.layoutIdentifier(index: index)
@@ -267,7 +338,12 @@ struct AnalyticsAPISection: Decodable, Sendable {
             return indicator.toIndicator(layoutID: uniqueLayoutID, sectionID: sectionID)
         }
 
-        return DashboardSection(id: sectionID, title: title, indicators: indicators)
+        return DashboardSection(
+            id: sectionID,
+            title: title,
+            indicators: indicators,
+            fetchedAt: fetchedAt
+        )
     }
 }
 
@@ -341,31 +417,31 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = container.decodeFlexibleString(forKey: .id)
-        identifier = container.decodeFlexibleString(forKey: .identifier)
-        name = container.decodeFlexibleString(forKey: .name) ?? ""
-        values = container.decodeFlexibleArray(AnalyticsAPIValue.self, forKey: .values)
-        type = (try? container.decode(ChartType.self, forKey: .type)) ?? .bar
-        value = container.decodeFlexibleDouble(forKey: .value)
-        valueMax = container.decodeFlexibleDouble(forKey: .valueMax)
-        unit = container.decodeFlexibleString(forKey: .unit)
-        colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
-        colorValue = container.decodeFlexibleString(forKey: .colorValue)
-        showLegend = container.decodeFlexibleBool(forKey: .showLegend)
-        showTotal = container.decodeFlexibleBool(forKey: .showTotal)
+        id = try container.decodeFlexibleString(forKey: .id)
+        identifier = try container.decodeFlexibleString(forKey: .identifier)
+        name = try container.decodeFlexibleString(forKey: .name) ?? ""
+        values = try container.decodeFlexibleArray(AnalyticsAPIValue.self, forKey: .values)
+        type = try container.decodeIfPresent(ChartType.self, forKey: .type) ?? .bar
+        value = try container.decodeFlexibleDouble(forKey: .value)
+        valueMax = try container.decodeFlexibleDouble(forKey: .valueMax)
+        unit = try container.decodeFlexibleString(forKey: .unit)
+        colorGraph = try container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = try container.decodeFlexibleString(forKey: .colorValue)
+        showLegend = try container.decodeFlexibleBool(forKey: .showLegend)
+        showTotal = try container.decodeFlexibleBool(forKey: .showTotal)
             ?? container.decodeFlexibleBool(forKey: .showTotalSnake)
             ?? container.decodeFlexibleBool(forKey: .displayTotal)
-        showDetails = container.decodeFlexibleBool(forKey: .showDetails)
+        showDetails = try container.decodeFlexibleBool(forKey: .showDetails)
             ?? container.decodeFlexibleBool(forKey: .showDetailsSnake)
             ?? container.decodeFlexibleBool(forKey: .displayDetails)
-        showValueLabels = container.decodeFlexibleBool(forKey: .showValueLabels)
+        showValueLabels = try container.decodeFlexibleBool(forKey: .showValueLabels)
             ?? container.decodeFlexibleBool(forKey: .showLabels)
             ?? container.decodeFlexibleBool(forKey: .displayValueLabels)
-        showYAxisLabels = container.decodeFlexibleBool(forKey: .showYAxisLabels)
+        showYAxisLabels = try container.decodeFlexibleBool(forKey: .showYAxisLabels)
             ?? container.decodeFlexibleBool(forKey: .showYAxis)
             ?? container.decodeFlexibleBool(forKey: .showScale)
             ?? container.decodeFlexibleBool(forKey: .displayYAxisLabels)
-        let rawDetailsOrientation = container.decodeFlexibleString(forKey: .detailsOrientation)
+        let rawDetailsOrientation = try container.decodeFlexibleString(forKey: .detailsOrientation)
             ?? container.decodeFlexibleString(forKey: .detailOrientation)
             ?? container.decodeFlexibleString(forKey: .detailsLayout)
         detailsOrientation = rawDetailsOrientation
@@ -374,28 +450,28 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
                     rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 )
             }
-        useCompactNumbers = container.decodeFlexibleBool(forKey: .useCompactNumbers)
+        useCompactNumbers = try container.decodeFlexibleBool(forKey: .useCompactNumbers)
             ?? container.decodeFlexibleBool(forKey: .useAbbreviations)
             ?? container.decodeFlexibleBool(forKey: .compactValues)
             ?? container.decodeFlexibleBool(forKey: .abbreviateValues)
 
-        let rawSpacing = container.decodeFlexibleDouble(forKey: .valueSpacing)
+        let rawSpacing = try container.decodeFlexibleDouble(forKey: .valueSpacing)
             ?? container.decodeFlexibleDouble(forKey: .valueGap)
             ?? container.decodeFlexibleDouble(forKey: .itemSpacing)
         valueSpacing = rawSpacing.map { min(max($0, 0), 64) }
 
-        let rawBarLayout = container.decodeFlexibleString(forKey: .barLayout)?.lowercased()
+        let rawBarLayout = try container.decodeFlexibleString(forKey: .barLayout)?.lowercased()
         barLayout = rawBarLayout.flatMap(BarLayout.init(rawValue:))
         lineStyle = normalizedLineStyle(
-            container.decodeFlexibleString(forKey: .lineStyle),
-            dashed: container.decodeFlexibleBool(forKey: .dashed)
+            try container.decodeFlexibleString(forKey: .lineStyle),
+            dashed: try container.decodeFlexibleBool(forKey: .dashed)
         )
-        forecastFromIndex = container.decodeFlexibleDouble(forKey: .forecastFromIndex)
+        forecastFromIndex = try container.decodeFlexibleDouble(forKey: .forecastFromIndex)
             .map { max(0, Int($0)) }
 
-        let rawWidth = container.decodeFlexibleDouble(forKey: .widthPercent)
+        let rawWidth = try container.decodeFlexibleDouble(forKey: .widthPercent)
             ?? container.decodeFlexibleDouble(forKey: .width)
-        let halfWidth = container.decodeFlexibleBool(forKey: .halfWidth)
+        let halfWidth = try container.decodeFlexibleBool(forKey: .halfWidth)
         if let rawWidth {
             widthPercent = rawWidth <= 50 ? 50 : 100
         } else if let halfWidth {
@@ -571,27 +647,27 @@ struct AnalyticsAPIValue: Decodable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = container.decodeFlexibleString(forKey: .name)
-        group = container.decodeFlexibleString(forKey: .group)
-        title = container.decodeFlexibleString(forKey: .title)
-        value = container.decodeFlexibleDouble(forKey: .value)
-        valueMax = container.decodeFlexibleDouble(forKey: .valueMax)
-        unit = container.decodeFlexibleString(forKey: .unit)
-        colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
-        colorValue = container.decodeFlexibleString(forKey: .colorValue)
+        name = try container.decodeFlexibleString(forKey: .name)
+        group = try container.decodeFlexibleString(forKey: .group)
+        title = try container.decodeFlexibleString(forKey: .title)
+        value = try container.decodeFlexibleDouble(forKey: .value)
+        valueMax = try container.decodeFlexibleDouble(forKey: .valueMax)
+        unit = try container.decodeFlexibleString(forKey: .unit)
+        colorGraph = try container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = try container.decodeFlexibleString(forKey: .colorValue)
         lineStyle = normalizedLineStyle(
-            container.decodeFlexibleString(forKey: .lineStyle),
-            dashed: container.decodeFlexibleBool(forKey: .dashed)
+            try container.decodeFlexibleString(forKey: .lineStyle),
+            dashed: try container.decodeFlexibleBool(forKey: .dashed)
         )
-        totalLabel = container.decodeFlexibleString(forKey: .totalLabel)
+        totalLabel = try container.decodeFlexibleString(forKey: .totalLabel)
             ?? container.decodeFlexibleString(forKey: .displayTotal)
             ?? container.decodeFlexibleString(forKey: .totalValue)
-        valueLabel = container.decodeFlexibleString(forKey: .valueLabel)
+        valueLabel = try container.decodeFlexibleString(forKey: .valueLabel)
             ?? container.decodeFlexibleString(forKey: .displayValue)
             ?? container.decodeFlexibleString(forKey: .displayLabel)
 
-        let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
-        let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
+        let subgroupValues = try container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
+        let nestedValues = try container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
         let combinedValues = subgroupValues.isEmpty ? nestedValues : subgroupValues
         subgroup = combinedValues.isEmpty ? nil : combinedValues
     }
@@ -728,23 +804,23 @@ struct AnalyticsAPISubgroup: Decodable, Sendable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        name = container.decodeFlexibleString(forKey: .name)
+        name = try container.decodeFlexibleString(forKey: .name)
             ?? container.decodeFlexibleString(forKey: .group)
             ?? ""
-        value = container.decodeFlexibleDouble(forKey: .value)
-        colorGraph = container.decodeFlexibleString(forKey: .colorGraph)
-        colorValue = container.decodeFlexibleString(forKey: .colorValue)
+        value = try container.decodeFlexibleDouble(forKey: .value)
+        colorGraph = try container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = try container.decodeFlexibleString(forKey: .colorValue)
         lineStyle = normalizedLineStyle(
-            container.decodeFlexibleString(forKey: .lineStyle),
-            dashed: container.decodeFlexibleBool(forKey: .dashed)
+            try container.decodeFlexibleString(forKey: .lineStyle),
+            dashed: try container.decodeFlexibleBool(forKey: .dashed)
         )
-        valueLabel = container.decodeFlexibleString(forKey: .valueLabel)
+        valueLabel = try container.decodeFlexibleString(forKey: .valueLabel)
             ?? container.decodeFlexibleString(forKey: .displayValue)
             ?? container.decodeFlexibleString(forKey: .displayLabel)
             ?? container.decodeFlexibleString(forKey: .totalLabel)
 
-        let subgroupValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
-        let nestedValues = container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
+        let subgroupValues = try container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .subgroup)
+        let nestedValues = try container.decodeFlexibleArray(AnalyticsAPISubgroup.self, forKey: .values)
         let combinedValues = subgroupValues.isEmpty ? nestedValues : subgroupValues
         subgroup = combinedValues.isEmpty ? nil : combinedValues
     }
@@ -812,17 +888,29 @@ private func normalizedLineStyle(_ rawValue: String?, dashed: Bool?) -> ChartLin
 }
 
 private extension KeyedDecodingContainer {
-    func decodeFlexibleArray<T: Decodable>(_ type: T.Type, forKey key: Key) -> [T] {
+    func decodeFlexibleArray<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> [T] {
+        guard contains(key), try !decodeNil(forKey: key) else {
+            return []
+        }
         if let values = try? decode([T].self, forKey: key) {
             return values
         }
         if let value = try? decode(T.self, forKey: key) {
             return [value]
         }
-        return []
+        throw DecodingError.typeMismatch(
+            [T].self,
+            DecodingError.Context(
+                codingPath: codingPath + [key],
+                debugDescription: "Expected an array or a single decodable value"
+            )
+        )
     }
 
-    func decodeFlexibleString(forKey key: Key) -> String? {
+    func decodeFlexibleString(forKey key: Key) throws -> String? {
+        guard contains(key), try !decodeNil(forKey: key) else {
+            return nil
+        }
         if let value = try? decode(String.self, forKey: key) {
             return value
         }
@@ -832,15 +920,30 @@ private extension KeyedDecodingContainer {
         if let value = try? decode(Bool.self, forKey: key) {
             return value ? "true" : "false"
         }
-        return nil
+        throw DecodingError.typeMismatch(
+            String.self,
+            DecodingError.Context(
+                codingPath: codingPath + [key],
+                debugDescription: "Expected a string, number, or boolean"
+            )
+        )
     }
 
-    func decodeFlexibleDouble(forKey key: Key) -> Double? {
+    func decodeFlexibleDouble(forKey key: Key) throws -> Double? {
+        guard contains(key), try !decodeNil(forKey: key) else {
+            return nil
+        }
         if let value = try? decode(Double.self, forKey: key) {
             return value
         }
         guard let text = try? decode(String.self, forKey: key) else {
-            return nil
+            throw DecodingError.typeMismatch(
+                Double.self,
+                DecodingError.Context(
+                    codingPath: codingPath + [key],
+                    debugDescription: "Expected a number or numeric string"
+                )
+            )
         }
 
         let normalized = text
@@ -849,10 +952,20 @@ private extension KeyedDecodingContainer {
             .replacingOccurrences(of: "\u{202f}", with: "")
             .replacingOccurrences(of: "%", with: "")
             .replacingOccurrences(of: ",", with: ".")
-        return Double(normalized)
+        guard let value = Double(normalized), value.isFinite else {
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: self,
+                debugDescription: "Invalid numeric value: \(text)"
+            )
+        }
+        return value
     }
 
-    func decodeFlexibleBool(forKey key: Key) -> Bool? {
+    func decodeFlexibleBool(forKey key: Key) throws -> Bool? {
+        guard contains(key), try !decodeNil(forKey: key) else {
+            return nil
+        }
         if let value = try? decode(Bool.self, forKey: key) {
             return value
         }
@@ -860,7 +973,13 @@ private extension KeyedDecodingContainer {
             return value != 0
         }
         guard let value = try? decode(String.self, forKey: key) else {
-            return nil
+            throw DecodingError.typeMismatch(
+                Bool.self,
+                DecodingError.Context(
+                    codingPath: codingPath + [key],
+                    debugDescription: "Expected a boolean, integer, or boolean string"
+                )
+            )
         }
         switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "true", "1", "yes":
@@ -868,7 +987,11 @@ private extension KeyedDecodingContainer {
         case "false", "0", "no":
             return false
         default:
-            return nil
+            throw DecodingError.dataCorruptedError(
+                forKey: key,
+                in: self,
+                debugDescription: "Invalid boolean value: \(value)"
+            )
         }
     }
 }

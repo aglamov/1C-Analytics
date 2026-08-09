@@ -25,7 +25,7 @@ enum AnalyticsProviderFactory {
     }
 }
 
-enum AnalyticsError: LocalizedError {
+enum AnalyticsError: LocalizedError, Equatable, Sendable {
     case invalidResponse
     case authenticationRequired
     case httpFailure(statusCode: Int)

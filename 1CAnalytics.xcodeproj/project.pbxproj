@@ -24,6 +24,23 @@
 		A10000000000000000000021 /* DashboardCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* DashboardCache.swift */; };
 		A10000000000000000000022 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* Assets.xcassets */; };
 		A10000000000000000000023 /* world-countries-110m.geojson in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* world-countries-110m.geojson */; };
+		A10000000000000000000024 /* DashboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* DashboardLayout.swift */; };
+		A10000000000000000000025 /* DashboardSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* DashboardSettingsView.swift */; };
+		A10000000000000000000026 /* IndicatorDashboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* IndicatorDashboardCard.swift */; };
+		A10000000000000000000027 /* DashboardValueIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* DashboardValueIndicators.swift */; };
+		A10000000000000000000028 /* DashboardProgressIndicators.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* DashboardProgressIndicators.swift */; };
+		A10000000000000000000029 /* GeoMapIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* GeoMapIndicatorView.swift */; };
+		A10000000000000000000030 /* ChartRenderers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* ChartRenderers.swift */; };
+		A10000000000000000000031 /* ChartStyling.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* ChartStyling.swift */; };
+		A10000000000000000000032 /* ChartLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* ChartLabels.swift */; };
+		A10000000000000000000033 /* ChartInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* ChartInteraction.swift */; };
+		A10000000000000000000034 /* ChartPolicies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* ChartPolicies.swift */; };
+		A10000000000000000000035 /* ContractPlanFactCompletionChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* ContractPlanFactCompletionChart.swift */; };
+		A10000000000000000000036 /* OverflowAwareScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000036 /* OverflowAwareScrollView.swift */; };
+		A10000000000000000000037 /* DetailGroupRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000037 /* DetailGroupRowView.swift */; };
+		A10000000000000000000038 /* DetailPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000038 /* DetailPresentationPolicy.swift */; };
+		A10000000000000000000039 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000039 /* AppTheme.swift */; };
+		A10000000000000000000040 /* DashboardStatusViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* DashboardStatusViews.swift */; };
 		B10000000000000000000001 /* ReleaseReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* ReleaseReadinessTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +77,23 @@
 		A20000000000000000000021 /* DashboardCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCache.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20000000000000000000023 /* world-countries-110m.geojson */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "world-countries-110m.geojson"; sourceTree = "<group>"; };
+		A20000000000000000000024 /* DashboardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLayout.swift; sourceTree = "<group>"; };
+		A20000000000000000000025 /* DashboardSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSettingsView.swift; sourceTree = "<group>"; };
+		A20000000000000000000026 /* IndicatorDashboardCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorDashboardCard.swift; sourceTree = "<group>"; };
+		A20000000000000000000027 /* DashboardValueIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardValueIndicators.swift; sourceTree = "<group>"; };
+		A20000000000000000000028 /* DashboardProgressIndicators.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardProgressIndicators.swift; sourceTree = "<group>"; };
+		A20000000000000000000029 /* GeoMapIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoMapIndicatorView.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* ChartRenderers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartRenderers.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* ChartStyling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartStyling.swift; sourceTree = "<group>"; };
+		A20000000000000000000032 /* ChartLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartLabels.swift; sourceTree = "<group>"; };
+		A20000000000000000000033 /* ChartInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartInteraction.swift; sourceTree = "<group>"; };
+		A20000000000000000000034 /* ChartPolicies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartPolicies.swift; sourceTree = "<group>"; };
+		A20000000000000000000035 /* ContractPlanFactCompletionChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractPlanFactCompletionChart.swift; sourceTree = "<group>"; };
+		A20000000000000000000036 /* OverflowAwareScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverflowAwareScrollView.swift; sourceTree = "<group>"; };
+		A20000000000000000000037 /* DetailGroupRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailGroupRowView.swift; sourceTree = "<group>"; };
+		A20000000000000000000038 /* DetailPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailPresentationPolicy.swift; sourceTree = "<group>"; };
+		A20000000000000000000039 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		A20000000000000000000040 /* DashboardStatusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStatusViews.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* 1C AnalyticsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "1C AnalyticsTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000002 /* ReleaseReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseReadinessTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -142,9 +176,26 @@
 			children = (
 				A20000000000000000000019 /* AuthenticationView.swift */,
 				A20000000000000000000008 /* DashboardView.swift */,
+				A20000000000000000000024 /* DashboardLayout.swift */,
+				A20000000000000000000025 /* DashboardSettingsView.swift */,
+				A20000000000000000000026 /* IndicatorDashboardCard.swift */,
+				A20000000000000000000027 /* DashboardValueIndicators.swift */,
+				A20000000000000000000028 /* DashboardProgressIndicators.swift */,
+				A20000000000000000000029 /* GeoMapIndicatorView.swift */,
 				A20000000000000000000009 /* IndicatorDetailView.swift */,
+				A20000000000000000000035 /* ContractPlanFactCompletionChart.swift */,
+				A20000000000000000000036 /* OverflowAwareScrollView.swift */,
+				A20000000000000000000037 /* DetailGroupRowView.swift */,
+				A20000000000000000000038 /* DetailPresentationPolicy.swift */,
 				A20000000000000000000010 /* ChartViews.swift */,
+				A20000000000000000000030 /* ChartRenderers.swift */,
+				A20000000000000000000031 /* ChartStyling.swift */,
+				A20000000000000000000032 /* ChartLabels.swift */,
+				A20000000000000000000033 /* ChartInteraction.swift */,
+				A20000000000000000000034 /* ChartPolicies.swift */,
+				A20000000000000000000039 /* AppTheme.swift */,
 				A20000000000000000000011 /* Components.swift */,
+				A20000000000000000000040 /* DashboardStatusViews.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -291,9 +342,26 @@
 				A10000000000000000000005 /* APIAnalyticsProvider.swift in Sources */,
 				A10000000000000000000007 /* DashboardViewModel.swift in Sources */,
 				A10000000000000000000008 /* DashboardView.swift in Sources */,
+				A10000000000000000000024 /* DashboardLayout.swift in Sources */,
+				A10000000000000000000025 /* DashboardSettingsView.swift in Sources */,
+				A10000000000000000000026 /* IndicatorDashboardCard.swift in Sources */,
+				A10000000000000000000027 /* DashboardValueIndicators.swift in Sources */,
+				A10000000000000000000028 /* DashboardProgressIndicators.swift in Sources */,
+				A10000000000000000000029 /* GeoMapIndicatorView.swift in Sources */,
 				A10000000000000000000009 /* IndicatorDetailView.swift in Sources */,
+				A10000000000000000000035 /* ContractPlanFactCompletionChart.swift in Sources */,
+				A10000000000000000000036 /* OverflowAwareScrollView.swift in Sources */,
+				A10000000000000000000037 /* DetailGroupRowView.swift in Sources */,
+				A10000000000000000000038 /* DetailPresentationPolicy.swift in Sources */,
 				A10000000000000000000010 /* ChartViews.swift in Sources */,
+				A10000000000000000000030 /* ChartRenderers.swift in Sources */,
+				A10000000000000000000031 /* ChartStyling.swift in Sources */,
+				A10000000000000000000032 /* ChartLabels.swift in Sources */,
+				A10000000000000000000033 /* ChartInteraction.swift in Sources */,
+				A10000000000000000000034 /* ChartPolicies.swift in Sources */,
+				A10000000000000000000039 /* AppTheme.swift in Sources */,
 				A10000000000000000000011 /* Components.swift in Sources */,
+				A10000000000000000000040 /* DashboardStatusViews.swift in Sources */,
 				A10000000000000000000017 /* AuthenticationService.swift in Sources */,
 				A10000000000000000000018 /* AuthenticationViewModel.swift in Sources */,
 				A10000000000000000000019 /* AuthenticationView.swift in Sources */,

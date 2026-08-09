@@ -64,6 +64,19 @@ struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let title: String
     let indicators: [Indicator]
+    let fetchedAt: Date?
+
+    init(
+        id: String,
+        title: String,
+        indicators: [Indicator],
+        fetchedAt: Date? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.indicators = indicators
+        self.fetchedAt = fetchedAt
+    }
 }
 
 struct Indicator: Identifiable, Codable, Equatable, Sendable {
@@ -346,7 +359,10 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
         case "GeoMap", "WorldMap", "Map", "GeoChoropleth":
             self = .geoMap
         default:
-            self = .bar
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported chart type: \(value)"
+            )
         }
     }
 
