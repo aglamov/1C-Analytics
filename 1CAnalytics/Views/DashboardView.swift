@@ -635,7 +635,6 @@ private struct ChartThemePreview: View {
 
             AnalyticsChart(
                 indicator: previewIndicator,
-                showsTitle: false,
                 usesCardBackground: false,
                 showsLegend: false
             )
@@ -733,7 +732,6 @@ private struct IndicatorDashboardCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 AnalyticsChart(
                     indicator: indicator,
-                    showsTitle: false,
                     usesCardBackground: false,
                     showsLegend: true,
                     animatesOnAppear: false
@@ -749,7 +747,6 @@ private struct IndicatorDashboardCard: View {
              .line, .area, .splineLine, .splineArea, .forecastLine:
             AnalyticsChart(
                 indicator: indicator,
-                showsTitle: false,
                 usesCardBackground: false,
                 showsLegend: true,
                 animatesOnAppear: false,

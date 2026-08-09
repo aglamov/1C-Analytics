@@ -111,7 +111,6 @@ struct IndicatorDetailView: View {
                     indicator: indicator,
                     usesCardBackground: false,
                     showsLegend: true,
-                    showsProminentSelection: true,
                     selectedRowID: $selectedRowID
                 )
                     .frame(maxWidth: .infinity)
@@ -428,8 +427,11 @@ private struct DetailGroupRowView: View {
                 onSelect(row.id)
             } label: {
                 groupedSeriesRowContent(row)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Выбрать \(group.label) \(row.series ?? "Значение")")
         } else {
             groupedSeriesRowContent(row)
@@ -443,8 +445,11 @@ private struct DetailGroupRowView: View {
                 onSelect(row.id)
             } label: {
                 singleValueRowContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Выбрать \(group.label)")
         } else {
             singleValueRowContent

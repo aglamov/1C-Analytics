@@ -4,13 +4,11 @@ import UIKit
 
 struct AnalyticsChart: View {
     let indicator: Indicator
-    var showsTitle = true
     var usesCardBackground = true
     var showsLegend = true
     var showsValueLabels = true
     var animatesOnAppear = true
     var showsLineAreaFill = false
-    var showsProminentSelection = false
     private var externalSelection: Binding<IndicatorRow.ID?>?
     @State private var internalSelectedRowID: IndicatorRow.ID?
     @State private var selectedSeriesKey: String?
@@ -22,67 +20,26 @@ struct AnalyticsChart: View {
 
     init(
         indicator: Indicator,
-        showsTitle: Bool = true,
         usesCardBackground: Bool = true,
         showsLegend: Bool = true,
         showsValueLabels: Bool = true,
         animatesOnAppear: Bool = true,
         showsLineAreaFill: Bool = false,
-        showsProminentSelection: Bool = false,
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
         self.indicator = indicator
-        self.showsTitle = showsTitle
         self.usesCardBackground = usesCardBackground
         self.showsLegend = showsLegend
         self.showsValueLabels = showsValueLabels
         self.animatesOnAppear = animatesOnAppear
         self.showsLineAreaFill = showsLineAreaFill
-        self.showsProminentSelection = showsProminentSelection
         self.externalSelection = selectedRowID
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if showsTitle,
-               !showsProminentSelection,
-               indicator.showValueLabels != false,
-               let selectedRow {
-                HStack {
-                    Spacer()
-
-                    Text(selectedRowTitle(for: selectedRow))
-                        .font(.subheadline.monospacedDigit().weight(.bold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-                        .allowsTightening(true)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .background(selectedTitleBackground, in: Capsule())
-                        .overlay {
-                            Capsule()
-                                .strokeBorder(Color.secondary.opacity(colorScheme == .dark ? 0.20 : 0.12), lineWidth: 1)
-                        }
-                        .subtleTextShadow()
-                        .transition(.move(edge: .trailing))
-                }
-            }
-
             chartContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .overlay(alignment: .topTrailing) {
-                    if showsProminentSelection, let selectedRow {
-                        prominentSelection(for: selectedRow)
-                            .padding(10)
-                            .transition(
-                                .scale(scale: 0.92, anchor: .topTrailing)
-                                    .combined(with: .opacity)
-                            )
-                            .allowsHitTesting(false)
-                    }
-                }
                 .zIndex(selectedRowID == nil ? 0 : 10)
 
             if displaysLegend, !indicator.orderedRows.isEmpty {
@@ -1099,14 +1056,6 @@ struct AnalyticsChart: View {
         indicator.showLegend ?? showsLegend
     }
 
-    private var selectedRow: IndicatorRow? {
-        guard let selectedRowID else {
-            return nil
-        }
-
-        return indicator.rows.first { $0.id == selectedRowID }
-    }
-
     @ViewBuilder
     private func legendBackground(for row: IndicatorRow) -> some View {
         ZStack {
@@ -1195,68 +1144,6 @@ struct AnalyticsChart: View {
             brightness: Double(min(max(brightness * factor, 0), 1)),
             opacity: Double(alpha)
         )
-    }
-
-    private func selectedRowTitle(for row: IndicatorRow) -> String {
-        let value = displayValue(for: row)
-        if let series = row.series {
-            return "\(row.label), \(series): \(value)"
-        }
-
-        return "\(row.label): \(value)"
-    }
-
-    private func prominentSelection(for row: IndicatorRow) -> some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            Text(selectionContext(for: row))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.trailing)
-
-            Text(displayValue(for: row))
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .foregroundStyle(indicator.valueColor(for: row))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .lineLimit(1)
-                .minimumScaleFactor(0.62)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .background(opaqueLabelBackground.opacity(0.94), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(alignment: .leading) {
-            Capsule()
-                .fill(chartColor(for: row))
-                .frame(width: 4)
-                .padding(.vertical, 9)
-                .padding(.leading, 5)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(chartColor(for: row).opacity(0.30), lineWidth: 1)
-        }
-        .shadow(
-            color: .black.opacity(colorScheme == .dark ? 0.30 : 0.14),
-            radius: 8,
-            x: 0,
-            y: 4
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(selectionContext(for: row)), \(displayValue(for: row))")
-    }
-
-    private func selectionContext(for row: IndicatorRow) -> String {
-        guard let series = row.series?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !series.isEmpty else {
-            return row.label
-        }
-
-        return "\(row.label) · \(series)"
-    }
-
-    private var selectedTitleBackground: Color {
-        opaqueLabelBackground
     }
 
     private var opaqueLabelBackground: Color {
@@ -1387,18 +1274,7 @@ struct AnalyticsChart: View {
 
     private func donutCenterSummary(showsPercentages: Bool) -> some View {
         let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
-        let valueText: String
-        let captionText: String
-
-        if let selectedRow {
-            valueText = showsPercentages
-                ? donutLabelText(for: selectedRow, showsPercentages: true)
-                : displayValue(for: selectedRow)
-            captionText = selectedRow.label
-        } else {
-            valueText = showsPercentages ? "100%" : indicator.formattedNumber(total)
-            captionText = "Итого"
-        }
+        let valueText = showsPercentages ? "100%" : indicator.formattedNumber(total)
 
         return VStack(spacing: 3) {
             Text(valueText)
@@ -1407,7 +1283,7 @@ struct AnalyticsChart: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.64)
 
-            Text(captionText)
+            Text("Итого")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
