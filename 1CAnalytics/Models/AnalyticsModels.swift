@@ -544,12 +544,9 @@ extension Indicator {
 
     var prefersHorizontalGroupedBars: Bool {
         guard useCompactNumbers != true,
-              chartType == .bar || chartType == .compactBar else {
+              chartType == .bar || chartType == .compactBar,
+              !title.isPlanFactIndicatorTitle else {
             return false
-        }
-
-        if title.isPlanFactIndicatorTitle {
-            return orderedRows.count > 1
         }
 
         let seriesCount = barDataShape.series.count

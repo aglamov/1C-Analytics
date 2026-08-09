@@ -604,6 +604,53 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testPlanFactBarsUseVerticalPresentation() {
+        let rows = [
+            IndicatorRow(
+                id: "current-plan",
+                label: "Текущий год",
+                value: 23_197_090,
+                series: "План",
+                sortOrder: 0
+            ),
+            IndicatorRow(
+                id: "current-fact",
+                label: "Текущий год",
+                value: 14_737_476,
+                series: "Факт",
+                sortOrder: 1
+            ),
+            IndicatorRow(
+                id: "previous-plan",
+                label: "Прошлый год",
+                value: 21_823_210,
+                series: "План",
+                sortOrder: 2
+            ),
+            IndicatorRow(
+                id: "previous-fact",
+                label: "Прошлый год",
+                value: 21_767_084,
+                series: "Факт",
+                sortOrder: 3
+            )
+        ]
+
+        for chartType in [ChartType.bar, .compactBar] {
+            let indicator = Indicator(
+                id: "plan-fact-income",
+                title: "План-Факт доходов, тыс. руб",
+                value: nil,
+                unit: nil,
+                chartType: chartType,
+                source: nil,
+                rows: rows
+            )
+
+            XCTAssertFalse(indicator.prefersHorizontalGroupedBars, chartType.rawValue)
+        }
+    }
+
     func testPresentationRulesKeepMixedPersonnelUnitsSeparate() {
         let indicator = Indicator(
             id: "personnel-share",
