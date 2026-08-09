@@ -882,7 +882,10 @@ private struct IndicatorDashboardCard: View {
         case .linearProgress:
             LinearProgressIndicatorView(indicator: indicator)
         case .gauge:
-            GaugeIndicatorView(indicator: indicator)
+            GaugeIndicatorView(
+                indicator: indicator,
+                animationTrigger: animationTrigger
+            )
                 .frame(height: chartHeight)
         case .geoMap:
             GeoMapIndicatorView(indicator: indicator)
@@ -1371,7 +1374,12 @@ struct LinearProgressIndicatorView: View {
 
 struct GaugeIndicatorView: View {
     let indicator: Indicator
+    var animationTrigger = ""
+    @State private var displayedProgress = 0.0
+    @State private var hasAppeared = false
+    @State private var isVisible = false
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     var body: some View {
         GeometryReader { proxy in
@@ -1388,7 +1396,7 @@ struct GaugeIndicatorView: View {
                     .rotationEffect(.degrees(90))
 
                 Circle()
-                    .trim(from: 0.125, to: 0.125 + 0.75 * progress)
+                    .trim(from: 0.125, to: 0.125 + 0.75 * displayedProgress)
                     .stroke(
                         AngularGradient(
                             colors: [
@@ -1403,7 +1411,7 @@ struct GaugeIndicatorView: View {
 
                 ForEach(0..<11, id: \.self) { tick in
                     Capsule()
-                        .fill(tick <= Int(progress * 10) ? paletteColor : Color.secondary.opacity(0.22))
+                        .fill(tick <= Int(displayedProgress * 10) ? paletteColor : Color.secondary.opacity(0.22))
                         .frame(width: 2, height: tick.isMultiple(of: 5) ? 9 : 5)
                         .offset(y: -(size * 0.38))
                         .rotationEffect(.degrees(-135 + Double(tick) * 27))
@@ -1413,7 +1421,7 @@ struct GaugeIndicatorView: View {
                     .fill(indicator.valueColor)
                     .frame(width: 4, height: size * 0.29)
                     .offset(y: -(size * 0.145))
-                    .rotationEffect(.degrees(-135 + 270 * progress))
+                    .rotationEffect(.degrees(-135 + 270 * displayedProgress))
 
                 Circle()
                     .fill(paletteColor)
@@ -1427,10 +1435,11 @@ struct GaugeIndicatorView: View {
                 VStack(spacing: 7) {
                     Spacer()
 
-                    Text(progress.formatted(.percent.precision(.fractionLength(0))))
+                    Text(displayedProgress.formatted(.percent.precision(.fractionLength(0))))
                         .font(.system(.title2, design: .rounded).weight(.bold))
                         .foregroundStyle(indicator.valueColor)
                         .monospacedDigit()
+                        .contentTransition(.numericText(value: displayedProgress))
 
                     if let value = indicator.value, let valueMax = indicator.valueMax {
                         HStack(alignment: .firstTextBaseline, spacing: 14) {
@@ -1457,6 +1466,21 @@ struct GaugeIndicatorView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(.horizontal, 8)
+        .onAppear {
+            isVisible = true
+            animateIfNeeded()
+        }
+        .onDisappear {
+            isVisible = false
+        }
+        .onChange(of: animationTrigger) { _, _ in
+            prepareReplayAnimation()
+        }
+        .onChange(of: accessibilityReduceMotion) { _, reduceMotion in
+            if reduceMotion {
+                showFinalStateWithoutAnimation()
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(indicator.title)
         .accessibilityValue(accessibilityValue)
@@ -1472,6 +1496,56 @@ struct GaugeIndicatorView: View {
 
     private var paletteColor: Color {
         indicator.paletteColor(scheme: chartPaletteScheme)
+    }
+
+    private func animateIfNeeded() {
+        guard !hasAppeared else {
+            return
+        }
+        guard !accessibilityReduceMotion else {
+            showFinalStateWithoutAnimation()
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.85)) {
+            displayedProgress = progress
+            hasAppeared = true
+        }
+    }
+
+    private func prepareReplayAnimation() {
+        guard !accessibilityReduceMotion else {
+            showFinalStateWithoutAnimation()
+            return
+        }
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            displayedProgress = 0
+            hasAppeared = false
+        }
+
+        guard isVisible else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard isVisible else {
+                return
+            }
+            animateIfNeeded()
+        }
+    }
+
+    private func showFinalStateWithoutAnimation() {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            displayedProgress = progress
+            hasAppeared = true
+        }
     }
 
     private func gaugeValue(
