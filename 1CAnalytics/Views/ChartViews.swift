@@ -72,7 +72,6 @@ struct AnalyticsChart: View {
 
             chartContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .clipped()
                 .overlay(alignment: .topTrailing) {
                     if showsProminentSelection, let selectedRow {
                         prominentSelection(for: selectedRow)
@@ -84,6 +83,7 @@ struct AnalyticsChart: View {
                             .allowsHitTesting(false)
                     }
                 }
+                .zIndex(selectedRowID == nil ? 0 : 10)
 
             if displaysLegend, !indicator.orderedRows.isEmpty {
                 interactiveLegend
@@ -539,6 +539,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
             .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
@@ -635,6 +636,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
             .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
@@ -725,7 +727,8 @@ struct AnalyticsChart: View {
                     .opacity(opacity(for: row))
                     .annotation(
                         position: trendAnnotationPosition(for: row),
-                        alignment: trendAnnotationAlignment(for: row)
+                        alignment: trendAnnotationAlignment(for: row),
+                        overflowResolution: .init(x: .disabled, y: .disabled)
                     ) {
                         if shouldShowValueLabel(for: row) {
                             valueLabel(for: row)
@@ -750,6 +753,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
             .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
@@ -790,7 +794,8 @@ struct AnalyticsChart: View {
                     .opacity(opacity(for: row))
                     .annotation(
                         position: trendAnnotationPosition(for: row),
-                        alignment: trendAnnotationAlignment(for: row)
+                        alignment: trendAnnotationAlignment(for: row),
+                        overflowResolution: .init(x: .disabled, y: .disabled)
                     ) {
                         if shouldShowValueLabel(for: row) {
                             valueLabel(for: row)
@@ -815,6 +820,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
             .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
@@ -845,7 +851,8 @@ struct AnalyticsChart: View {
                         .opacity(opacity(for: row))
                         .annotation(
                             position: trendAnnotationPosition(for: row),
-                            alignment: trendAnnotationAlignment(for: row)
+                            alignment: trendAnnotationAlignment(for: row),
+                            overflowResolution: .init(x: .disabled, y: .disabled)
                         ) {
                             if shouldShowValueLabel(for: row) {
                                 valueLabel(for: row)
@@ -882,6 +889,7 @@ struct AnalyticsChart: View {
                 .frame(width: contentWidth, height: geometry.size.height)
             }
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
             .scrollDisabled(!allowsHorizontalChartScrolling)
         }
     }
