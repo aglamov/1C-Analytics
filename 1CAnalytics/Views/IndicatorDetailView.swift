@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 struct IndicatorDetailView: View {
@@ -42,19 +43,26 @@ struct IndicatorDetailView: View {
             IndicatorHero(indicator: indicator)
                 .frame(maxWidth: .infinity, minHeight: headerHeight, maxHeight: headerHeight, alignment: .leading)
 
-            HStack(alignment: .top, spacing: 16) {
-                chartSection(fillsAvailableHeight: false)
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: lowerHeight,
-                        alignment: .top
-                    )
-
+            if indicator.usesContractPlanFactPresentation {
                 OverflowAwareScrollView {
-                    rowsSection
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                    contractPlanFactSection
                 }
                 .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
+            } else {
+                HStack(alignment: .top, spacing: 16) {
+                    chartSection(fillsAvailableHeight: false)
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: lowerHeight,
+                            alignment: .top
+                        )
+
+                    OverflowAwareScrollView {
+                        rowsSection
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
+                }
             }
 
             Spacer(minLength: 0)
@@ -64,8 +72,26 @@ struct IndicatorDetailView: View {
     private func compactDetailContent(availableSize: CGSize) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             IndicatorHero(indicator: indicator)
-            chartSection(fillsAvailableHeight: false, aspectRatio: compactChartAspectRatio(for: availableSize))
-            rowsSection
+
+            if indicator.usesContractPlanFactPresentation {
+                contractPlanFactSection
+            } else {
+                chartSection(fillsAvailableHeight: false, aspectRatio: compactChartAspectRatio(for: availableSize))
+                rowsSection
+            }
+        }
+    }
+
+    private var contractPlanFactSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ContractPlanFactCompletionChart(indicator: indicator)
+                .padding(16)
+                .premiumPanel()
+
+            ContractPlanFactView(indicator: indicator)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(16)
+                .premiumPanel()
         }
     }
 
@@ -237,6 +263,102 @@ struct IndicatorDetailView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
             selectedRowID = selectedRowID == rowID ? nil : rowID
         }
+    }
+}
+
+private struct ContractPlanFactCompletionChart: View {
+    let indicator: Indicator
+
+    private var points: [ContractPlanFactCompletionPoint] {
+        indicator.contractPlanFactCategories.flatMap { category in
+            category.periods.compactMap { periodRows in
+                guard let ratio = periodRows.completionRatio, ratio >= 0 else {
+                    return nil
+                }
+
+                return ContractPlanFactCompletionPoint(
+                    category: category.label,
+                    period: periodRows.period,
+                    ratio: ratio
+                )
+            }
+        }
+    }
+
+    private var yDomain: ClosedRange<Double> {
+        let largestRatio = points.map(\.ratio).max() ?? 1
+        return 0...max(1.15, largestRatio * 1.18)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Выполнение плана")
+                    .font(.title3.weight(.bold))
+
+                Text("Оплачено относительно плана")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Chart {
+                ForEach(points) { point in
+                    BarMark(
+                        x: .value("Категория", point.category),
+                        y: .value("Выполнение", point.ratio)
+                    )
+                    .position(by: .value("Период", point.period.title))
+                    .foregroundStyle(by: .value("Период", point.period.title))
+                    .cornerRadius(5)
+                    .annotation(position: .top, spacing: 5) {
+                        Text(point.ratio.formatted(.percent.precision(.fractionLength(0))))
+                            .font(.caption2.monospacedDigit().weight(.bold))
+                            .foregroundStyle(point.period.contractPlanFactColor)
+                    }
+                }
+
+                RuleMark(y: .value("План", 1))
+                    .foregroundStyle(.secondary.opacity(0.55))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
+            }
+            .chartForegroundStyleScale(
+                domain: [
+                    ContractPlanFactPeriod.current.title,
+                    ContractPlanFactPeriod.previous.title
+                ],
+                range: [
+                    ContractPlanFactPeriod.current.contractPlanFactColor,
+                    ContractPlanFactPeriod.previous.contractPlanFactColor
+                ]
+            )
+            .chartYScale(domain: yDomain)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine()
+                        .foregroundStyle(.secondary.opacity(0.16))
+                    AxisTick()
+
+                    AxisValueLabel {
+                        if let ratio = value.as(Double.self) {
+                            Text(ratio.formatted(.percent.precision(.fractionLength(0))))
+                        }
+                    }
+                }
+            }
+            .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
+            .frame(height: 250)
+            .accessibilityLabel("Выполнение плана по контрактам")
+        }
+    }
+}
+
+private struct ContractPlanFactCompletionPoint: Identifiable {
+    let category: String
+    let period: ContractPlanFactPeriod
+    let ratio: Double
+
+    var id: String {
+        "\(category)-\(period.rawValue)"
     }
 }
 

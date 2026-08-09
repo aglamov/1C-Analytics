@@ -708,7 +708,7 @@ private struct IndicatorDashboardCard: View {
     @ViewBuilder
     private var visualization: some View {
         if indicator.usesContractPlanFactPresentation {
-            ContractPlanFactDashboardView(indicator: indicator)
+            ContractPlanFactView(indicator: indicator)
         } else {
             standardVisualization
         }
@@ -836,7 +836,7 @@ private struct IndicatorDashboardCard: View {
 
 }
 
-private struct ContractPlanFactDashboardView: View {
+struct ContractPlanFactView: View {
     let indicator: Indicator
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
@@ -964,12 +964,7 @@ private struct ContractPlanFactPeriodSummary: View {
     }
 
     private var periodColor: Color {
-        switch periodRows.period {
-        case .current:
-            Color(red: 0.02, green: 0.55, blue: 0.45)
-        case .previous:
-            Color(red: 0.48, green: 0.35, blue: 0.72)
-        }
+        periodRows.period.contractPlanFactColor
     }
 
     private func metric(title: String, row: IndicatorRow?, color: Color) -> some View {
@@ -998,6 +993,17 @@ private struct ContractPlanFactPeriodSummary: View {
             return "—"
         }
         return row.valueLabel ?? indicator.formattedNumber(row.value)
+    }
+}
+
+extension ContractPlanFactPeriod {
+    var contractPlanFactColor: Color {
+        switch self {
+        case .current:
+            Color(red: 0.02, green: 0.55, blue: 0.45)
+        case .previous:
+            Color(red: 0.48, green: 0.35, blue: 0.72)
+        }
     }
 }
 
