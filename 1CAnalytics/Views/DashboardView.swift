@@ -16,6 +16,8 @@ struct DashboardView: View {
     @State private var indicatorIDToRestore: Indicator.ID?
     @State private var currentSectionID: DashboardSection.ID?
     @State private var hasFirstSectionHeaderPassedTop = false
+    @State private var refreshAnimationGeneration = 0
+    @State private var sectionAnimationGenerations: [DashboardSection.ID: Int] = [:]
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -107,6 +109,12 @@ struct DashboardView: View {
             indicatorIDToRestore = indicatorID
         }
         .environment(\.chartPaletteScheme, chartPaletteScheme)
+        .onChange(of: viewModel.dashboard?.fetchedAt) { oldDate, newDate in
+            guard oldDate != nil, newDate != nil, oldDate != newDate else {
+                return
+            }
+            refreshAnimationGeneration &+= 1
+        }
         .task {
             if case .idle = viewModel.state {
                 await viewModel.load()
@@ -253,7 +261,10 @@ struct DashboardView: View {
         _ indicator: Indicator,
         in section: DashboardSection
     ) -> some View {
-        IndicatorDashboardCard(indicator: indicator)
+        IndicatorDashboardCard(
+            indicator: indicator,
+            animationTrigger: chartAnimationTrigger(for: section.id)
+        )
             .overlay(alignment: .topTrailing) {
                 if isEditingLayout {
                     reorderHandle(for: indicator, in: section)
@@ -357,6 +368,7 @@ struct DashboardView: View {
     private func toggleSection(_ sectionID: DashboardSection.ID) {
         withAnimation(.easeInOut(duration: 0.22)) {
             if collapsedSectionIDs.contains(sectionID) {
+                sectionAnimationGenerations[sectionID, default: 0] &+= 1
                 collapsedSectionIDs.remove(sectionID)
             } else {
                 collapsedSectionIDs.insert(sectionID)
@@ -372,11 +384,19 @@ struct DashboardView: View {
     private func toggleAllSections(in dashboard: Dashboard) {
         withAnimation(.easeInOut(duration: 0.24)) {
             if allSectionsAreCollapsed(in: dashboard) {
+                for section in dashboard.sections {
+                    sectionAnimationGenerations[section.id, default: 0] &+= 1
+                }
                 collapsedSectionIDs.removeAll()
             } else {
                 collapsedSectionIDs = Set(dashboard.sections.map(\.id))
             }
         }
+    }
+
+    private func chartAnimationTrigger(for sectionID: DashboardSection.ID) -> String {
+        let sectionGeneration = sectionAnimationGenerations[sectionID, default: 0]
+        return "refresh:\(refreshAnimationGeneration)-section:\(sectionGeneration)"
     }
 
     private func updateCurrentSection(
@@ -800,6 +820,7 @@ private struct ChartThemePreview: View {
 
 private struct IndicatorDashboardCard: View {
     let indicator: Indicator
+    let animationTrigger: String
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
@@ -873,7 +894,8 @@ private struct IndicatorDashboardCard: View {
                     indicator: indicator,
                     usesCardBackground: false,
                     showsLegend: true,
-                    animatesOnAppear: true
+                    animatesOnAppear: true,
+                    animationTrigger: animationTrigger
                 )
                     .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
                     .padding(.top, 2)
@@ -889,7 +911,8 @@ private struct IndicatorDashboardCard: View {
                 usesCardBackground: false,
                 showsLegend: true,
                 animatesOnAppear: true,
-                showsLineAreaFill: true
+                showsLineAreaFill: true,
+                animationTrigger: animationTrigger
             )
                 .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
                 .padding(.top, 2)

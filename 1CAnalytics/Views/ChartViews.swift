@@ -9,14 +9,17 @@ struct AnalyticsChart: View {
     var showsValueLabels = true
     var animatesOnAppear = true
     var showsLineAreaFill = false
+    var animationTrigger = ""
     private var externalSelection: Binding<IndicatorRow.ID?>?
     @State private var internalSelectedRowID: IndicatorRow.ID?
     @State private var selectedSeriesKey: String?
     @State private var selectedSeriesAnchorID: IndicatorRow.ID?
     @State private var hasAppeared = false
+    @State private var isVisible = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
     init(
         indicator: Indicator,
@@ -25,6 +28,7 @@ struct AnalyticsChart: View {
         showsValueLabels: Bool = true,
         animatesOnAppear: Bool = true,
         showsLineAreaFill: Bool = false,
+        animationTrigger: String = "",
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
         self.indicator = indicator
@@ -33,6 +37,7 @@ struct AnalyticsChart: View {
         self.showsValueLabels = showsValueLabels
         self.animatesOnAppear = animatesOnAppear
         self.showsLineAreaFill = showsLineAreaFill
+        self.animationTrigger = animationTrigger
         self.externalSelection = selectedRowID
     }
 
@@ -51,15 +56,20 @@ struct AnalyticsChart: View {
         .modifier(ChartChromeModifier(isEnabled: usesCardBackground))
         .chartLegend(.hidden)
         .onAppear {
-            guard animatesOnAppear else {
-                return
-            }
-            withAnimation(.easeOut(duration: 0.7)) {
-                hasAppeared = true
-            }
+            isVisible = true
+            animateIfNeeded()
         }
         .onDisappear {
+            isVisible = false
             clearSelection()
+        }
+        .onChange(of: animationTrigger) { _, _ in
+            prepareReplayAnimation()
+        }
+        .onChange(of: accessibilityReduceMotion) { _, reduceMotion in
+            if reduceMotion {
+                setAppearedWithoutAnimation()
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase != .active {
@@ -67,6 +77,56 @@ struct AnalyticsChart: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedRowID)
+    }
+
+    private func animateIfNeeded() {
+        guard animatesOnAppear, !hasAppeared else {
+            return
+        }
+        guard !accessibilityReduceMotion else {
+            setAppearedWithoutAnimation()
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.7)) {
+            hasAppeared = true
+        }
+    }
+
+    private func prepareReplayAnimation() {
+        guard animatesOnAppear else {
+            return
+        }
+        guard !accessibilityReduceMotion else {
+            setAppearedWithoutAnimation()
+            return
+        }
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            hasAppeared = false
+        }
+
+        guard isVisible else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard isVisible else {
+                return
+            }
+            animateIfNeeded()
+        }
+    }
+
+    private func setAppearedWithoutAnimation() {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            hasAppeared = true
+        }
     }
 
     @ViewBuilder
