@@ -764,10 +764,6 @@ private struct IndicatorDashboardCard: View {
             return max(250, CGFloat(indicator.orderedRows.count) * 30 + 96)
         }
 
-        if indicator.usesRankedCategoryPresentation {
-            return 280
-        }
-
         if indicator.usesDenseEnrollmentCompositionPresentation {
             return max(CGFloat(categoryCount) * 50 + 142, 296)
         }

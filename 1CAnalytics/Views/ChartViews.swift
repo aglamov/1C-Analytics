@@ -75,8 +75,6 @@ struct AnalyticsChart: View {
             emptyDataState
         } else if indicator.usesMixedUnitPersonnelPresentation {
             personnelComposition
-        } else if indicator.usesRankedCategoryPresentation {
-            rankedCategoryBars
         } else if indicator.usesCitizenshipCompositionPresentation {
             citizenshipComposition
         } else if indicator.usesDenseEnrollmentCompositionPresentation {
@@ -133,77 +131,6 @@ struct AnalyticsChart: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.vertical, 24)
         .accessibilityElement(children: .combine)
-    }
-
-    private var rankedCategoryBars: some View {
-        let rows = rankedPresentationRows
-        let maximum = rows.map(\.value).max() ?? 1
-
-        return VStack(alignment: .leading, spacing: 11) {
-            ForEach(rows) { row in
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(row.label)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.82)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .subtleTextShadow()
-
-                        Spacer(minLength: 6)
-
-                        if shouldShowValueLabel(for: row) {
-                            if rowMatchesSelection(row) {
-                                valueLabel(for: row)
-                            } else {
-                                Text(displayValue(for: row))
-                                    .font(.caption.monospacedDigit().weight(.bold))
-                                    .foregroundStyle(indicator.valueColor(for: row))
-                                    .subtleTextShadow()
-                            }
-                        }
-                    }
-
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(chartColor(for: row).opacity(0.12))
-
-                            Capsule()
-                                .fill(horizontalGradient(for: row))
-                                .frame(width: proxy.size.width * max(row.value / maximum, 0.012))
-                        }
-                    }
-                    .frame(height: 7)
-                }
-                .accessibilityElement(children: .combine)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    toggleSelection(row.id)
-                }
-            }
-        }
-    }
-
-    private var rankedPresentationRows: [IndicatorRow] {
-        let sorted = indicator.orderedRows.sorted { $0.value > $1.value }
-        guard sorted.count > 5 else {
-            return sorted
-        }
-
-        let visibleRows = Array(sorted.prefix(4))
-        let remainingRows = sorted.dropFirst(4)
-        let other = IndicatorRow(
-            id: "\(indicator.id)-other",
-            label: "Прочие звания",
-            value: remainingRows.reduce(0) { $0 + $1.value },
-            series: nil,
-            sortOrder: nil,
-            colorGraph: nil,
-            colorValue: nil
-        )
-        return visibleRows + [other]
     }
 
     private var personnelComposition: some View {
@@ -617,7 +544,7 @@ struct AnalyticsChart: View {
                         angle: .value("Доля", animatedValue(for: row)),
                         innerRadius: .ratio(0.62),
                         outerRadius: rowMatchesSelection(row) ? .ratio(1.0) : .ratio(0.92),
-                        angularInset: donutAngularInset
+                        angularInset: rowMatchesSelection(row) ? 0 : donutAngularInset
                     )
                     .cornerRadius(3)
                     .foregroundStyle(sectorGradient(for: row))
@@ -941,19 +868,21 @@ struct AnalyticsChart: View {
             alignment: .leading,
             spacing: 8
         ) {
-            ForEach(legendRows.prefix(8)) { row in
+            ForEach(displayedLegendRows) { row in
                 Button {
                     toggleLegendSelection(row)
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(alignment: .top, spacing: 6) {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(chartColor(for: row).opacity(rowMatchesSelection(row) ? 1 : 0.72))
                             .frame(width: 7, height: 7)
+                            .padding(.top, 4)
 
                         Text(legendTitle(for: row))
-                            .font(.caption2.weight(.semibold))
-                            .lineLimit(indicator.usesDenseEnrollmentCompositionPresentation ? 2 : 1)
-                            .minimumScaleFactor(0.78)
+                            .font(rowMatchesSelection(row) ? .caption.weight(.semibold) : .caption2.weight(.semibold))
+                            .lineLimit(rowMatchesSelection(row) ? nil : legendTitleLineLimit)
+                            .minimumScaleFactor(rowMatchesSelection(row) ? 1 : 0.78)
+                            .fixedSize(horizontal: false, vertical: rowMatchesSelection(row))
 
                         Spacer(minLength: 0)
 
@@ -967,7 +896,7 @@ struct AnalyticsChart: View {
                     }
                     .padding(.horizontal, 9)
                     .padding(.vertical, 7)
-                    .frame(minHeight: indicator.usesDenseEnrollmentCompositionPresentation ? 38 : 28)
+                    .frame(minHeight: legendItemMinimumHeight)
                     .background {
                         legendBackground(for: row)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -985,8 +914,37 @@ struct AnalyticsChart: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Выбрать \(legendTitle(for: row))")
+                .accessibilityValue(legendValue(for: row) ?? "")
             }
         }
+    }
+
+    private var selectedDonutRow: IndicatorRow? {
+        guard isDonutChart, let selectedRowID else {
+            return nil
+        }
+
+        return indicator.orderedRows.first { $0.id == selectedRowID }
+    }
+
+    private var displayedLegendRows: [IndicatorRow] {
+        isDonutChart ? legendRows : Array(legendRows.prefix(8))
+    }
+
+    private var isDonutChart: Bool {
+        indicator.chartType == .donut || indicator.chartType == .percentDonut
+    }
+
+    private var legendTitleLineLimit: Int {
+        return indicator.usesDenseEnrollmentCompositionPresentation ? 2 : 1
+    }
+
+    private var legendItemMinimumHeight: CGFloat {
+        if isDonutChart {
+            return 36
+        }
+
+        return indicator.usesDenseEnrollmentCompositionPresentation ? 38 : 28
     }
 
     private var legendRows: [IndicatorRow] {
@@ -1309,18 +1267,8 @@ struct AnalyticsChart: View {
 
         return ZStack {
             ForEach(positions) { position in
-                Path { path in
-                    path.move(to: position.anchor)
-                    path.addLine(to: position.elbow)
-                    path.addLine(to: position.lineEnd)
-                }
-                .stroke(
-                    chartColor(for: position.row).opacity(0.72),
-                    style: StrokeStyle(lineWidth: 1.2, lineCap: .round, lineJoin: .round)
-                )
-
                 Text(donutLabelText(for: position.row, showsPercentages: showsPercentages))
-                    .font(.caption2.monospacedDigit().weight(.bold))
+                    .font(.title3.monospacedDigit().weight(.bold))
                     .foregroundStyle(
                         position.row.colorValue == nil && colorScheme == .dark
                             ? Color.white
@@ -1328,8 +1276,8 @@ struct AnalyticsChart: View {
                     )
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: true)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
                     .background(opaqueLabelBackground, in: Capsule())
                     .overlay {
                         Capsule()
@@ -1346,22 +1294,19 @@ struct AnalyticsChart: View {
     }
 
     private func donutExternalLabelInset(in size: CGSize) -> CGFloat {
-        guard !indicator.usesEducationLevelDonutPresentation else {
-            return 0
-        }
-
         let candidateInset = min(max(size.width * 0.12, 42), 56)
         let plotSize = CGSize(
             width: max(size.width - candidateInset * 2, 1),
             height: size.height
         )
 
-        let needsExternalLabels = indicator.orderedRows.contains { row in
-            shouldShowValueLabel(for: row)
-                && shouldPlaceDonutLabelOutside(row, plotSize: plotSize)
+        guard let selectedDonutRow else {
+            return 0
         }
 
-        return needsExternalLabels ? candidateInset : 0
+        return shouldPlaceDonutLabelOutside(selectedDonutRow, plotSize: plotSize)
+            ? candidateInset
+            : 0
     }
 
     private func shouldPlaceDonutLabelOutside(
@@ -1374,6 +1319,10 @@ struct AnalyticsChart: View {
         }
 
         let share = max(row.value, 0) / total
+        if rowMatchesSelection(row), share <= 0.12 {
+            return true
+        }
+
         let radius = min(plotSize.width, plotSize.height) * 0.36
         return DonutLabelPlacementPolicy.shouldPlaceOutside(
             share: share,
@@ -1386,98 +1335,41 @@ struct AnalyticsChart: View {
         in size: CGSize,
         labelInset: CGFloat
     ) -> [DonutExternalLabelPosition] {
-        guard labelInset > 0,
-              !indicator.usesEducationLevelDonutPresentation else {
+        guard labelInset > 0 else {
             return []
         }
 
         let rows = indicator.orderedRows
-        let total = rows.reduce(0) { $0 + max($1.value, 0) }
-        guard total > 0 else {
+        guard let selectedDonutRow,
+              let angle = DonutSelectionGeometryPolicy.middleAngle(
+                  for: selectedDonutRow.id,
+                  in: rows
+              ) else {
             return []
         }
 
         let plotSize = CGSize(width: max(size.width - labelInset * 2, 1), height: size.height)
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
         let radius = min(plotSize.width, plotSize.height) * 0.46
-        var cumulativeShare = 0.0
-        var candidates: [DonutExternalLabelCandidate] = []
-
-        for row in rows {
-            let share = max(row.value, 0) / total
-            let middleAngle = -.pi / 2 + (cumulativeShare + share / 2) * 2 * .pi
-            cumulativeShare += share
-
-            guard shouldShowValueLabel(for: row),
-                  shouldPlaceDonutLabelOutside(row, plotSize: plotSize) else {
-                continue
-            }
-
-            candidates.append(
-                DonutExternalLabelCandidate(
-                    row: row,
-                    angle: middleAngle,
-                    isRightSide: cos(middleAngle) >= 0,
-                    preferredY: center.y + CGFloat(sin(middleAngle)) * (radius + 34)
-                )
+        let cosine = CGFloat(cos(angle))
+        let sine = CGFloat(sin(angle))
+        let labelCenter = CGPoint(
+            x: min(
+                max(center.x + cosine * (radius + 36), 48),
+                max(48, size.width - 48)
+            ),
+            y: min(
+                max(center.y + sine * (radius + 36), 22),
+                max(22, size.height - 22)
             )
-        }
+        )
 
-        var resolvedYByID: [IndicatorRow.ID: CGFloat] = [:]
-        for isRightSide in [false, true] {
-            let sideCandidates = candidates
-                .filter { $0.isRightSide == isRightSide }
-                .sorted { $0.preferredY < $1.preferredY }
-            let resolved = DonutLabelPlacementPolicy.distributedVerticalPositions(
-                sideCandidates.map(\.preferredY),
-                bounds: 16...max(16, size.height - 16),
-                minimumSpacing: 28
-            )
-
-            for (candidate, y) in zip(sideCandidates, resolved) {
-                resolvedYByID[candidate.row.id] = y
-            }
-        }
-
-        return candidates.compactMap { candidate in
-            guard let labelY = resolvedYByID[candidate.row.id] else {
-                return nil
-            }
-
-            let cosine = CGFloat(cos(candidate.angle))
-            let sine = CGFloat(sin(candidate.angle))
-            let anchor = CGPoint(
-                x: center.x + cosine * radius,
-                y: center.y + sine * radius
-            )
-            let elbow = CGPoint(
-                x: center.x + cosine * (radius + 9),
-                y: center.y + sine * (radius + 9)
-            )
-            let labelCenter = CGPoint(
-                x: min(
-                    max(center.x + cosine * (radius + 34), 42),
-                    max(42, size.width - 42)
-                ),
-                y: labelY
-            )
-            let connectorX = labelCenter.x - elbow.x
-            let connectorY = labelCenter.y - elbow.y
-            let connectorLength = max(hypot(connectorX, connectorY), 1)
-            let labelClearance = min(24, connectorLength * 0.55)
-            let lineEnd = CGPoint(
-                x: labelCenter.x - connectorX / connectorLength * labelClearance,
-                y: labelCenter.y - connectorY / connectorLength * labelClearance
-            )
-
-            return DonutExternalLabelPosition(
-                row: candidate.row,
-                anchor: anchor,
-                elbow: elbow,
-                lineEnd: lineEnd,
+        return [
+            DonutExternalLabelPosition(
+                row: selectedDonutRow,
                 labelCenter: labelCenter
             )
-        }
+        ]
     }
 
     private func donutLabelText(for row: IndicatorRow, showsPercentages: Bool) -> String {
@@ -2210,34 +2102,29 @@ enum DonutLabelPlacementPolicy {
         return share < 0.12 || availableArcLength < estimatedLabelWidth
     }
 
-    static func distributedVerticalPositions(
-        _ preferredPositions: [CGFloat],
-        bounds: ClosedRange<CGFloat>,
-        minimumSpacing: CGFloat
-    ) -> [CGFloat] {
-        guard !preferredPositions.isEmpty else {
-            return []
+}
+
+enum DonutSelectionGeometryPolicy {
+    static func middleAngle(
+        for selectedRowID: IndicatorRow.ID,
+        in rows: [IndicatorRow]
+    ) -> Double? {
+        let total = rows.reduce(0) { $0 + max($1.value, 0) }
+        guard total > 0 else {
+            return nil
         }
 
-        var positions = preferredPositions.map { min(max($0, bounds.lowerBound), bounds.upperBound) }
-        for index in positions.indices.dropFirst() {
-            positions[index] = max(positions[index], positions[index - 1] + minimumSpacing)
-        }
-
-        if let overflow = positions.last.map({ max($0 - bounds.upperBound, 0) }), overflow > 0 {
-            for index in positions.indices {
-                positions[index] -= overflow
+        var cumulativeValue = 0.0
+        for row in rows {
+            let visibleValue = max(row.value, 0)
+            if row.id == selectedRowID {
+                let middleValue = cumulativeValue + visibleValue / 2
+                return -.pi / 2 + middleValue / total * 2 * .pi
             }
+            cumulativeValue += visibleValue
         }
 
-        if positions[0] < bounds.lowerBound {
-            positions[0] = bounds.lowerBound
-            for index in positions.indices.dropFirst() {
-                positions[index] = max(positions[index], positions[index - 1] + minimumSpacing)
-            }
-        }
-
-        return positions
+        return nil
     }
 }
 
@@ -2256,18 +2143,8 @@ enum ChartSelectionPolicy {
     }
 }
 
-private struct DonutExternalLabelCandidate {
-    let row: IndicatorRow
-    let angle: Double
-    let isRightSide: Bool
-    let preferredY: CGFloat
-}
-
 private struct DonutExternalLabelPosition: Identifiable {
     let row: IndicatorRow
-    let anchor: CGPoint
-    let elbow: CGPoint
-    let lineEnd: CGPoint
     let labelCenter: CGPoint
 
     var id: IndicatorRow.ID {

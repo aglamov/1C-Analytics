@@ -106,7 +106,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(domain.upperBound, 61, accuracy: 0.0001)
     }
 
-    func testSmallDonutLabelsMoveOutsideAndAvoidVerticalOverlap() {
+    func testSmallDonutLabelsMoveOutside() {
         XCTAssertTrue(
             DonutLabelPlacementPolicy.shouldPlaceOutside(
                 share: 0.04,
@@ -129,17 +129,26 @@ final class ReleaseReadinessTests: XCTestCase {
             )
         )
 
-        let positions = DonutLabelPlacementPolicy.distributedVerticalPositions(
-            [42, 48, 53],
-            bounds: 16...120,
-            minimumSpacing: 28
+    }
+
+    func testSelectedTinyDonutSliceHasAStableLabelAngle() throws {
+        let rows = [
+            IndicatorRow(id: "large", label: "Большой", value: 999, series: nil, sortOrder: 0),
+            IndicatorRow(id: "tiny", label: "Маленький", value: 1, series: nil, sortOrder: 1),
+            IndicatorRow(id: "zero", label: "Нулевой", value: 0, series: nil, sortOrder: 2)
+        ]
+
+        let tinyAngle = try XCTUnwrap(
+            DonutSelectionGeometryPolicy.middleAngle(for: "tiny", in: rows)
+        )
+        let zeroAngle = try XCTUnwrap(
+            DonutSelectionGeometryPolicy.middleAngle(for: "zero", in: rows)
         )
 
-        XCTAssertEqual(positions.count, 3)
-        XCTAssertGreaterThanOrEqual(positions[1] - positions[0], 28)
-        XCTAssertGreaterThanOrEqual(positions[2] - positions[1], 28)
-        XCTAssertGreaterThanOrEqual(positions[0], 16)
-        XCTAssertLessThanOrEqual(positions[2], 120)
+        XCTAssertTrue(tinyAngle.isFinite)
+        XCTAssertTrue(zeroAngle.isFinite)
+        XCTAssertNotEqual(tinyAngle, zeroAngle)
+        XCTAssertNil(DonutSelectionGeometryPolicy.middleAngle(for: "missing", in: rows))
     }
 
     func testPhoneChartsFitAvailableWidthWhileIPadCanScrollDenseContent() {
@@ -670,7 +679,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(indicator.showsAggregateValue)
     }
 
-    func testPresentationRulesReplaceDenseAcademicTitleDonutWithRanking() {
+    func testAcademicTitleIndicatorKeepsEveryDonutCategory() {
         let rows = (0..<7).map {
             IndicatorRow(id: "title-\($0)", label: "Звание \($0)", value: Double($0 + 1), series: nil, sortOrder: $0)
         }
@@ -684,7 +693,8 @@ final class ReleaseReadinessTests: XCTestCase {
             rows: rows
         )
 
-        XCTAssertTrue(indicator.usesRankedCategoryPresentation)
+        XCTAssertEqual(indicator.chartType, .donut)
+        XCTAssertEqual(indicator.orderedRows, rows)
     }
 
     func testPresentationRulesRecognizeZeroAndTemporalCharts() {

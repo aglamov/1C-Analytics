@@ -354,7 +354,8 @@ private struct DetailGroupRowView: View {
                     Text(group.label)
                         .font(.body.weight(.bold))
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
 
                     Spacer(minLength: 6)
 
@@ -363,6 +364,7 @@ private struct DetailGroupRowView: View {
                             .font(.caption.monospacedDigit().weight(.bold))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
 
@@ -500,29 +502,33 @@ private struct DetailGroupRowView: View {
         shareDenominator: Double?
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            HStack(spacing: 7) {
+            HStack(alignment: .top, spacing: 7) {
                 Circle()
                     .fill(color)
                     .frame(width: 7, height: 7)
+                    .padding(.top, 7)
 
                 Text(title)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(displayValue ?? indicator.formattedNumber(value))
                     .font(.body.monospacedDigit().weight(.bold))
                     .foregroundStyle(valueColor)
                     .contentTransition(.numericText())
+                    .lineLimit(1)
 
                 Text(shareText(for: value, denominator: shareDenominator))
                     .font(.caption2.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.secondary)
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 

@@ -472,13 +472,6 @@ extension Indicator {
             && seriesNames.contains { $0.contains("численност") }
     }
 
-    var usesRankedCategoryPresentation: Bool {
-        let normalizedTitle = title.lowercased()
-        return (chartType == .donut || chartType == .percentDonut)
-            && orderedRows.count > 4
-            && normalizedTitle.contains("учеными званиями")
-    }
-
     var usesDenseEnrollmentCompositionPresentation: Bool {
         title.lowercased().contains("динамика зачисления иг")
             && barDataShape.series.count >= 4
@@ -489,13 +482,6 @@ extension Indicator {
         title.lowercased().contains("всего обучающихся рф и иг")
             && barDataShape.series.count >= 2
             && !rowGroups.isEmpty
-    }
-
-    var usesEducationLevelDonutPresentation: Bool {
-        let normalizedTitle = title.lowercased()
-        return (chartType == .donut || chartType == .percentDonut)
-            && orderedRows.count >= 6
-            && normalizedTitle.contains("иг по уровням подготовки")
     }
 
     var usesStackedCompositionPresentation: Bool {
