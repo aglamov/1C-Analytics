@@ -1,8 +1,43 @@
 import XCTest
+import UIKit
 @testable import _C_Analytics
 
 @MainActor
 final class ReleaseReadinessTests: XCTestCase {
+    func testSelectedPaletteOverridesServerGraphColor() {
+        let row = IndicatorRow(
+            id: "row",
+            label: "Показатель",
+            value: 42,
+            series: nil,
+            sortOrder: 0,
+            colorGraph: "#FF0000"
+        )
+        let indicator = Indicator(
+            id: "indicator",
+            title: "Показатель",
+            value: nil,
+            unit: nil,
+            chartType: .bar,
+            source: nil,
+            colorGraph: "#FF0000",
+            rows: [row]
+        )
+
+        let corporateColor = UIColor(indicator.chartColor(for: row, scheme: .corporate))
+        let playfulColor = UIColor(indicator.chartColor(for: row, scheme: .playful))
+
+        XCTAssertNotEqual(corporateColor, playfulColor)
+        XCTAssertEqual(
+            corporateColor,
+            UIColor(ChartPalette.colors(for: .corporate)[0])
+        )
+        XCTAssertEqual(
+            playfulColor,
+            UIColor(ChartPalette.colors(for: .playful)[0])
+        )
+    }
+
     func testIPadDashboardAlwaysPlacesIndicatorsTwoPerRow() {
         let rows = DashboardGridLayoutPolicy.rows(for: [1, 2, 3, 4, 5], isPad: true)
 

@@ -117,7 +117,7 @@ struct AnalyticsChart: View {
         VStack(spacing: 12) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(indicator.graphColor.opacity(0.72))
+                .foregroundStyle(indicator.paletteColor(scheme: chartPaletteScheme).opacity(0.72))
 
             Text("Данные пока отсутствуют")
                 .font(.headline)

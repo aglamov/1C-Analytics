@@ -14,11 +14,13 @@ struct DashboardView: View {
     @State private var draggedIndicator: DashboardDraggedIndicator?
     @State private var navigationPath: [DashboardRoute] = []
     @State private var indicatorIDToRestore: Indicator.ID?
+    @State private var currentSectionID: DashboardSection.ID?
+    @State private var hasFirstSectionHeaderPassedTop = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
-                .navigationTitle(viewModel.dashboard?.title ?? "Аналитика")
+                .navigationTitle(navigationTitle)
                 .navigationDestination(for: DashboardRoute.self) { route in
                     switch route {
                     case let .indicator(indicatorID):
@@ -47,7 +49,22 @@ struct DashboardView: View {
                     }
 
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if viewModel.dashboard != nil {
+                        if let dashboard = viewModel.dashboard {
+                            Button {
+                                toggleAllSections(in: dashboard)
+                            } label: {
+                                Image(
+                                    systemName: allSectionsAreCollapsed(in: dashboard)
+                                        ? "rectangle.expand.vertical"
+                                        : "rectangle.compress.vertical"
+                                )
+                            }
+                            .accessibilityLabel(
+                                allSectionsAreCollapsed(in: dashboard)
+                                    ? "Развернуть все группы"
+                                    : "Свернуть все группы"
+                            )
+
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     isEditingLayout.toggle()
@@ -128,6 +145,10 @@ struct DashboardView: View {
                     .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
                     .padding(.vertical, 16)
                 }
+                .coordinateSpace(name: DashboardScrollCoordinateSpace.name)
+                .onPreferenceChange(DashboardSectionOffsetPreferenceKey.self) { offsets in
+                    updateCurrentSection(using: offsets, in: dashboard)
+                }
                 .onChange(of: indicatorIDToRestore) { _, indicatorID in
                     guard let indicatorID else {
                         return
@@ -156,36 +177,7 @@ struct DashboardView: View {
         let isExpanded = debugSectionTitle.map { $0 == section.title }
             ?? !collapsedSectionIDs.contains(section.id)
 
-        return VStack(alignment: .leading, spacing: 0) {
-            Button {
-                toggleSection(section.id)
-            } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(section.title)
-                            .font(.title2.weight(.bold))
-
-                        Text(sectionCountText(section.indicators.count))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 12)
-
-                    Image(systemName: "chevron.down")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
-                        .accessibilityHidden(true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(section.title)
-            .accessibilityValue(isExpanded ? "Развернуто" : "Свернуто")
-            .accessibilityAddTraits(.isHeader)
-
+        return Section {
             if isExpanded {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     ForEach(layoutRows(for: displayedIndicators(in: section))) { row in
@@ -206,7 +198,55 @@ struct DashboardView: View {
                 .padding(.top, 12)
                 .transition(.opacity)
             }
+        } header: {
+            dashboardSectionHeader(section, isExpanded: isExpanded)
         }
+    }
+
+    private func dashboardSectionHeader(
+        _ section: DashboardSection,
+        isExpanded: Bool
+    ) -> some View {
+        Button {
+            toggleSection(section.id)
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(section.title)
+                        .font(.title2.weight(.bold))
+
+                    Text(sectionCountText(section.indicators.count))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 12)
+
+                Image(systemName: "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: DashboardSectionOffsetPreferenceKey.self,
+                    value: [
+                        section.id: proxy.frame(
+                            in: .named(DashboardScrollCoordinateSpace.name)
+                        ).minY
+                    ]
+                )
+            }
+        }
+        .accessibilityLabel(section.title)
+        .accessibilityValue(isExpanded ? "Развернуто" : "Свернуто")
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func dashboardCard(
@@ -221,7 +261,7 @@ struct DashboardView: View {
                     NavigationLink(value: DashboardRoute.indicator(indicator.id)) {
                         Image(systemName: "arrow.up.right")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(indicator.graphColor)
+                            .foregroundStyle(indicator.paletteColor(scheme: chartPaletteScheme))
                             .frame(width: 30, height: 30)
                             .background(
                                 Color(.systemBackground).opacity(0.94),
@@ -299,6 +339,21 @@ struct DashboardView: View {
         ChartPaletteScheme(rawValue: chartPaletteSchemeRawValue) ?? .corporate
     }
 
+    private var navigationTitle: String {
+        guard let dashboard = viewModel.dashboard else {
+            return "1С Аналитика"
+        }
+
+        let sectionID = currentSectionID ?? dashboard.sections.first?.id
+        if sectionID == dashboard.sections.first?.id,
+           !hasFirstSectionHeaderPassedTop {
+            return "1С Аналитика"
+        }
+
+        return dashboard.sections.first(where: { $0.id == sectionID })?.title
+            ?? dashboard.title
+    }
+
     private func toggleSection(_ sectionID: DashboardSection.ID) {
         withAnimation(.easeInOut(duration: 0.22)) {
             if collapsedSectionIDs.contains(sectionID) {
@@ -306,6 +361,70 @@ struct DashboardView: View {
             } else {
                 collapsedSectionIDs.insert(sectionID)
             }
+        }
+    }
+
+    private func allSectionsAreCollapsed(in dashboard: Dashboard) -> Bool {
+        !dashboard.sections.isEmpty
+            && dashboard.sections.allSatisfy { collapsedSectionIDs.contains($0.id) }
+    }
+
+    private func toggleAllSections(in dashboard: Dashboard) {
+        withAnimation(.easeInOut(duration: 0.24)) {
+            if allSectionsAreCollapsed(in: dashboard) {
+                collapsedSectionIDs.removeAll()
+            } else {
+                collapsedSectionIDs = Set(dashboard.sections.map(\.id))
+            }
+        }
+    }
+
+    private func updateCurrentSection(
+        using offsets: [DashboardSection.ID: CGFloat],
+        in dashboard: Dashboard
+    ) {
+        guard !dashboard.sections.isEmpty, !offsets.isEmpty else {
+            return
+        }
+
+        let topEdge: CGFloat = 1
+        if let firstSectionID = dashboard.sections.first?.id,
+           let firstSectionOffset = offsets[firstSectionID] {
+            let didPassTop = firstSectionOffset <= topEdge
+            if hasFirstSectionHeaderPassedTop != didPassTop {
+                hasFirstSectionHeaderPassedTop = didPassTop
+            }
+        }
+
+        let indexedSections = dashboard.sections.enumerated()
+        let latestPassedSection = indexedSections
+            .compactMap { index, section -> (index: Int, offset: CGFloat)? in
+                guard let offset = offsets[section.id], offset <= topEdge else {
+                    return nil
+                }
+                return (index, offset)
+            }
+            .max { $0.offset < $1.offset }
+
+        let nextSection = indexedSections
+            .compactMap { index, section -> (index: Int, offset: CGFloat)? in
+                guard let offset = offsets[section.id], offset > topEdge else {
+                    return nil
+                }
+                return (index, offset)
+            }
+            .min { $0.offset < $1.offset }
+
+        var currentIndex = latestPassedSection?.index ?? 0
+        if let nextSection {
+            currentIndex = max(currentIndex, nextSection.index - 1)
+        } else if latestPassedSection == nil {
+            currentIndex = dashboard.sections.count - 1
+        }
+
+        let newSectionID = dashboard.sections[currentIndex].id
+        if currentSectionID != newSectionID {
+            currentSectionID = newSectionID
         }
     }
 
@@ -370,6 +489,21 @@ struct DashboardView: View {
         }
     }
 
+}
+
+private enum DashboardScrollCoordinateSpace {
+    static let name = "dashboard-scroll"
+}
+
+private struct DashboardSectionOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: [DashboardSection.ID: CGFloat] = [:]
+
+    static func reduce(
+        value: inout [DashboardSection.ID: CGFloat],
+        nextValue: () -> [DashboardSection.ID: CGFloat]
+    ) {
+        value.merge(nextValue()) { _, newValue in newValue }
+    }
 }
 
 private enum DashboardRoute: Hashable {
@@ -666,6 +800,7 @@ private struct ChartThemePreview: View {
 
 private struct IndicatorDashboardCard: View {
     let indicator: Indicator
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -679,20 +814,24 @@ private struct IndicatorDashboardCard: View {
             alignment: .topLeading
         )
         .background(
-            indicator.chartType == .oneValue ? indicator.graphColor.opacity(0.075) : .clear,
+            indicator.chartType == .oneValue ? paletteColor.opacity(0.075) : .clear,
             in: RoundedRectangle(cornerRadius: 8)
         )
         .premiumPanel(isElevated: false)
         .overlay(alignment: .leading) {
             if indicator.chartType == .oneValue {
                 Capsule()
-                    .fill(indicator.graphColor)
+                    .fill(paletteColor)
                     .frame(width: 4)
                     .padding(.vertical, 14)
                     .offset(x: 6)
                     .accessibilityHidden(true)
             }
         }
+    }
+
+    private var paletteColor: Color {
+        indicator.paletteColor(scheme: chartPaletteScheme)
     }
 
     @ViewBuilder
@@ -734,7 +873,7 @@ private struct IndicatorDashboardCard: View {
                     indicator: indicator,
                     usesCardBackground: false,
                     showsLegend: true,
-                    animatesOnAppear: false
+                    animatesOnAppear: true
                 )
                     .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
                     .padding(.top, 2)
@@ -749,7 +888,7 @@ private struct IndicatorDashboardCard: View {
                 indicator: indicator,
                 usesCardBackground: false,
                 showsLegend: true,
-                animatesOnAppear: false,
+                animatesOnAppear: true,
                 showsLineAreaFill: true
             )
                 .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
@@ -864,25 +1003,21 @@ struct ContractPlanFactView: View {
     }
 
     private func planColor(for periodRows: ContractPlanFactPeriodRows) -> Color {
-        periodRows.planRow.map(barColor(for:)) ?? indicator.graphColor
+        periodRows.planRow.map(barColor(for:)) ?? indicator.paletteColor(scheme: chartPaletteScheme)
     }
 
     private func paidColor(for periodRows: ContractPlanFactPeriodRows) -> Color {
         guard let paidRow = periodRows.paidRow else {
             return ChartPalette.colors(for: chartPaletteScheme).dropFirst().first
-                ?? indicator.graphColor
+                ?? indicator.paletteColor(scheme: chartPaletteScheme)
         }
         return barColor(for: paidRow)
     }
 
     private func barColor(for row: IndicatorRow) -> Color {
-        if let apiColor = Color(apiHex: row.colorGraph) {
-            return apiColor
-        }
-
         let colors = ChartPalette.colors(for: chartPaletteScheme)
         guard !colors.isEmpty else {
-            return indicator.graphColor
+            return indicator.paletteColor(scheme: chartPaletteScheme)
         }
         return colors[row.isContractPlanMetric ? 0 : min(1, colors.count - 1)]
     }
@@ -893,6 +1028,7 @@ private struct ContractPlanFactPeriodSummary: View {
     let periodRows: ContractPlanFactPeriodRows
     let planColor: Color
     let paidColor: Color
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -964,7 +1100,7 @@ private struct ContractPlanFactPeriodSummary: View {
     }
 
     private var periodColor: Color {
-        periodRows.period.contractPlanFactColor
+        periodRows.period.contractPlanFactColor(in: chartPaletteScheme)
     }
 
     private func metric(title: String, row: IndicatorRow?, color: Color) -> some View {
@@ -997,12 +1133,14 @@ private struct ContractPlanFactPeriodSummary: View {
 }
 
 extension ContractPlanFactPeriod {
-    var contractPlanFactColor: Color {
+    func contractPlanFactColor(in scheme: ChartPaletteScheme) -> Color {
+        let colors = ChartPalette.colors(for: scheme)
+
         switch self {
         case .current:
-            Color(red: 0.02, green: 0.55, blue: 0.45)
+            return colors.first ?? Color(red: 0.02, green: 0.55, blue: 0.45)
         case .previous:
-            Color(red: 0.48, green: 0.35, blue: 0.72)
+            return colors.dropFirst().first ?? Color(red: 0.48, green: 0.35, blue: 0.72)
         }
     }
 }
@@ -1049,12 +1187,13 @@ struct OneValueDashboardContent: View {
     let indicator: Indicator
     var reservesDetailButtonSpace = false
     @ScaledMetric(relativeTo: .largeTitle) private var valueFontSize: CGFloat = 38
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         ZStack(alignment: .trailing) {
             Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 92, weight: .bold))
-                .foregroundStyle(indicator.graphColor.opacity(0.07))
+                .foregroundStyle(paletteColor.opacity(0.07))
                 .offset(x: 8, y: 20)
                 .accessibilityHidden(true)
 
@@ -1098,10 +1237,15 @@ struct OneValueDashboardContent: View {
 
         return indicator.formattedValueWithUnit(value)
     }
+
+    private var paletteColor: Color {
+        indicator.paletteColor(scheme: chartPaletteScheme)
+    }
 }
 
 struct LinearProgressIndicatorView: View {
     let indicator: Indicator
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -1122,19 +1266,19 @@ struct LinearProgressIndicatorView: View {
 
                 Text(progress.formatted(.percent.precision(.fractionLength(0))))
                     .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(indicator.graphColor)
+                    .foregroundStyle(paletteColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(indicator.graphColor.opacity(0.11), in: Capsule())
+                    .background(paletteColor.opacity(0.11), in: Capsule())
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(indicator.graphColor.opacity(0.18))
+                        .fill(paletteColor.opacity(0.18))
 
                     Capsule()
-                        .fill(indicator.graphColor)
+                        .fill(paletteColor)
                         .frame(width: proxy.size.width * progress)
                         .overlay {
                             LinearGradient(
@@ -1169,6 +1313,10 @@ struct LinearProgressIndicatorView: View {
         return min(max(NSDecimalNumber(decimal: value).doubleValue / valueMax, 0), 1)
     }
 
+    private var paletteColor: Color {
+        indicator.paletteColor(scheme: chartPaletteScheme)
+    }
+
     private var currentValueText: String {
         if let valueLabel = indicator.rows.first?.valueLabel {
             return valueLabel
@@ -1200,6 +1348,7 @@ struct LinearProgressIndicatorView: View {
 
 struct GaugeIndicatorView: View {
     let indicator: Indicator
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         GeometryReader { proxy in
@@ -1210,7 +1359,7 @@ struct GaugeIndicatorView: View {
                 Circle()
                     .trim(from: 0.125, to: 0.875)
                     .stroke(
-                        indicator.graphColor.opacity(0.13),
+                        paletteColor.opacity(0.13),
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                     )
                     .rotationEffect(.degrees(90))
@@ -1220,8 +1369,8 @@ struct GaugeIndicatorView: View {
                     .stroke(
                         AngularGradient(
                             colors: [
-                                indicator.graphColor.opacity(0.52),
-                                indicator.graphColor
+                                paletteColor.opacity(0.52),
+                                paletteColor
                             ],
                             center: .center
                         ),
@@ -1231,7 +1380,7 @@ struct GaugeIndicatorView: View {
 
                 ForEach(0..<11, id: \.self) { tick in
                     Capsule()
-                        .fill(tick <= Int(progress * 10) ? indicator.graphColor : Color.secondary.opacity(0.22))
+                        .fill(tick <= Int(progress * 10) ? paletteColor : Color.secondary.opacity(0.22))
                         .frame(width: 2, height: tick.isMultiple(of: 5) ? 9 : 5)
                         .offset(y: -(size * 0.38))
                         .rotationEffect(.degrees(-135 + Double(tick) * 27))
@@ -1244,7 +1393,7 @@ struct GaugeIndicatorView: View {
                     .rotationEffect(.degrees(-135 + 270 * progress))
 
                 Circle()
-                    .fill(indicator.graphColor)
+                    .fill(paletteColor)
                     .frame(width: 15, height: 15)
                     .overlay {
                         Circle()
@@ -1298,6 +1447,10 @@ struct GaugeIndicatorView: View {
         return min(max(NSDecimalNumber(decimal: value).doubleValue / valueMax, 0), 1)
     }
 
+    private var paletteColor: Color {
+        indicator.paletteColor(scheme: chartPaletteScheme)
+    }
+
     private func gaugeValue(
         title: String,
         value: String,
@@ -1331,6 +1484,7 @@ struct GeoMapIndicatorView: View {
     private let maximumValue: Double
     private let minimumValue: Double
     @State private var geometry = GeoMapGeometry.empty
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     init(indicator: Indicator) {
         self.indicator = indicator
@@ -1387,7 +1541,7 @@ struct GeoMapIndicatorView: View {
         }
 
         let intensity = sqrt(max(value, 0) / max(maximumValue, 1))
-        return indicator.graphColor.opacity(0.20 + 0.76 * intensity)
+        return paletteColor.opacity(0.20 + 0.76 * intensity)
     }
 
     private func mapPath(for shape: GeoCountryShape, in rect: CGRect, bounds: CGRect) -> Path {
@@ -1429,8 +1583,8 @@ struct GeoMapIndicatorView: View {
                 Text(indicator.formattedNumber(minimumValue))
                 LinearGradient(
                     colors: [
-                        indicator.graphColor.opacity(0.18),
-                        indicator.graphColor.opacity(0.92)
+                        paletteColor.opacity(0.18),
+                        paletteColor.opacity(0.92)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -1449,6 +1603,10 @@ struct GeoMapIndicatorView: View {
             "Шкала от \(minimumValue.formatted(.number.grouping(.automatic))) "
                 + "до \(maximumValue.formatted(.number.grouping(.automatic)))"
         )
+    }
+
+    private var paletteColor: Color {
+        indicator.paletteColor(scheme: chartPaletteScheme)
     }
 }
 

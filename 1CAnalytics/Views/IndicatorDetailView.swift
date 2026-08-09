@@ -1,5 +1,6 @@
 import Charts
 import SwiftUI
+import UIKit
 
 struct IndicatorDetailView: View {
     let indicator: Indicator
@@ -269,6 +270,7 @@ struct IndicatorDetailView: View {
 struct ContractPlanFactCompletionChart: View {
     let indicator: Indicator
     @State private var selectedPointID: ContractPlanFactCompletionPoint.ID?
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     private var periods: [ContractPlanFactPeriod] {
         [.current, .previous]
@@ -313,7 +315,8 @@ struct ContractPlanFactCompletionChart: View {
                         y: .value("Выполнение", point.ratio)
                     )
                     .position(by: .value("Период", point.period.title))
-                    .foregroundStyle(by: .value("Период", point.period.title))
+                    .foregroundStyle(barGradient(for: point.period))
+                    .alignsMarkStylesWithPlotArea(false)
                     .cornerRadius(5)
                     .opacity(selectedPointID == nil || selectedPointID == point.id ? 1 : 0.28)
                     .annotation(position: .top, spacing: 5) {
@@ -325,16 +328,6 @@ struct ContractPlanFactCompletionChart: View {
                     .foregroundStyle(.secondary.opacity(0.55))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 4]))
             }
-            .chartForegroundStyleScale(
-                domain: [
-                    ContractPlanFactPeriod.current.title,
-                    ContractPlanFactPeriod.previous.title
-                ],
-                range: [
-                    ContractPlanFactPeriod.current.contractPlanFactColor,
-                    ContractPlanFactPeriod.previous.contractPlanFactColor
-                ]
-            )
             .chartYScale(domain: yDomain)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
@@ -349,12 +342,27 @@ struct ContractPlanFactCompletionChart: View {
                     }
                 }
             }
-            .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
+            .chartLegend(.hidden)
             .chartOverlay { proxy in
                 chartTapOverlay(proxy: proxy)
             }
-            .frame(height: 250)
+            .frame(height: 220)
             .accessibilityLabel("Выполнение плана по контрактам")
+
+            HStack(spacing: 16) {
+                ForEach(periods) { period in
+                    HStack(spacing: 6) {
+                        Capsule()
+                            .fill(barGradient(for: period))
+                            .frame(width: 18, height: 8)
+
+                        Text(period.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityElement(children: .combine)
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedPointID)
         .onDisappear {
@@ -371,7 +379,7 @@ struct ContractPlanFactCompletionChart: View {
                     ? .title3.monospacedDigit().weight(.bold)
                     : .caption2.monospacedDigit().weight(.bold)
             )
-            .foregroundStyle(isSelected ? Color.primary : point.period.contractPlanFactColor)
+            .foregroundStyle(isSelected ? Color.primary : periodColor(for: point.period))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: true)
             .padding(.horizontal, isSelected ? 12 : 0)
@@ -385,10 +393,51 @@ struct ContractPlanFactCompletionChart: View {
             .overlay {
                 if isSelected {
                     Capsule()
-                        .strokeBorder(point.period.contractPlanFactColor.opacity(0.32), lineWidth: 1)
+                        .strokeBorder(periodColor(for: point.period).opacity(0.32), lineWidth: 1)
                 }
             }
             .shadow(color: .black.opacity(isSelected ? 0.09 : 0), radius: 4, y: 2)
+    }
+
+    private func barGradient(for period: ContractPlanFactPeriod) -> LinearGradient {
+        let color = periodColor(for: period)
+        return LinearGradient(
+            colors: [
+                vividColor(color, brightness: 1.10),
+                color,
+                vividColor(color, brightness: 0.70)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func periodColor(for period: ContractPlanFactPeriod) -> Color {
+        period.contractPlanFactColor(in: chartPaletteScheme)
+    }
+
+    private func vividColor(_ color: Color, brightness factor: CGFloat) -> Color {
+        let resolvedColor = UIColor(color)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard resolvedColor.getHue(
+            &hue,
+            saturation: &saturation,
+            brightness: &brightness,
+            alpha: &alpha
+        ) else {
+            return color
+        }
+
+        return Color(
+            hue: Double(hue),
+            saturation: Double(min(saturation * 1.08, 1)),
+            brightness: Double(min(max(brightness * factor, 0), 1)),
+            opacity: Double(alpha)
+        )
     }
 
     private func chartTapOverlay(proxy: ChartProxy) -> some View {

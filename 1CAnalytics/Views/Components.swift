@@ -189,10 +189,6 @@ extension Indicator {
     }
 
     func chartColor(for row: IndicatorRow, scheme: ChartPaletteScheme) -> Color {
-        if let apiColor = Color(apiHex: row.colorGraph ?? colorGraph) {
-            return apiColor
-        }
-
         let key: String
         switch chartType {
         case .stackedBar:
@@ -212,20 +208,16 @@ extension Indicator {
     }
 
     func chartColor(forGroupLabel label: String, scheme: ChartPaletteScheme) -> Color {
-        if let rowColor = orderedRows.first(where: { $0.label == label })?.colorGraph,
-           let apiColor = Color(apiHex: rowColor) {
-            return apiColor
-        }
-        if let apiColor = Color(apiHex: colorGraph) {
-            return apiColor
-        }
-
         return ChartPalette.color(
             for: label,
             in: orderedRows.uniqueValues(\.label),
             scheme: scheme,
             fallback: accent.primary
         )
+    }
+
+    func paletteColor(scheme: ChartPaletteScheme) -> Color {
+        ChartPalette.colors(for: scheme).first ?? accent.primary
     }
 
     var graphColor: Color {
@@ -375,6 +367,7 @@ private struct SubtleTextShadowModifier: ViewModifier {
 
 struct IndicatorCard: View {
     let indicator: Indicator
+    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -383,7 +376,7 @@ struct IndicatorCard: View {
                     .font(.title3)
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(indicator.graphColor, in: RoundedRectangle(cornerRadius: 8))
+                    .background(indicator.paletteColor(scheme: chartPaletteScheme), in: RoundedRectangle(cornerRadius: 8))
 
                 Spacer()
             }
