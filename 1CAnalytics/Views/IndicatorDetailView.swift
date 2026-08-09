@@ -266,8 +266,13 @@ struct IndicatorDetailView: View {
     }
 }
 
-private struct ContractPlanFactCompletionChart: View {
+struct ContractPlanFactCompletionChart: View {
     let indicator: Indicator
+    @State private var selectedPointID: ContractPlanFactCompletionPoint.ID?
+
+    private var periods: [ContractPlanFactPeriod] {
+        [.current, .previous]
+    }
 
     private var points: [ContractPlanFactCompletionPoint] {
         indicator.contractPlanFactCategories.flatMap { category in
@@ -310,10 +315,9 @@ private struct ContractPlanFactCompletionChart: View {
                     .position(by: .value("Период", point.period.title))
                     .foregroundStyle(by: .value("Период", point.period.title))
                     .cornerRadius(5)
+                    .opacity(selectedPointID == nil || selectedPointID == point.id ? 1 : 0.28)
                     .annotation(position: .top, spacing: 5) {
-                        Text(point.ratio.formatted(.percent.precision(.fractionLength(0))))
-                            .font(.caption2.monospacedDigit().weight(.bold))
-                            .foregroundStyle(point.period.contractPlanFactColor)
+                        completionLabel(for: point)
                     }
                 }
 
@@ -346,9 +350,127 @@ private struct ContractPlanFactCompletionChart: View {
                 }
             }
             .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
+            .chartOverlay { proxy in
+                chartTapOverlay(proxy: proxy)
+            }
             .frame(height: 250)
             .accessibilityLabel("Выполнение плана по контрактам")
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedPointID)
+        .onDisappear {
+            selectedPointID = nil
+        }
+    }
+
+    private func completionLabel(for point: ContractPlanFactCompletionPoint) -> some View {
+        let isSelected = selectedPointID == point.id
+
+        return Text(point.ratio.formatted(.percent.precision(.fractionLength(0))))
+            .font(
+                isSelected
+                    ? .title3.monospacedDigit().weight(.bold)
+                    : .caption2.monospacedDigit().weight(.bold)
+            )
+            .foregroundStyle(isSelected ? Color.primary : point.period.contractPlanFactColor)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: true)
+            .padding(.horizontal, isSelected ? 12 : 0)
+            .padding(.vertical, isSelected ? 7 : 0)
+            .background {
+                if isSelected {
+                    Color(.systemBackground)
+                        .clipShape(Capsule())
+                }
+            }
+            .overlay {
+                if isSelected {
+                    Capsule()
+                        .strokeBorder(point.period.contractPlanFactColor.opacity(0.32), lineWidth: 1)
+                }
+            }
+            .shadow(color: .black.opacity(isSelected ? 0.09 : 0), radius: 4, y: 2)
+    }
+
+    private func chartTapOverlay(proxy: ChartProxy) -> some View {
+        GeometryReader { geometry in
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .simultaneousGesture(
+                    SpatialTapGesture()
+                        .onEnded { value in
+                            guard let plotFrame = proxy.plotFrame else {
+                                selectedPointID = nil
+                                return
+                            }
+
+                            let frame = geometry[plotFrame]
+                            let location = CGPoint(
+                                x: value.location.x - frame.origin.x,
+                                y: value.location.y - frame.origin.y
+                            )
+
+                            guard let point = selectedPoint(at: location, proxy: proxy) else {
+                                selectedPointID = nil
+                                return
+                            }
+
+                            selectedPointID = selectedPointID == point.id ? nil : point.id
+                        }
+                )
+        }
+    }
+
+    private func selectedPoint(
+        at location: CGPoint,
+        proxy: ChartProxy
+    ) -> ContractPlanFactCompletionPoint? {
+        guard let category = proxy.value(atX: location.x, as: String.self),
+              let tappedValue = proxy.value(atY: location.y, as: Double.self),
+              let categoryIndex = categories.firstIndex(of: category),
+              let categoryCenter = proxy.position(forX: category) else {
+            return nil
+        }
+
+        let lowerBound: CGFloat
+        if categoryIndex == categories.startIndex {
+            lowerBound = 0
+        } else if let previousCenter = proxy.position(forX: categories[categoryIndex - 1]) {
+            lowerBound = (previousCenter + categoryCenter) / 2
+        } else {
+            lowerBound = 0
+        }
+
+        let upperBound: CGFloat
+        if categoryIndex == categories.index(before: categories.endIndex) {
+            upperBound = proxy.plotSize.width
+        } else if let nextCenter = proxy.position(forX: categories[categoryIndex + 1]) {
+            upperBound = (categoryCenter + nextCenter) / 2
+        } else {
+            upperBound = proxy.plotSize.width
+        }
+
+        guard upperBound > lowerBound else {
+            return nil
+        }
+
+        let fraction = min(max((location.x - lowerBound) / (upperBound - lowerBound), 0), 0.999)
+        let periodIndex = min(Int(fraction * CGFloat(periods.count)), periods.count - 1)
+        let period = periods[periodIndex]
+
+        guard let point = points.first(where: {
+            $0.category == category && $0.period == period
+        }),
+        tappedValue >= 0,
+        tappedValue <= point.ratio else {
+            return nil
+        }
+
+        return point
+    }
+
+    private var categories: [String] {
+        indicator.contractPlanFactCategories.map(\.label)
     }
 }
 

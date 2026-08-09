@@ -708,7 +708,7 @@ private struct IndicatorDashboardCard: View {
     @ViewBuilder
     private var visualization: some View {
         if indicator.usesContractPlanFactPresentation {
-            ContractPlanFactView(indicator: indicator)
+            ContractPlanFactCompletionChart(indicator: indicator)
         } else {
             standardVisualization
         }
