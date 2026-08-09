@@ -695,7 +695,7 @@ struct AnalyticsChart: View {
                 Chart(indicator.orderedRows) { row in
                     if showsLineAreaFill {
                         AreaMark(
-                            x: .value("Группа", row.label),
+                            x: .value("Группа", trendXValue(for: row)),
                             yStart: .value("Основание", 0),
                             yEnd: .value("Значение", animatedValue(for: row)),
                             series: .value("Серия", row.series ?? indicator.title)
@@ -707,7 +707,7 @@ struct AnalyticsChart: View {
                     }
 
                     LineMark(
-                        x: .value("Группа", row.label),
+                        x: .value("Группа", trendXValue(for: row)),
                         y: .value("Значение", animatedValue(for: row)),
                         series: .value("Серия", row.series ?? indicator.title)
                     )
@@ -717,25 +717,32 @@ struct AnalyticsChart: View {
                     .opacity(opacity(for: row))
 
                     PointMark(
-                        x: .value("Группа", row.label),
+                        x: .value("Группа", trendXValue(for: row)),
                         y: .value("Значение", animatedValue(for: row))
                     )
                     .foregroundStyle(chartColor(for: row))
                     .symbolSize(rowMatchesSelection(row) ? 62 : 24)
                     .opacity(opacity(for: row))
-                    .annotation(position: trendAnnotationPosition(for: row), alignment: .center) {
+                    .annotation(
+                        position: trendAnnotationPosition(for: row),
+                        alignment: trendAnnotationAlignment(for: row)
+                    ) {
                         if shouldShowValueLabel(for: row) {
                             valueLabel(for: row)
                         }
                     }
                 }
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartXScale(
+                    domain: trendXDomain,
+                    range: .plotDimension(startPadding: 0, endPadding: 5)
+                )
                 .chartYScale(domain: trendValueLabelDomain(includesZero: showsLineAreaFill))
                 .chartYAxis {
                     valueAxis
                 }
                 .chartXAxis {
-                    responsiveCategoryAxis(availableWidth: contentWidth)
+                    responsiveTrendAxis(availableWidth: contentWidth)
                 }
                 .chartOverlay { proxy in
                     chartTapOverlay(proxy: proxy, mode: .point)
@@ -754,7 +761,7 @@ struct AnalyticsChart: View {
             ScrollView(.horizontal) {
                 Chart(indicator.orderedRows) { row in
                     AreaMark(
-                        x: .value("Группа", row.label),
+                        x: .value("Группа", trendXValue(for: row)),
                         yStart: .value("Основание", 0),
                         yEnd: .value("Значение", animatedValue(for: row)),
                         series: .value("Серия", row.series ?? indicator.title)
@@ -765,7 +772,7 @@ struct AnalyticsChart: View {
                     .opacity(opacity(for: row))
 
                     LineMark(
-                        x: .value("Группа", row.label),
+                        x: .value("Группа", trendXValue(for: row)),
                         y: .value("Значение", animatedValue(for: row)),
                         series: .value("Серия", row.series ?? indicator.title)
                     )
@@ -775,25 +782,32 @@ struct AnalyticsChart: View {
                     .opacity(opacity(for: row))
 
                     PointMark(
-                        x: .value("Группа", row.label),
+                        x: .value("Группа", trendXValue(for: row)),
                         y: .value("Значение", animatedValue(for: row))
                     )
                     .foregroundStyle(chartColor(for: row))
                     .symbolSize(rowMatchesSelection(row) ? 58 : 20)
                     .opacity(opacity(for: row))
-                    .annotation(position: trendAnnotationPosition(for: row), alignment: .center) {
+                    .annotation(
+                        position: trendAnnotationPosition(for: row),
+                        alignment: trendAnnotationAlignment(for: row)
+                    ) {
                         if shouldShowValueLabel(for: row) {
                             valueLabel(for: row)
                         }
                     }
                 }
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartXScale(
+                    domain: trendXDomain,
+                    range: .plotDimension(startPadding: 0, endPadding: 5)
+                )
                 .chartYScale(domain: trendValueLabelDomain(includesZero: true))
                 .chartYAxis {
                     valueAxis
                 }
                 .chartXAxis {
-                    responsiveCategoryAxis(availableWidth: contentWidth)
+                    responsiveTrendAxis(availableWidth: contentWidth)
                 }
                 .chartOverlay { proxy in
                     chartTapOverlay(proxy: proxy, mode: .point)
@@ -813,7 +827,7 @@ struct AnalyticsChart: View {
                 Chart {
                     ForEach(indicator.orderedRows) { row in
                         LineMark(
-                            x: .value("Группа", row.label),
+                            x: .value("Группа", trendXValue(for: row)),
                             y: .value("Значение", animatedValue(for: row)),
                             series: .value("Серия", row.series ?? indicator.title)
                         )
@@ -823,13 +837,16 @@ struct AnalyticsChart: View {
                         .opacity(opacity(for: row))
 
                         PointMark(
-                            x: .value("Группа", row.label),
+                            x: .value("Группа", trendXValue(for: row)),
                             y: .value("Значение", animatedValue(for: row))
                         )
                         .foregroundStyle(chartColor(for: row))
                         .symbolSize(rowMatchesSelection(row) ? 62 : 24)
                         .opacity(opacity(for: row))
-                        .annotation(position: trendAnnotationPosition(for: row), alignment: .center) {
+                        .annotation(
+                            position: trendAnnotationPosition(for: row),
+                            alignment: trendAnnotationAlignment(for: row)
+                        ) {
                             if shouldShowValueLabel(for: row) {
                                 valueLabel(for: row)
                             }
@@ -837,7 +854,7 @@ struct AnalyticsChart: View {
                     }
 
                     if let forecastStartLabel {
-                        RuleMark(x: .value("Начало прогноза", forecastStartLabel))
+                        RuleMark(x: .value("Начало прогноза", trendXValue(for: forecastStartLabel)))
                             .foregroundStyle(Color.secondary.opacity(0.42))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             .annotation(position: .top, alignment: .leading) {
@@ -848,12 +865,16 @@ struct AnalyticsChart: View {
                     }
                 }
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartXScale(
+                    domain: trendXDomain,
+                    range: .plotDimension(startPadding: 0, endPadding: 5)
+                )
                 .chartYScale(domain: trendValueLabelDomain(includesZero: false))
                 .chartYAxis {
                     valueAxis
                 }
                 .chartXAxis {
-                    responsiveCategoryAxis(availableWidth: contentWidth)
+                    responsiveTrendAxis(availableWidth: contentWidth)
                 }
                 .chartOverlay { proxy in
                     chartTapOverlay(proxy: proxy, mode: .point)
@@ -1627,6 +1648,22 @@ struct AnalyticsChart: View {
         indicator.orderedRows.uniqueValues(\.label)
     }
 
+    private var trendXDomain: ClosedRange<Double> {
+        guard categoryLabels.count > 1 else {
+            return -0.5...0.5
+        }
+
+        return 0...Double(categoryLabels.count - 1)
+    }
+
+    private func trendXValue(for row: IndicatorRow) -> Double {
+        trendXValue(for: row.label)
+    }
+
+    private func trendXValue(for label: String) -> Double {
+        Double(categoryLabels.firstIndex(of: label) ?? 0)
+    }
+
     private var longestDisplayValueCharacterCount: Int {
         indicator.orderedRows.map { displayValue(for: $0).count }.max() ?? 1
     }
@@ -1653,6 +1690,18 @@ struct AnalyticsChart: View {
         case .below:
             return .bottom
         }
+    }
+
+    private func trendAnnotationAlignment(for row: IndicatorRow) -> Alignment {
+        if row.label == categoryLabels.first {
+            return .leading
+        }
+
+        if row.label == categoryLabels.last {
+            return .trailing
+        }
+
+        return .center
     }
 
     private var forecastStartIndex: Int? {
@@ -1696,6 +1745,33 @@ struct AnalyticsChart: View {
                         .allowsTightening(true)
                         .frame(width: labelWidth)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func responsiveTrendAxis(availableWidth: CGFloat) -> some AxisContent {
+        let labels = categoryLabels
+        let categoryCount = max(labels.count, 1)
+        let plotWidth = max(availableWidth - 52, 0)
+        let labelWidth = min(120, max(40, plotWidth / CGFloat(categoryCount) - 4))
+        let values = labels.indices.map(Double.init)
+
+        return AxisMarks(values: values) { value in
+            AxisValueLabel(centered: true, collisionResolution: .truncate) {
+                if let xValue = value.as(Double.self) {
+                    let index = Int(xValue.rounded())
+                    if labels.indices.contains(index) {
+                        Text(wrappedAxisLabel(labels[index]))
+                            .font(.caption2)
+                            .foregroundStyle(Color.secondary)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.72)
+                            .allowsTightening(true)
+                            .frame(width: labelWidth)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -1910,11 +1986,17 @@ struct AnalyticsChart: View {
 
         case .point:
             guard
-                let label = proxy.value(atX: location.x, as: String.self),
+                let xValue = proxy.value(atX: location.x, as: Double.self),
                 let value = proxy.value(atY: location.y, as: Double.self)
             else {
                 return nil
             }
+
+            let categoryIndex = Int(xValue.rounded())
+            guard categoryLabels.indices.contains(categoryIndex) else {
+                return nil
+            }
+            let label = categoryLabels[categoryIndex]
 
             return indicator.orderedRows
                 .filter { $0.label == label }
