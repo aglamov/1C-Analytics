@@ -472,7 +472,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             title: name,
             value: scalarValue.map { Decimal($0) },
             valueMax: valueMax ?? totalRow?.valueMax ?? primaryValue?.valueMax,
-            unit: unit ?? totalRow?.unit ?? defaultUnit,
+            unit: unit ?? totalRow?.unit,
             chartType: chartType,
             source: "DGU_APP_Mobile_Client/analitycs",
             colorGraph: colorGraph ?? totalRow?.colorGraph ?? primaryValue?.colorGraph,
@@ -520,15 +520,6 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         return type
     }
 
-    private var defaultUnit: String? {
-        switch type {
-        case .oneValue, .linearProgress, .gauge, .geoMap, .compactBar:
-            nil
-        case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
-             .line, .area, .splineLine, .splineArea, .forecastLine:
-            "чел."
-        }
-    }
 }
 
 private extension ChartType {

@@ -211,7 +211,12 @@ struct AnalyticsChart: View {
         let percentRows = indicator.orderedRows.filter { ($0.series ?? "").lowercased().contains("процент") }
 
         return VStack(alignment: .leading, spacing: 16) {
-            presentationMetricGroup(title: "Численность, чел.", rows: countRows, maximum: countRows.map(\.value).max() ?? 1, isPercent: false)
+            presentationMetricGroup(
+                title: indicator.displayUnit.map { "Численность, \($0)" } ?? "Численность",
+                rows: countRows,
+                maximum: countRows.map(\.value).max() ?? 1,
+                isPercent: false
+            )
 
             Divider()
 

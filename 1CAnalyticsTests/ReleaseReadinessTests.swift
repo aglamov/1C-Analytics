@@ -548,6 +548,7 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertEqual(indicator.chartType, .horizontalBar)
+        XCTAssertNil(indicator.unit)
         XCTAssertFalse(indicator.usesStackedCompositionPresentation)
         XCTAssertTrue(indicator.usesCitizenshipCompositionPresentation)
         XCTAssertEqual(
@@ -670,7 +671,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(temporalIndicator.prefersTrendPresentation)
     }
 
-    func testPercentageTitleProvidesVisibleUnitWhenServerOmitsIt() {
+    func testTitleDoesNotProvideImplicitUnitWhenServerOmitsIt() {
         let indicator = Indicator(
             id: "share",
             title: "Доля НПР до 39 лет, %",
@@ -681,7 +682,7 @@ final class ReleaseReadinessTests: XCTestCase {
             rows: []
         )
 
-        XCTAssertEqual(indicator.displayUnit, "%")
+        XCTAssertNil(indicator.displayUnit)
     }
 
     func testResponseMappingSupportsNewCompactIndicatorTypesAndColors() throws {

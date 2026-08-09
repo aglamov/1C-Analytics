@@ -401,7 +401,7 @@ extension Indicator {
             return unit
         }
 
-        return title.contains("%") ? "%" : nil
+        return nil
     }
 
     var showsLegend: Bool {
@@ -442,6 +442,15 @@ extension Indicator {
         }
 
         return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
+    }
+
+    func formattedValueWithUnit(_ value: Decimal) -> String {
+        let number = formattedNumber(value)
+        guard let displayUnit else {
+            return number
+        }
+
+        return "\(number) \(displayUnit)"
     }
 
     var orderedRows: [IndicatorRow] {

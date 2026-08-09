@@ -835,7 +835,7 @@ private struct IndicatorDashboardCard: View {
             return "нет данных"
         }
 
-        return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
+        return indicator.formattedValueWithUnit(value)
     }
 
 }
@@ -1094,8 +1094,7 @@ struct OneValueDashboardContent: View {
             return "нет данных"
         }
 
-        return "\(indicator.formattedNumber(value)) \(indicator.displayUnit ?? "")"
-            .trimmingCharacters(in: .whitespaces)
+        return indicator.formattedValueWithUnit(value)
     }
 }
 
@@ -1418,9 +1417,11 @@ struct GeoMapIndicatorView: View {
 
     private var mapLegend: some View {
         VStack(alignment: .trailing, spacing: 5) {
-            Text(indicator.unit ?? "чел.")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+            if let unit = indicator.displayUnit {
+                Text(unit)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
 
             HStack(spacing: 6) {
                 Text(indicator.formattedNumber(minimumValue))
