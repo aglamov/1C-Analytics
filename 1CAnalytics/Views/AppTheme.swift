@@ -84,10 +84,68 @@ private struct ChartPaletteSchemeKey: EnvironmentKey {
     static let defaultValue: ChartPaletteScheme = .corporate
 }
 
+enum DashboardContentScalePolicy {
+    static let range = 0.8...1.3
+    static let step = 0.05
+
+    static func normalized(_ value: Double) -> Double {
+        let clamped = min(max(value, range.lowerBound), range.upperBound)
+        return (clamped / step).rounded() * step
+    }
+
+    static func scaledDynamicTypeSize(
+        from current: DynamicTypeSize,
+        scale: Double
+    ) -> DynamicTypeSize {
+        let sizes: [(DynamicTypeSize, Double)] = [
+            (.xSmall, 14), (.small, 15), (.medium, 16), (.large, 17),
+            (.xLarge, 19), (.xxLarge, 21), (.xxxLarge, 23),
+            (.accessibility1, 28), (.accessibility2, 33), (.accessibility3, 40),
+            (.accessibility4, 47), (.accessibility5, 53)
+        ]
+        let base = sizes.first(where: { $0.0 == current })?.1 ?? 17
+        let target = base * normalized(scale)
+        return sizes.min { abs($0.1 - target) < abs($1.1 - target) }?.0 ?? current
+    }
+}
+
+private struct DashboardContentScaleKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1
+}
+
 extension EnvironmentValues {
     var chartPaletteScheme: ChartPaletteScheme {
         get { self[ChartPaletteSchemeKey.self] }
         set { self[ChartPaletteSchemeKey.self] = newValue }
+    }
+
+    var dashboardContentScale: CGFloat {
+        get { self[DashboardContentScaleKey.self] }
+        set {
+            self[DashboardContentScaleKey.self] = CGFloat(
+                DashboardContentScalePolicy.normalized(Double(newValue))
+            )
+        }
+    }
+}
+
+private struct DashboardScaledTypographyModifier: ViewModifier {
+    @Environment(\.dashboardContentScale) private var scale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func body(content: Content) -> some View {
+        content.dynamicTypeSize(
+            DashboardContentScalePolicy.scaledDynamicTypeSize(
+                from: dynamicTypeSize,
+                scale: Double(scale)
+            )
+        )
+    }
+}
+
+extension View {
+    func dashboardScaledTypography() -> some View {
+        modifier(DashboardScaledTypographyModifier())
     }
 }
 
@@ -251,4 +309,3 @@ extension Array where Element == IndicatorRow {
         uniqueValues { $0[keyPath: keyPath] }
     }
 }
-

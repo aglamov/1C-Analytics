@@ -19,46 +19,60 @@ enum ChartValueLabelPolicy {
     }
 }
 
-enum ChartPresentationPolicy {
-    enum Style {
-        case groupedBar
-        case stackedBar
-        case trend
+enum TrendPointValueLabelPolicy {
+    static func isVisible(
+        rowMatchesSelection: Bool,
+        showValueLabels: Bool?,
+        alwaysShowPointValues: Bool?
+    ) -> Bool {
+        if showValueLabels == false {
+            return false
+        }
+
+        if alwaysShowPointValues == false {
+            return rowMatchesSelection
+        }
+
+        return true
     }
+}
 
-    static func contentWidth(
-        availableWidth: CGFloat,
-        categoryCount: Int,
-        seriesCount: Int,
-        longestValueCharacterCount: Int,
-        style: Style,
-        allowsHorizontalOverflow: Bool = true
-    ) -> CGFloat {
-        guard allowsHorizontalOverflow else {
-            return availableWidth
+struct ChartValueLabelLayoutMetrics: Equatable {
+    let horizontalPadding: CGFloat
+    let verticalPadding: CGFloat
+    let maximumTextWidth: CGFloat
+}
+
+enum ChartValueLabelLayoutPolicy {
+    static func metrics(
+        isSelected: Bool,
+        usesContrastingForeground: Bool
+    ) -> ChartValueLabelLayoutMetrics {
+        let horizontalPadding: CGFloat
+        let verticalPadding: CGFloat
+        let maximumTextWidth: CGFloat
+
+        if isSelected {
+            horizontalPadding = usesContrastingForeground ? 4 : 7
+            verticalPadding = usesContrastingForeground ? 2 : 4
+            maximumTextWidth = 96
+        } else {
+            horizontalPadding = usesContrastingForeground ? 0 : 5
+            verticalPadding = usesContrastingForeground ? 0 : 3
+            maximumTextWidth = 120
         }
 
-        guard categoryCount > 0 else {
-            return availableWidth
-        }
-
-        let readableValueWidth = min(
-            max(CGFloat(longestValueCharacterCount) * 7 + 18, 58),
-            132
+        return ChartValueLabelLayoutMetrics(
+            horizontalPadding: horizontalPadding,
+            verticalPadding: verticalPadding,
+            maximumTextWidth: maximumTextWidth
         )
-        let categoryWidth: CGFloat
+    }
+}
 
-        switch style {
-        case .groupedBar:
-            categoryWidth = max(76, readableValueWidth * CGFloat(max(seriesCount, 1)) * 0.78)
-        case .stackedBar:
-            categoryWidth = max(76, readableValueWidth)
-        case .trend:
-            categoryWidth = max(82, readableValueWidth * min(CGFloat(max(seriesCount, 1)), 2) * 0.62)
-        }
-
-        let requestedWidth = categoryWidth * CGFloat(categoryCount) + 52
-        return max(availableWidth, requestedWidth)
+enum ChartPresentationPolicy {
+    static func contentWidth(availableWidth: CGFloat) -> CGFloat {
+        max(availableWidth, 0)
     }
 }
 
@@ -220,6 +234,12 @@ enum DonutLabelPlacementPolicy {
         return share < 0.12 || availableArcLength < estimatedLabelWidth
     }
 
+}
+
+enum DonutPlotLayoutPolicy {
+    static func plotSize(in availableSize: CGSize) -> CGSize {
+        availableSize
+    }
 }
 
 enum DonutSelectionGeometryPolicy {

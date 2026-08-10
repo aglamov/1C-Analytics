@@ -9,16 +9,30 @@ final class DashboardViewModel: ObservableObject {
         case failed(String)
     }
 
+    enum ExtendedSectionLoadState: Equatable {
+        case idle
+        case loading
+        case loaded
+        case failed(String)
+    }
+
     @Published private(set) var state: LoadState = .idle
     @Published private(set) var isShowingCachedData = false
     @Published private(set) var refreshErrorMessage: String?
     @Published private(set) var isRefreshing = false
     @Published private(set) var staleSectionIDs: Set<DashboardSection.ID> = []
+    @Published private(set) var extendedSectionStates: [DashboardSection.ID: ExtendedSectionLoadState] = [:]
     @Published var selectedIndicatorID: Indicator.ID?
 
     private let provider: any AnalyticsProvider
     private let cache: any DashboardCaching
     private let onAuthenticationRequired: () -> Void
+    private var standardDashboard: Dashboard?
+    private var expandedSectionIDs: Set<DashboardSection.ID> = []
+    private var extendedIndicatorsBySectionID: [DashboardSection.ID: [Indicator]] = [:]
+    private var standardStaleSectionIDs: Set<DashboardSection.ID> = []
+    private var extendedStaleSectionIDs: Set<DashboardSection.ID> = []
+    private var isStandardShowingCachedData = false
 
     init(
         provider: any AnalyticsProvider,
@@ -58,7 +72,7 @@ final class DashboardViewModel: ObservableObject {
         let receivedSections = DashboardSectionAccumulator()
 
         if let cachedDashboard {
-            show(
+            showStandardDashboard(
                 cachedDashboard,
                 isCached: true,
                 staleSectionIDs: Set(cachedDashboard.sections.map(\.id))
@@ -75,7 +89,7 @@ final class DashboardViewModel: ObservableObject {
                 receivedSections.append(section)
                 self.publishReceivedSections(receivedSections.sections)
             }
-            show(dashboard, isCached: false, staleSectionIDs: [])
+            showStandardDashboard(dashboard, isCached: false, staleSectionIDs: [])
             refreshErrorMessage = nil
             saveToCache(dashboard)
         } catch AnalyticsError.authenticationRequired {
@@ -106,9 +120,10 @@ final class DashboardViewModel: ObservableObject {
                 receivedSections.append(section)
                 self.publishReceivedSections(receivedSections.sections)
             }
-            show(dashboard, isCached: false, staleSectionIDs: [])
+            showStandardDashboard(dashboard, isCached: false, staleSectionIDs: [])
             refreshErrorMessage = nil
             saveToCache(dashboard)
+            await refreshActivatedExtendedSections()
         } catch AnalyticsError.authenticationRequired {
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
             onAuthenticationRequired()
@@ -119,13 +134,45 @@ final class DashboardViewModel: ObservableObject {
 
             if dashboard != nil {
                 if receivedSections.sections.isEmpty, dashboard == dashboardBeforeRefresh {
-                    isShowingCachedData = true
-                    staleSectionIDs = Set(dashboard?.sections.map(\.id) ?? [])
+                    isStandardShowingCachedData = true
+                    standardStaleSectionIDs = Set(dashboard?.sections.map(\.id) ?? [])
+                    updateFreshnessState()
                 }
                 refreshErrorMessage = Self.offlineMessage(for: error)
+                await refreshActivatedExtendedSections()
             } else {
                 state = .failed(error.localizedDescription)
             }
+        }
+    }
+
+    func extendedState(for sectionID: DashboardSection.ID) -> ExtendedSectionLoadState {
+        extendedSectionStates[sectionID] ?? .idle
+    }
+
+    func loadExtendedIndicators(for section: DashboardSection) async {
+        guard section.hasExtended,
+              let contract = AnalyticsAPIContract.section(matching: section.title) else {
+            return
+        }
+
+        extendedSectionStates[section.id] = .loading
+
+        do {
+            let extendedSection = try await provider.fetchExtendedSection(for: contract)
+            extendedIndicatorsBySectionID[section.id] = extendedSection.indicators
+            expandedSectionIDs.insert(section.id)
+            extendedSectionStates[section.id] = .loaded
+            extendedStaleSectionIDs.remove(section.id)
+            updateFreshnessState()
+            renderDashboard()
+        } catch AnalyticsError.authenticationRequired {
+            state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
+            onAuthenticationRequired()
+        } catch is CancellationError {
+            extendedSectionStates[section.id] = .idle
+        } catch {
+            extendedSectionStates[section.id] = .failed(error.localizedDescription)
         }
     }
 
@@ -143,10 +190,11 @@ final class DashboardViewModel: ObservableObject {
                 id: section.id,
                 title: section.title,
                 indicators: section.indicators,
-                fetchedAt: section.fetchedAt ?? receivedAt
+                fetchedAt: section.fetchedAt ?? receivedAt,
+                hasExtended: section.hasExtended
             )
         }
-        var sections = dashboard?.sections ?? []
+        var sections = standardDashboard?.sections ?? []
         for section in normalizedReceivedSections {
             if let index = sections.firstIndex(where: {
                 $0.id == section.id
@@ -169,13 +217,13 @@ final class DashboardViewModel: ObservableObject {
         let partialDashboard = Dashboard(
             id: "analytics",
             title: "Аналитика",
-            fetchedAt: dashboard?.fetchedAt
+            fetchedAt: standardDashboard?.fetchedAt
                 ?? normalizedReceivedSections.compactMap(\.fetchedAt).max(),
             sections: sections
         )
         let receivedIDs = Set(normalizedReceivedSections.map(\.id))
         let staleIDs = Set(sections.map(\.id)).subtracting(receivedIDs)
-        show(
+        showStandardDashboard(
             partialDashboard,
             isCached: refreshFailed || !staleIDs.isEmpty,
             staleSectionIDs: staleIDs
@@ -183,18 +231,101 @@ final class DashboardViewModel: ObservableObject {
         saveToCache(partialDashboard)
     }
 
-    private func show(
+    private func showStandardDashboard(
         _ dashboard: Dashboard,
         isCached: Bool,
         staleSectionIDs: Set<DashboardSection.ID>
     ) {
-        state = .loaded(dashboard)
-        isShowingCachedData = isCached
-        self.staleSectionIDs = staleSectionIDs
+        standardDashboard = dashboard
+        reconcileExtendedSections(with: dashboard)
+        isStandardShowingCachedData = isCached
+        standardStaleSectionIDs = staleSectionIDs
+        updateFreshnessState()
+        renderDashboard()
+    }
 
-        if !dashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
-            selectedIndicatorID = dashboard.indicators.first?.id
+    private func renderDashboard() {
+        guard let standardDashboard else {
+            return
         }
+
+        let sections = standardDashboard.sections.map { section in
+            let extendedIndicators = expandedSectionIDs.contains(section.id)
+                ? (extendedIndicatorsBySectionID[section.id] ?? [])
+                : []
+            return DashboardSection(
+                id: section.id,
+                title: section.title,
+                indicators: section.indicators + extendedIndicators,
+                fetchedAt: section.fetchedAt,
+                hasExtended: section.hasExtended
+            )
+        }
+        let renderedDashboard = Dashboard(
+            id: standardDashboard.id,
+            title: standardDashboard.title,
+            fetchedAt: standardDashboard.fetchedAt,
+            sections: sections
+        )
+        state = .loaded(renderedDashboard)
+
+        if !renderedDashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
+            selectedIndicatorID = renderedDashboard.indicators.first?.id
+        }
+    }
+
+    private func reconcileExtendedSections(with dashboard: Dashboard) {
+        let supportedIDs = Set(dashboard.sections.filter(\.hasExtended).map(\.id))
+        let trackedIDs = expandedSectionIDs
+            .union(extendedIndicatorsBySectionID.keys)
+            .union(extendedSectionStates.keys)
+        for sectionID in trackedIDs.subtracting(supportedIDs) {
+            expandedSectionIDs.remove(sectionID)
+            extendedIndicatorsBySectionID.removeValue(forKey: sectionID)
+            extendedSectionStates.removeValue(forKey: sectionID)
+            extendedStaleSectionIDs.remove(sectionID)
+        }
+        updateFreshnessState()
+    }
+
+    private func refreshActivatedExtendedSections() async {
+        guard let standardDashboard else {
+            return
+        }
+
+        for section in standardDashboard.sections where expandedSectionIDs.contains(section.id) {
+            guard section.hasExtended,
+                  let contract = AnalyticsAPIContract.section(matching: section.title) else {
+                continue
+            }
+
+            extendedSectionStates[section.id] = .loading
+            do {
+                let refreshedSection = try await provider.fetchExtendedSection(for: contract)
+                extendedIndicatorsBySectionID[section.id] = refreshedSection.indicators
+                extendedSectionStates[section.id] = .loaded
+                extendedStaleSectionIDs.remove(section.id)
+                updateFreshnessState()
+                renderDashboard()
+            } catch AnalyticsError.authenticationRequired {
+                state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
+                onAuthenticationRequired()
+                return
+            } catch is CancellationError {
+                extendedSectionStates[section.id] = .loaded
+                return
+            } catch {
+                extendedSectionStates[section.id] = .failed(error.localizedDescription)
+                extendedStaleSectionIDs.insert(section.id)
+                updateFreshnessState()
+                refreshErrorMessage = "Не удалось обновить дополнительный уровень раздела «\(section.title)»."
+            }
+        }
+    }
+
+    private func updateFreshnessState() {
+        staleSectionIDs = standardStaleSectionIDs.union(extendedStaleSectionIDs)
+        isShowingCachedData = isStandardShowingCachedData || !extendedStaleSectionIDs.isEmpty
     }
 
     private static func offlineMessage(for error: Error) -> String {

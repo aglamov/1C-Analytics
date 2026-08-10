@@ -117,6 +117,7 @@ struct DashboardConnectionStatus: View {
 
             statusText
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
 
             if isRefreshing {
                 ProgressView()
@@ -129,6 +130,7 @@ struct DashboardConnectionStatus: View {
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -136,24 +138,13 @@ struct DashboardConnectionStatus: View {
         if isRefreshing {
             Text("Обновляем данные…")
         } else if hasError {
-            ViewThatFits(in: .horizontal) {
-                Text("Ошибка синхронизации · \(compactSynchronizationText)")
-                    .fixedSize(horizontal: true, vertical: false)
-
-                Text("Ошибка синхронизации")
-                    .fixedSize(horizontal: true, vertical: false)
-            }
+            Text("Ошибка · \(compactSynchronizationText)")
+                .minimumScaleFactor(0.78)
+                .allowsTightening(true)
         } else {
-            ViewThatFits(in: .horizontal) {
-                Text(lastSynchronizationText)
-                    .fixedSize(horizontal: true, vertical: false)
-
-                Text(compactSynchronizationText)
-                    .fixedSize(horizontal: true, vertical: false)
-
-                Text(compactSynchronizationText)
-                    .minimumScaleFactor(0.72)
-            }
+            Text("Синхронизация · \(compactSynchronizationText)")
+                .minimumScaleFactor(0.78)
+                .allowsTightening(true)
         }
     }
 
@@ -188,7 +179,7 @@ struct DashboardConnectionStatus: View {
             return "Время последней синхронизации неизвестно"
         }
 
-        return "Последняя синхронизация: \(date.formatted(date: .abbreviated, time: .shortened))"
+        return "Последняя синхронизация: \(DashboardSynchronizationTextPolicy.timestamp(for: date))"
     }
 
     private var compactSynchronizationText: String {
@@ -196,7 +187,21 @@ struct DashboardConnectionStatus: View {
             return "Синхронизация неизвестна"
         }
 
-        return date.formatted(date: .numeric, time: .shortened)
+        return DashboardSynchronizationTextPolicy.timestamp(for: date)
+    }
+}
+
+enum DashboardSynchronizationTextPolicy {
+    static func timestamp(
+        for date: Date,
+        timeZone: TimeZone = .autoupdatingCurrent
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ru_RU")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "dd.MM.yy, HH:mm"
+        return formatter.string(from: date)
     }
 }
 

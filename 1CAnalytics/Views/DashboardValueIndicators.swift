@@ -3,11 +3,12 @@ import SwiftUI
 struct ContractPlanFactView: View {
     let indicator: Indicator
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 22 * contentScale) {
             ForEach(indicator.contractPlanFactCategories) { category in
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12 * contentScale) {
                     Text(category.label)
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
@@ -54,10 +55,11 @@ private struct ContractPlanFactPeriodSummary: View {
     let planColor: Color
     let paidColor: Color
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10 * contentScale) {
+            HStack(alignment: .center, spacing: 8 * contentScale) {
                 Text(periodRows.period.title)
                     .font(.caption.weight(.bold))
                     .foregroundStyle(periodColor)
@@ -68,13 +70,13 @@ private struct ContractPlanFactPeriodSummary: View {
                     Text(completionRatio.formatted(.percent.precision(.fractionLength(0))))
                         .font(.caption.monospacedDigit().weight(.bold))
                         .foregroundStyle(periodColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8 * contentScale)
+                        .padding(.vertical, 4 * contentScale)
                         .background(periodColor.opacity(0.14), in: Capsule())
                 }
             }
 
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: 10 * contentScale) {
                 metric(
                     title: "План",
                     row: periodRows.planRow,
@@ -103,9 +105,9 @@ private struct ContractPlanFactPeriodSummary: View {
                         )
                 }
             }
-            .frame(height: 10)
+            .frame(height: 10 * contentScale)
         }
-        .padding(12)
+        .padding(12 * contentScale)
         .background(
             LinearGradient(
                 colors: [
@@ -129,11 +131,11 @@ private struct ContractPlanFactPeriodSummary: View {
     }
 
     private func metric(title: String, row: IndicatorRow?, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 3 * contentScale) {
+            HStack(spacing: 5 * contentScale) {
                 Circle()
                     .fill(color)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 6 * contentScale, height: 6 * contentScale)
 
                 Text(title)
                     .font(.caption2.weight(.semibold))
@@ -173,18 +175,19 @@ extension ContractPlanFactPeriod {
 struct CompactBarValues: View {
     let indicator: Indicator
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 132), spacing: 10)],
+            columns: [GridItem(.adaptive(minimum: 132 * contentScale), spacing: 10 * contentScale)],
             alignment: .leading,
-            spacing: 10
+            spacing: 10 * contentScale
         ) {
             ForEach(indicator.orderedRows) { row in
-                HStack(spacing: 8) {
+                HStack(spacing: 8 * contentScale) {
                     Circle()
                         .fill(indicator.chartColor(for: row, scheme: chartPaletteScheme))
-                        .frame(width: 8, height: 8)
+                        .frame(width: 8 * contentScale, height: 8 * contentScale)
 
                     Text(row.label)
                         .font(.caption)
@@ -213,20 +216,22 @@ struct OneValueDashboardContent: View {
     var reservesDetailButtonSpace = false
     @ScaledMetric(relativeTo: .largeTitle) private var valueFontSize: CGFloat = 38
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
         ZStack(alignment: .trailing) {
             Image(systemName: "waveform.path.ecg")
-                .font(.system(size: 92, weight: .bold))
+                .font(.system(size: 92 * contentScale, weight: .bold))
                 .foregroundStyle(paletteColor.opacity(0.07))
                 .offset(x: 8, y: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 18 * contentScale) {
                 HStack(alignment: .center) {
                     Text(indicator.title)
                         .font(.headline.weight(.bold))
-                        .lineLimit(2)
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                         .subtleTextShadow()
 
@@ -236,7 +241,7 @@ struct OneValueDashboardContent: View {
 
                 if indicator.showsAggregateValue {
                     Text(valueText)
-                        .font(.system(size: valueFontSize, weight: .bold, design: .rounded))
+                        .font(.system(size: valueFontSize * contentScale, weight: .bold, design: .rounded))
                         .foregroundStyle(indicator.valueColor)
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -267,4 +272,3 @@ struct OneValueDashboardContent: View {
         indicator.paletteColor(scheme: chartPaletteScheme)
     }
 }
-

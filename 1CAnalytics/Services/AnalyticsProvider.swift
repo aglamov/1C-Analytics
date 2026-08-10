@@ -6,6 +6,7 @@ protocol AnalyticsProvider {
     func fetchDashboard(
         onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
     ) async throws -> Dashboard
+    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection
 }
 
 extension AnalyticsProvider {
@@ -15,6 +16,10 @@ extension AnalyticsProvider {
         let dashboard = try await fetchDashboard()
         dashboard.sections.forEach(onSectionReceived)
         return dashboard
+    }
+
+    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+        throw AnalyticsError.invalidResponse
     }
 }
 
@@ -66,6 +71,13 @@ enum AnalyticsAPIContract {
         return sections.firstIndex {
             normalize($0.displayName) == normalizedTitle || normalize($0.queryValue) == normalizedTitle
         } ?? .max
+    }
+
+    static func section(matching sectionTitle: String) -> Section? {
+        let normalizedTitle = normalize(sectionTitle)
+        return sections.first {
+            normalize($0.displayName) == normalizedTitle || normalize($0.queryValue) == normalizedTitle
+        }
     }
 
     static func normalize(_ value: String) -> String {

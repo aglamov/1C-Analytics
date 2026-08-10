@@ -44,6 +44,57 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(rows, [[1, 2], [3, 4], [5]])
     }
 
+    func testSlotLayoutPacksMixedCardWidthsWithoutReordering() {
+        let indicators = ["a", "b", "c", "d"].map { id in
+            Indicator(
+                id: id,
+                title: id,
+                value: nil,
+                unit: nil,
+                chartType: .oneValue,
+                source: nil,
+                rows: []
+            )
+        }
+        let items = [
+            DashboardIndicatorLayoutItem(indicator: indicators[0], width: .half),
+            DashboardIndicatorLayoutItem(indicator: indicators[1], width: .full),
+            DashboardIndicatorLayoutItem(indicator: indicators[2], width: .half),
+            DashboardIndicatorLayoutItem(indicator: indicators[3], width: .full)
+        ]
+
+        let compactRows = DashboardGridLayoutPolicy.rows(for: items, slotCapacity: 2)
+        XCTAssertEqual(compactRows.map { $0.items.map(\.id) }, [["a"], ["b"], ["c"], ["d"]])
+
+        let regularRows = DashboardGridLayoutPolicy.rows(for: items, slotCapacity: 4)
+        XCTAssertEqual(regularRows.map { $0.items.map(\.id) }, [["a", "b", "c"], ["d"]])
+    }
+
+    func testSlotMetricsNeverExceedAvailableDashboardWidth() {
+        let compact = DashboardSlotMetrics(
+            availableWidth: 361,
+            slotCapacity: 2,
+            spacing: 16
+        )
+        XCTAssertEqual(compact.occupiedWidth(spans: [2]), 361, accuracy: 0.001)
+        XCTAssertEqual(compact.occupiedWidth(spans: [1, 1]), 361, accuracy: 0.001)
+
+        let regular = DashboardSlotMetrics(
+            availableWidth: 744,
+            slotCapacity: 4,
+            spacing: 16
+        )
+        XCTAssertLessThanOrEqual(regular.occupiedWidth(spans: [1, 2]), 744)
+        XCTAssertEqual(regular.occupiedWidth(spans: [2, 2]), 744, accuracy: 0.001)
+    }
+
+    func testDashboardScaleIsClampedAndRoundedToFivePercentSteps() {
+        XCTAssertEqual(DashboardContentScalePolicy.normalized(0.5), 0.8, accuracy: 0.000_001)
+        XCTAssertEqual(DashboardContentScalePolicy.normalized(1.07), 1.05, accuracy: 0.000_001)
+        XCTAssertEqual(DashboardContentScalePolicy.normalized(1.08), 1.10, accuracy: 0.000_001)
+        XCTAssertEqual(DashboardContentScalePolicy.normalized(1.8), 1.3, accuracy: 0.000_001)
+    }
+
     func testIPhoneDashboardKeepsOneIndicatorPerRow() {
         let rows = DashboardGridLayoutPolicy.rows(for: [1, 2, 3], isPad: false)
 
@@ -131,6 +182,76 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testTrendPointValueLabelsFollowContractPriority() {
+        XCTAssertFalse(
+            TrendPointValueLabelPolicy.isVisible(
+                rowMatchesSelection: true,
+                showValueLabels: false,
+                alwaysShowPointValues: true
+            )
+        )
+        XCTAssertFalse(
+            TrendPointValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                showValueLabels: true,
+                alwaysShowPointValues: false
+            )
+        )
+        XCTAssertTrue(
+            TrendPointValueLabelPolicy.isVisible(
+                rowMatchesSelection: true,
+                showValueLabels: nil,
+                alwaysShowPointValues: false
+            )
+        )
+        XCTAssertTrue(
+            TrendPointValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                showValueLabels: true,
+                alwaysShowPointValues: true
+            )
+        )
+        XCTAssertTrue(
+            TrendPointValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                showValueLabels: nil,
+                alwaysShowPointValues: nil
+            )
+        )
+    }
+
+    func testSelectedValueLabelGrowsSlightlyButStaysCompact() {
+        for usesContrastingForeground in [false, true] {
+            let idle = ChartValueLabelLayoutPolicy.metrics(
+                isSelected: false,
+                usesContrastingForeground: usesContrastingForeground
+            )
+            let selected = ChartValueLabelLayoutPolicy.metrics(
+                isSelected: true,
+                usesContrastingForeground: usesContrastingForeground
+            )
+
+            XCTAssertGreaterThan(selected.horizontalPadding, idle.horizontalPadding)
+            XCTAssertGreaterThan(selected.verticalPadding, idle.verticalPadding)
+            XCTAssertLessThan(selected.maximumTextWidth, idle.maximumTextWidth)
+            XCTAssertLessThanOrEqual(selected.maximumTextWidth, 96)
+        }
+    }
+
+    func testSynchronizationTimestampHasStableCompactFormat() throws {
+        let date = try XCTUnwrap(
+            ISO8601DateFormatter().date(from: "2026-08-10T08:13:00Z")
+        )
+
+        XCTAssertEqual(
+            DashboardSynchronizationTextPolicy.timestamp(
+                for: date,
+                timeZone: try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+            ),
+            "10.08.26, 08:13"
+        )
+    }
+
     func testVerticalBarsReservePlotSpaceForValueLabels() {
         let domain = VerticalBarValueLabelScale.domain(for: [40, 100, 75])
 
@@ -179,6 +300,15 @@ final class ReleaseReadinessTests: XCTestCase {
 
     }
 
+    func testSelectedDonutLabelDoesNotShrinkPlotArea() {
+        let availableSize = CGSize(width: 148, height: 260)
+
+        XCTAssertEqual(
+            DonutPlotLayoutPolicy.plotSize(in: availableSize),
+            availableSize
+        )
+    }
+
     func testSelectedTinyDonutSliceHasAStableLabelAngle() throws {
         let rows = [
             IndicatorRow(id: "large", label: "Большой", value: 999, series: nil, sortOrder: 0),
@@ -199,25 +329,17 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertNil(DonutSelectionGeometryPolicy.middleAngle(for: "missing", in: rows))
     }
 
-    func testPhoneChartsFitAvailableWidthWhileIPadCanScrollDenseContent() {
+    func testChartsAlwaysFitAvailableWidth() {
         let compactWidth = ChartPresentationPolicy.contentWidth(
-            availableWidth: 320,
-            categoryCount: 8,
-            seriesCount: 2,
-            longestValueCharacterCount: 8,
-            style: .groupedBar,
-            allowsHorizontalOverflow: false
+            availableWidth: 320
         )
         let denseWidth = ChartPresentationPolicy.contentWidth(
-            availableWidth: 320,
-            categoryCount: 8,
-            seriesCount: 2,
-            longestValueCharacterCount: 8,
-            style: .groupedBar
+            availableWidth: 320
         )
 
         XCTAssertEqual(compactWidth, 320)
-        XCTAssertGreaterThan(denseWidth, 600)
+        XCTAssertEqual(denseWidth, 320)
+        XCTAssertEqual(ChartPresentationPolicy.contentWidth(availableWidth: -20), 0)
     }
 
     func testStackedBarLabelsOnlyAppearWhenSegmentCanContainThem() {
@@ -435,15 +557,18 @@ final class ReleaseReadinessTests: XCTestCase {
 
         let store = DashboardLayoutStore(defaults: defaults, storageKey: storageKey)
         store.moveIndicator(in: section, draggedID: "a", over: "b")
+        store.setWidth(.half, for: section.indicators[0])
 
         let restoredStore = DashboardLayoutStore(defaults: defaults, storageKey: storageKey)
         XCTAssertEqual(restoredStore.orderedIndicators(in: section).map(\.id), ["b", "a", "c"])
+        XCTAssertEqual(restoredStore.width(for: section.indicators[0]), .half)
 
         restoredStore.reset()
 
         let resetStore = DashboardLayoutStore(defaults: defaults, storageKey: storageKey)
         XCTAssertFalse(resetStore.hasCustomLayout)
         XCTAssertEqual(resetStore.orderedIndicators(in: section).map(\.id), ["a", "b", "c"])
+        XCTAssertEqual(resetStore.width(for: section.indicators[0]), .full)
     }
 
     func testAuthorizationURLContainsFreshState() throws {
@@ -518,6 +643,73 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(request.timeoutInterval, 60)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Test-Authorization"), "attached")
+
+        let extendedRequest = try provider.makeRequest(
+            for: AnalyticsAPIContract.sections[3],
+            isExtended: true
+        )
+        let extendedItems = try XCTUnwrap(
+            URLComponents(url: extendedRequest.url!, resolvingAgainstBaseURL: false)?.queryItems
+        )
+        XCTAssertEqual(
+            extendedItems.first { $0.name == "section" }?.value,
+            "Приемная_кампания_Расширенный"
+        )
+    }
+
+    func testExtendedContractAndPlanFactProgressUseContractDefaults() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Финансы","hasExtended":true,"values":[{"name":"План-Факт (контракт), тыс. руб","type":"PlanFactProgress","values":[{"group":"БАК","subgroup":[{"group":"Текущий год","subgroup":[{"name":"План","value":100},{"name":"Опл.","value":80}]}]}]}]}]}"#.utf8
+        )
+
+        let section = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .sections
+                .first
+        )
+        let indicator = try XCTUnwrap(section.indicators.first)
+
+        XCTAssertTrue(section.hasExtended)
+        XCTAssertEqual(indicator.chartType, .horizontalBar)
+        XCTAssertTrue(indicator.usesContractPlanFactPresentation)
+        XCTAssertEqual(indicator.isExplicitPlanFactProgress, true)
+        XCTAssertFalse(indicator.showsAggregateValue)
+        XCTAssertFalse(indicator.showsLegend)
+        XCTAssertFalse(indicator.showsAggregateValueInHeader)
+        XCTAssertFalse(indicator.showsPlanFactPresentationLegend)
+    }
+
+    func testExplicitPlanFactProgressCanEnableTotalAndLegend() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Финансы","values":[{"name":"Исполнение","type":"PlanFactProgress","showTotal":true,"showLegend":true,"values":[{"group":"БАК","subgroup":[{"group":"Текущий год","subgroup":[{"name":"План","value":100},{"name":"Опл.","value":80}]}]}]}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertTrue(indicator.usesContractPlanFactPresentation)
+        XCTAssertTrue(indicator.showsAggregateValue)
+        XCTAssertTrue(indicator.showsLegend)
+        XCTAssertTrue(indicator.showsAggregateValueInHeader)
+        XCTAssertTrue(indicator.showsPlanFactPresentationLegend)
+    }
+
+    func testTrendPointValueAliasesDecodeWithCanonicalPriority() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Тренды","values":[{"name":"Канонический","type":"LineMark","alwaysShowPointValues":false,"showPointValues":true,"values":[{"group":"2025","value":1}]},{"name":"Первый алиас","type":"LineMark","showPointValues":false,"values":[{"group":"2025","value":1}]},{"name":"Второй алиас","type":"LineMark","displayPointValues":true,"values":[{"group":"2025","value":1}]},{"name":"По умолчанию","type":"LineMark","values":[{"group":"2025","value":1}]}]}]}"#.utf8
+        )
+
+        let indicators = try JSONDecoder()
+            .decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+
+        XCTAssertEqual(indicators.map(\.alwaysShowPointValues), [false, false, true, nil])
     }
 
     func testResponseMappingUsesFetchTimeAndCalculatesSubgroupSummary() throws {
@@ -605,6 +797,9 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertTrue(indicator.usesContractPlanFactPresentation)
+        XCTAssertEqual(indicator.isExplicitPlanFactProgress, false)
+        XCTAssertFalse(indicator.showsAggregateValueInHeader)
+        XCTAssertTrue(indicator.showsPlanFactPresentationLegend)
         XCTAssertEqual(indicator.contractPlanFactCategories.map(\.label), ["БАК"])
         XCTAssertEqual(
             indicator.contractPlanFactCategories[0].periods.map(\.period),
@@ -1622,6 +1817,69 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(viewModel.dashboard, dashboard)
         XCTAssertTrue(viewModel.refreshErrorMessage?.contains("сохранить") == true)
     }
+
+    func testExtendedIndicatorsStayInMemoryAndRefreshWithDashboard() async throws {
+        let baseIndicator = Indicator(
+            id: "финансы-base",
+            title: "Основной",
+            value: nil,
+            unit: nil,
+            chartType: .bar,
+            source: nil,
+            rows: []
+        )
+        let extendedIndicator = Indicator(
+            id: "финансы-extended-extra",
+            title: "Дополнительный",
+            value: nil,
+            unit: nil,
+            chartType: .bar,
+            source: nil,
+            rows: []
+        )
+        let baseSection = DashboardSection(
+            id: "финансы",
+            title: "Финансы",
+            indicators: [baseIndicator],
+            hasExtended: true
+        )
+        let baseDashboard = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: Date(),
+            sections: [baseSection]
+        )
+        let provider = ExtendedDashboardProvider(
+            dashboard: baseDashboard,
+            extendedSection: DashboardSection(
+                id: "финансы",
+                title: "Финансы",
+                indicators: [extendedIndicator]
+            )
+        )
+        let cache = RecordingDashboardCache()
+        let viewModel = DashboardViewModel(provider: provider, cache: cache)
+
+        await viewModel.load()
+        XCTAssertEqual(viewModel.dashboard?.indicators.map(\.id), [baseIndicator.id])
+
+        let visibleSection = try XCTUnwrap(viewModel.dashboard?.sections.first)
+        await viewModel.loadExtendedIndicators(for: visibleSection)
+        XCTAssertEqual(
+            viewModel.dashboard?.indicators.map(\.id),
+            [baseIndicator.id, extendedIndicator.id]
+        )
+        XCTAssertEqual(viewModel.extendedState(for: baseSection.id), .loaded)
+        XCTAssertTrue(cache.savedDashboards.allSatisfy { $0.indicators.map(\.id) == [baseIndicator.id] })
+
+        await viewModel.refresh()
+        XCTAssertEqual(provider.extendedRequestCount, 2)
+        XCTAssertEqual(
+            viewModel.dashboard?.indicators.map(\.id),
+            [baseIndicator.id, extendedIndicator.id]
+        )
+        XCTAssertTrue(cache.savedDashboards.allSatisfy { $0.indicators.map(\.id) == [baseIndicator.id] })
+    }
 }
 
 @MainActor
@@ -1731,6 +1989,38 @@ private struct StaticDashboardProvider: AnalyticsProvider {
 
     func fetchDashboard() async throws -> Dashboard {
         dashboard
+    }
+}
+
+@MainActor
+private final class ExtendedDashboardProvider: AnalyticsProvider {
+    let dashboard: Dashboard
+    let extendedSection: DashboardSection
+    private(set) var extendedRequestCount = 0
+
+    init(dashboard: Dashboard, extendedSection: DashboardSection) {
+        self.dashboard = dashboard
+        self.extendedSection = extendedSection
+    }
+
+    func fetchDashboard() async throws -> Dashboard {
+        dashboard
+    }
+
+    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+        extendedRequestCount += 1
+        return extendedSection
+    }
+}
+
+@MainActor
+private final class RecordingDashboardCache: DashboardCaching {
+    private(set) var savedDashboards: [Dashboard] = []
+
+    func loadDashboard() throws -> Dashboard? { nil }
+
+    func save(_ dashboard: Dashboard) throws {
+        savedDashboards.append(dashboard)
     }
 }
 

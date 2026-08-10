@@ -84,19 +84,19 @@ extension AnalyticsChart {
 
     var interactiveLegend: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: legendColumnMinimumWidth), spacing: 8)],
+            columns: [GridItem(.adaptive(minimum: legendColumnMinimumWidth), spacing: 8 * dashboardContentScale)],
             alignment: .leading,
-            spacing: 8
+            spacing: 8 * dashboardContentScale
         ) {
             ForEach(displayedLegendRows) { row in
                 Button {
                     toggleLegendSelection(row)
                 } label: {
-                    HStack(alignment: .top, spacing: 6) {
+                    HStack(alignment: .top, spacing: 6 * dashboardContentScale) {
                         RoundedRectangle(cornerRadius: 4)
                             .fill(chartColor(for: row).opacity(legendRowMatchesSelection(row) ? 1 : 0.72))
-                            .frame(width: 7, height: 7)
-                            .padding(.top, 4)
+                            .frame(width: 7 * dashboardContentScale, height: 7 * dashboardContentScale)
+                            .padding(.top, 4 * dashboardContentScale)
 
                         Text(legendTitle(for: row))
                             .font(legendRowMatchesSelection(row) ? .caption.weight(.semibold) : .caption2.weight(.semibold))
@@ -114,8 +114,8 @@ extension AnalyticsChart {
                                 .fixedSize(horizontal: true, vertical: false)
                         }
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 9 * dashboardContentScale)
+                    .padding(.vertical, 7 * dashboardContentScale)
                     .frame(minHeight: legendItemMinimumHeight)
                     .background {
                         legendBackground(for: row)
@@ -161,10 +161,10 @@ extension AnalyticsChart {
 
     var legendItemMinimumHeight: CGFloat {
         if isDonutChart {
-            return 36
+            return 36 * dashboardContentScale
         }
 
-        return indicator.usesDenseEnrollmentCompositionPresentation ? 38 : 28
+        return (indicator.usesDenseEnrollmentCompositionPresentation ? 38 : 28) * dashboardContentScale
     }
 
     var legendRows: [IndicatorRow] {
@@ -192,14 +192,14 @@ extension AnalyticsChart {
     var legendColumnMinimumWidth: CGFloat {
         if indicator.usesDenseEnrollmentCompositionPresentation
             || indicator.usesCitizenshipCompositionPresentation {
-            return 140
+            return 140 * dashboardContentScale
         }
 
         return switch indicator.chartType {
         case .donut, .percentDonut:
-            142
+            142 * dashboardContentScale
         default:
-            96
+            96 * dashboardContentScale
         }
     }
 

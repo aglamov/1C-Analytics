@@ -18,6 +18,7 @@ private struct ChartPalettePicker: View {
 
 struct DashboardSettingsView: View {
     @Binding var chartPalette: ChartPaletteScheme
+    @Binding var contentScale: Double
     @ObservedObject var layoutStore: DashboardLayoutStore
     let onSignOut: () -> Void
     @State private var showsLayoutResetConfirmation = false
@@ -34,8 +35,30 @@ struct DashboardSettingsView: View {
                 .padding(.vertical, 4)
             }
 
+
+            Section("Масштаб графиков") {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Размер содержимого")
+                        Spacer()
+                        Text("\(Int((contentScale * 100).rounded()))%")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    Slider(
+                        value: $contentScale,
+                        in: DashboardContentScalePolicy.range,
+                        step: DashboardContentScalePolicy.step
+                    )
+                    .accessibilityLabel("Масштаб графиков")
+                    .accessibilityValue("\(Int((contentScale * 100).rounded())) процентов")
+                }
+                .padding(.vertical, 4)
+            }
+
             Section("Предпросмотр") {
-                ChartThemePreview(palette: chartPalette)
+                ChartThemePreview(palette: chartPalette, contentScale: contentScale)
             }
 
             Section {
@@ -48,7 +71,7 @@ struct DashboardSettingsView: View {
             } header: {
                 Text("Расположение")
             } footer: {
-                Text("Графики вернутся к порядку, полученному от сервера.")
+                Text("Графики вернутся к порядку и размерам, полученным от сервера.")
             }
 
             Section {
@@ -79,6 +102,7 @@ struct DashboardSettingsView: View {
 
 private struct ChartThemePreview: View {
     let palette: ChartPaletteScheme
+    let contentScale: Double
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -101,10 +125,12 @@ private struct ChartThemePreview: View {
                 usesCardBackground: false,
                 showsLegend: false
             )
-            .frame(height: 180)
+            .frame(height: 180 * CGFloat(contentScale))
         }
         .padding(.vertical, 6)
         .environment(\.chartPaletteScheme, palette)
+        .environment(\.dashboardContentScale, CGFloat(contentScale))
+        .dashboardScaledTypography()
         .animation(.easeInOut(duration: 0.25), value: palette)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Предпросмотр темы \(palette.accessibilityTitle)")
@@ -126,4 +152,3 @@ private struct ChartThemePreview: View {
         )
     }
 }
-

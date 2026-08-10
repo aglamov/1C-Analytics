@@ -4,15 +4,16 @@ struct IndicatorDashboardCard: View {
     let indicator: Indicator
     let animationTrigger: String
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16 * contentScale) {
             cardContent
         }
-        .padding(18)
+        .padding(18 * contentScale)
         .frame(
             maxWidth: .infinity,
-            minHeight: indicator.chartType == .oneValue ? 164 : nil,
+            minHeight: indicator.chartType == .oneValue ? 164 * contentScale : nil,
             maxHeight: .infinity,
             alignment: .topLeading
         )
@@ -31,6 +32,7 @@ struct IndicatorDashboardCard: View {
                     .accessibilityHidden(true)
             }
         }
+        .dashboardScaledTypography()
     }
 
     private var paletteColor: Color {
@@ -72,6 +74,7 @@ struct IndicatorDashboardCard: View {
         case .geoMap:
             GeoMapIndicatorView(indicator: indicator)
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: chartHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case .compactBar:
             VStack(alignment: .leading, spacing: 12) {
@@ -105,6 +108,10 @@ struct IndicatorDashboardCard: View {
     }
 
     private var chartHeight: CGFloat {
+        unscaledChartHeight * contentScale
+    }
+
+    private var unscaledChartHeight: CGFloat {
         let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
 
         if indicator.usesMixedUnitPersonnelPresentation {
@@ -150,7 +157,8 @@ struct IndicatorDashboardCard: View {
             HStack(alignment: .top) {
                 Text(indicator.title)
                     .font(.headline)
-                    .lineLimit(2)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .subtleTextShadow()
 
@@ -158,7 +166,7 @@ struct IndicatorDashboardCard: View {
             }
             .padding(.trailing, indicator.supportsDetail ? 42 : 0)
 
-            if indicator.showsAggregateValue && !indicator.usesContractPlanFactPresentation {
+            if indicator.showsAggregateValueInHeader {
                 Text(valueText)
                     .font(.system(.title2, design: .default).weight(.semibold))
                     .foregroundStyle(.primary)
@@ -182,4 +190,3 @@ struct IndicatorDashboardCard: View {
     }
 
 }
-

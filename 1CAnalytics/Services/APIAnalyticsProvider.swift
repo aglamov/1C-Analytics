@@ -83,7 +83,31 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         return Self.makeDashboard(sections: sections)
     }
 
-    func makeRequest(for section: AnalyticsAPIContract.Section) throws -> URLRequest {
+    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+        let request: URLRequest
+        do {
+            request = try makeRequest(for: section, isExtended: true)
+        } catch AuthenticationError.missingCredentials {
+            throw AnalyticsError.authenticationRequired
+        }
+
+        let (data, response) = try await urlSession.data(for: request)
+        try Self.validate(response)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
+        return try analyticsResponse.dashboardSection(
+            preferredTitle: section.displayName,
+            fetchedAt: Date(),
+            indicatorIDNamespace: "extended"
+        )
+    }
+
+    func makeRequest(
+        for section: AnalyticsAPIContract.Section,
+        isExtended: Bool = false
+    ) throws -> URLRequest {
         guard var components = URLComponents(
             url: configuration.analyticsBaseURL,
             resolvingAgainstBaseURL: false
@@ -95,7 +119,10 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         queryItems.removeAll { $0.name == "id" || $0.name == "section" }
         queryItems.append(contentsOf: [
             URLQueryItem(name: "id", value: AnalyticsAPIContract.requestID),
-            URLQueryItem(name: "section", value: section.queryValue)
+            URLQueryItem(
+                name: "section",
+                value: isExtended ? "\(section.queryValue)_Расширенный" : section.queryValue
+            )
         ])
         components.queryItems = queryItems
 
@@ -283,7 +310,11 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
         )
     }
 
-    func dashboardSection(preferredTitle: String, fetchedAt: Date = Date()) throws -> DashboardSection {
+    func dashboardSection(
+        preferredTitle: String,
+        fetchedAt: Date = Date(),
+        indicatorIDNamespace: String? = nil
+    ) throws -> DashboardSection {
         guard !sections.isEmpty else {
             throw AnalyticsError.invalidResponse
         }
@@ -297,7 +328,12 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
             ? preferredTitle
             : rawTitle
         let sectionID = title.stableID.isEmpty ? preferredTitle.stableID : title.stableID
-        return section.toDashboardSection(title: title, sectionID: sectionID, fetchedAt: fetchedAt)
+        return section.toDashboardSection(
+            title: title,
+            sectionID: sectionID,
+            fetchedAt: fetchedAt,
+            indicatorIDNamespace: indicatorIDNamespace
+        )
     }
 
     private static func uniqueID(_ baseID: String, counts: inout [String: Int]) -> String {
@@ -310,23 +346,31 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
 struct AnalyticsAPISection: Decodable, Sendable {
     let name: String
     let values: [AnalyticsAPIIndicator]
+    let hasExtended: Bool
 
     private enum CodingKeys: String, CodingKey {
         case name
         case values
+        case hasExtended
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decodeFlexibleString(forKey: .name) ?? ""
         values = try container.decodeFlexibleArray(AnalyticsAPIIndicator.self, forKey: .values)
+        hasExtended = try container.decodeFlexibleBool(forKey: .hasExtended) ?? false
     }
 
     var normalizedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func toDashboardSection(title: String, sectionID: String, fetchedAt: Date?) -> DashboardSection {
+    func toDashboardSection(
+        title: String,
+        sectionID: String,
+        fetchedAt: Date?,
+        indicatorIDNamespace: String? = nil
+    ) -> DashboardSection {
         var layoutIDCounts = [String: Int]()
         let indicators = values.enumerated().map { index, indicator in
             let baseLayoutID = indicator.layoutIdentifier(index: index)
@@ -335,14 +379,17 @@ struct AnalyticsAPISection: Decodable, Sendable {
             let uniqueLayoutID = occurrence == 0
                 ? baseLayoutID
                 : "\(baseLayoutID)#\(occurrence + 1)"
-            return indicator.toIndicator(layoutID: uniqueLayoutID, sectionID: sectionID)
+            let namespacedLayoutID = indicatorIDNamespace.map { "\($0)-\(uniqueLayoutID)" }
+                ?? uniqueLayoutID
+            return indicator.toIndicator(layoutID: namespacedLayoutID, sectionID: sectionID)
         }
 
         return DashboardSection(
             id: sectionID,
             title: title,
             indicators: indicators,
-            fetchedAt: fetchedAt
+            fetchedAt: fetchedAt,
+            hasExtended: hasExtended
         )
     }
 }
@@ -362,6 +409,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let showValueLabels: Bool?
+    let alwaysShowPointValues: Bool?
     let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
@@ -370,6 +418,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let barLayout: BarLayout?
     let lineStyle: ChartLineStyle?
     let forecastFromIndex: Int?
+    let isExplicitPlanFactProgress: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -392,6 +441,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case showValueLabels
         case showLabels
         case displayValueLabels
+        case alwaysShowPointValues
+        case showPointValues
+        case displayPointValues
         case showYAxisLabels
         case showYAxis
         case showScale
@@ -422,6 +474,8 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         name = try container.decodeFlexibleString(forKey: .name) ?? ""
         values = try container.decodeFlexibleArray(AnalyticsAPIValue.self, forKey: .values)
         type = try container.decodeIfPresent(ChartType.self, forKey: .type) ?? .bar
+        isExplicitPlanFactProgress = try container.decodeFlexibleString(forKey: .type)
+            == "PlanFactProgress"
         value = try container.decodeFlexibleDouble(forKey: .value)
         valueMax = try container.decodeFlexibleDouble(forKey: .valueMax)
         unit = try container.decodeFlexibleString(forKey: .unit)
@@ -437,6 +491,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         showValueLabels = try container.decodeFlexibleBool(forKey: .showValueLabels)
             ?? container.decodeFlexibleBool(forKey: .showLabels)
             ?? container.decodeFlexibleBool(forKey: .displayValueLabels)
+        alwaysShowPointValues = try container.decodeFlexibleBool(forKey: .alwaysShowPointValues)
+            ?? container.decodeFlexibleBool(forKey: .showPointValues)
+            ?? container.decodeFlexibleBool(forKey: .displayPointValues)
         showYAxisLabels = try container.decodeFlexibleBool(forKey: .showYAxisLabels)
             ?? container.decodeFlexibleBool(forKey: .showYAxis)
             ?? container.decodeFlexibleBool(forKey: .showScale)
@@ -553,10 +610,11 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             source: "DGU_APP_Mobile_Client/analitycs",
             colorGraph: colorGraph ?? totalRow?.colorGraph ?? primaryValue?.colorGraph,
             colorValue: colorValue ?? totalRow?.colorValue ?? primaryValue?.colorValue,
-            showLegend: showLegend,
-            showTotal: showTotal,
+            showLegend: isExplicitPlanFactProgress ? (showLegend ?? false) : showLegend,
+            showTotal: isExplicitPlanFactProgress ? (showTotal ?? false) : showTotal,
             showDetails: showDetails,
             showValueLabels: showValueLabels,
+            alwaysShowPointValues: alwaysShowPointValues,
             showYAxisLabels: showYAxisLabels,
             detailsOrientation: detailsOrientation,
             widthPercent: widthPercent,
@@ -565,6 +623,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             barLayout: barLayout,
             lineStyle: lineStyle,
             forecastFromIndex: forecastFromIndex,
+            isExplicitPlanFactProgress: isExplicitPlanFactProgress,
             rows: rows
         )
     }

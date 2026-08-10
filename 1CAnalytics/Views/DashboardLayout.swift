@@ -21,11 +21,40 @@ enum DashboardRoute: Hashable {
     case indicator(Indicator.ID)
 }
 
+enum DashboardCardWidth: Int, Codable, CaseIterable, Sendable {
+    case half = 50
+    case full = 100
+
+    init(percent: Double) {
+        self = percent <= 50 ? .half : .full
+    }
+
+    var slotSpan: Int {
+        self == .half ? 1 : 2
+    }
+
+    var title: String {
+        "\(rawValue)%"
+    }
+
+    var toggled: DashboardCardWidth {
+        self == .half ? .full : .half
+    }
+}
+
+struct DashboardIndicatorLayoutItem: Identifiable {
+    let indicator: Indicator
+    let width: DashboardCardWidth
+
+    var id: Indicator.ID { indicator.id }
+}
+
 struct DashboardIndicatorLayoutRow: Identifiable {
-    let indicators: [Indicator]
+    let items: [DashboardIndicatorLayoutItem]
+    let slotCapacity: Int
 
     var id: String {
-        indicators.map(\.id).joined(separator: "|")
+        items.map(\.id).joined(separator: "|")
     }
 }
 
@@ -38,12 +67,128 @@ enum DashboardGridLayoutPolicy {
             return Array(elements[startIndex..<endIndex])
         }
     }
+
+    static func rows(
+        for items: [DashboardIndicatorLayoutItem],
+        slotCapacity: Int
+    ) -> [DashboardIndicatorLayoutRow] {
+        let capacity = max(slotCapacity, 2)
+        var rows: [DashboardIndicatorLayoutRow] = []
+        var currentItems: [DashboardIndicatorLayoutItem] = []
+        var usedSlots = 0
+
+        for item in items {
+            let span = min(item.width.slotSpan, capacity)
+            if !currentItems.isEmpty, usedSlots + span > capacity {
+                rows.append(DashboardIndicatorLayoutRow(items: currentItems, slotCapacity: capacity))
+                currentItems = []
+                usedSlots = 0
+            }
+            currentItems.append(item)
+            usedSlots += span
+        }
+
+        if !currentItems.isEmpty {
+            rows.append(DashboardIndicatorLayoutRow(items: currentItems, slotCapacity: capacity))
+        }
+        return rows
+    }
+}
+
+struct DashboardSlotMetrics {
+    let availableWidth: CGFloat
+    let slotCapacity: Int
+    let spacing: CGFloat
+
+    private var capacity: Int {
+        max(slotCapacity, 1)
+    }
+
+    var slotWidth: CGFloat {
+        max(
+            (availableWidth - spacing * CGFloat(capacity - 1)) / CGFloat(capacity),
+            0
+        )
+    }
+
+    func itemWidth(span: Int) -> CGFloat {
+        let resolvedSpan = min(max(span, 1), capacity)
+        return slotWidth * CGFloat(resolvedSpan)
+            + spacing * CGFloat(resolvedSpan - 1)
+    }
+
+    func occupiedWidth(spans: [Int]) -> CGFloat {
+        guard !spans.isEmpty else {
+            return 0
+        }
+
+        return spans.reduce(0) { $0 + itemWidth(span: $1) }
+            + spacing * CGFloat(spans.count - 1)
+    }
+}
+
+struct DashboardSlotRowLayout: Layout {
+    let slotCapacity: Int
+    let spans: [Int]
+    let spacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let availableWidth = max(proposal.width ?? 0, 0)
+        let metrics = DashboardSlotMetrics(
+            availableWidth: availableWidth,
+            slotCapacity: slotCapacity,
+            spacing: spacing
+        )
+        let height = zip(subviews, resolvedSpans(for: subviews.count))
+            .map { subview, span in
+                subview.sizeThatFits(
+                    ProposedViewSize(width: metrics.itemWidth(span: span), height: nil)
+                ).height
+            }
+            .max() ?? 0
+
+        return CGSize(width: availableWidth, height: height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let metrics = DashboardSlotMetrics(
+            availableWidth: bounds.width,
+            slotCapacity: slotCapacity,
+            spacing: spacing
+        )
+        var x = bounds.minX
+
+        for (subview, span) in zip(subviews, resolvedSpans(for: subviews.count)) {
+            let width = metrics.itemWidth(span: span)
+            subview.place(
+                at: CGPoint(x: x, y: bounds.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: width, height: bounds.height)
+            )
+            x += width + spacing
+        }
+    }
+
+    private func resolvedSpans(for count: Int) -> [Int] {
+        (0..<count).map { index in
+            index < spans.count ? spans[index] : 1
+        }
+    }
 }
 
 final class DashboardLayoutStore: ObservableObject {
-    static let defaultStorageKey = "dashboardIndicatorOrder.v1"
+    static let defaultStorageKey = "dashboardIndicatorLayout.v2"
 
-    @Published private var orderBySection: [DashboardSection.ID: [Indicator.ID]]
+    @Published private var storedLayout: StoredDashboardLayout
 
     private let defaults: UserDefaults
     private let storageKey: String
@@ -55,16 +200,9 @@ final class DashboardLayoutStore: ObservableObject {
         self.defaults = defaults
         self.storageKey = storageKey
 
-        guard let data = defaults.data(forKey: storageKey),
-              let storedOrder = try? JSONDecoder().decode(
-                  [DashboardSection.ID: [Indicator.ID]].self,
-                  from: data
-              ) else {
-            orderBySection = [:]
-            return
-        }
-
-        orderBySection = storedOrder
+        storedLayout = defaults.data(forKey: storageKey)
+            .flatMap { try? JSONDecoder().decode(StoredDashboardLayout.self, from: $0) }
+            ?? StoredDashboardLayout()
     }
 
     func orderedIndicators(in section: DashboardSection) -> [Indicator] {
@@ -72,9 +210,23 @@ final class DashboardLayoutStore: ObservableObject {
             uniqueKeysWithValues: section.indicators.map { ($0.id, $0) }
         )
         return Self.reconciledOrder(
-            savedOrder: orderBySection[section.id] ?? [],
+            savedOrder: storedLayout.orderBySection[section.id] ?? [],
             availableIDs: section.indicators.map(\.id)
         ).compactMap { indicatorByID[$0] }
+    }
+
+    func width(for indicator: Indicator) -> DashboardCardWidth {
+        storedLayout.widthByIndicatorID[indicator.id]
+            ?? DashboardCardWidth(percent: indicator.resolvedWidthPercent)
+    }
+
+    func setWidth(_ width: DashboardCardWidth, for indicator: Indicator) {
+        storedLayout.widthByIndicatorID[indicator.id] = width
+        persist()
+    }
+
+    func toggleWidth(for indicator: Indicator) {
+        setWidth(width(for: indicator).toggled, for: indicator)
     }
 
     func moveIndicator(
@@ -87,7 +239,7 @@ final class DashboardLayoutStore: ObservableObject {
         }
 
         var order = Self.reconciledOrder(
-            savedOrder: orderBySection[section.id] ?? [],
+            savedOrder: storedLayout.orderBySection[section.id] ?? [],
             availableIDs: section.indicators.map(\.id)
         )
         guard let sourceIndex = order.firstIndex(of: draggedID),
@@ -99,7 +251,7 @@ final class DashboardLayoutStore: ObservableObject {
             fromOffsets: IndexSet(integer: sourceIndex),
             toOffset: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
         )
-        orderBySection[section.id] = order
+        storedLayout.orderBySection[section.id] = order
         persist()
     }
 
@@ -119,20 +271,25 @@ final class DashboardLayoutStore: ObservableObject {
     }
 
     var hasCustomLayout: Bool {
-        !orderBySection.isEmpty
+        !storedLayout.orderBySection.isEmpty || !storedLayout.widthByIndicatorID.isEmpty
     }
 
     func reset() {
-        orderBySection = [:]
+        storedLayout = StoredDashboardLayout()
         defaults.removeObject(forKey: storageKey)
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(orderBySection) else {
+        guard let data = try? JSONEncoder().encode(storedLayout) else {
             return
         }
         defaults.set(data, forKey: storageKey)
     }
+}
+
+private struct StoredDashboardLayout: Codable {
+    var orderBySection: [DashboardSection.ID: [Indicator.ID]] = [:]
+    var widthByIndicatorID: [Indicator.ID: DashboardCardWidth] = [:]
 }
 
 struct DashboardDraggedIndicator: Equatable {
@@ -181,4 +338,3 @@ struct DashboardIndicatorDropDelegate: DropDelegate {
         return true
     }
 }
-

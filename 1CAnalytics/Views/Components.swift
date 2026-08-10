@@ -133,7 +133,9 @@ struct IndicatorCard: View {
                 Text(indicator.title)
                     .font(.headline)
                     .foregroundStyle(.primary)
-                    .lineLimit(2)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if indicator.showsAggregateValue {
                     Text(valueText)
@@ -188,10 +190,11 @@ struct IndicatorHero: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(indicator.title)
                 .font(.title2.weight(.bold))
-                .lineLimit(2)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
 
-            if indicator.showsAggregateValue,
-               !indicator.usesContractPlanFactPresentation,
+            if indicator.showsAggregateValueInHeader,
                let value = indicator.value {
                 Text(indicator.formattedValueWithUnit(value))
                     .font(.system(.largeTitle, design: .default).weight(.semibold))

@@ -5,6 +5,7 @@ struct ContractPlanFactCompletionChart: View {
     let indicator: Indicator
     @State private var selectedPointID: ContractPlanFactCompletionPoint.ID?
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     private var periods: [ContractPlanFactPeriod] {
         [.current, .previous]
@@ -32,8 +33,8 @@ struct ContractPlanFactCompletionChart: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 14 * contentScale) {
+            VStack(alignment: .leading, spacing: 3 * contentScale) {
                 Text("Выполнение плана")
                     .font(.title3.weight(.bold))
 
@@ -80,23 +81,25 @@ struct ContractPlanFactCompletionChart: View {
             .chartOverlay { proxy in
                 chartTapOverlay(proxy: proxy)
             }
-            .frame(height: 220)
+            .frame(height: 220 * contentScale)
             .accessibilityLabel("Выполнение плана по контрактам")
 
-            HStack(spacing: 16) {
-                ForEach(periods) { period in
-                    HStack(spacing: 6) {
-                        Capsule()
-                            .fill(barGradient(for: period))
-                            .frame(width: 18, height: 8)
+            if indicator.showsPlanFactPresentationLegend {
+                HStack(spacing: 16 * contentScale) {
+                    ForEach(periods) { period in
+                        HStack(spacing: 6 * contentScale) {
+                            Capsule()
+                                .fill(barGradient(for: period))
+                                .frame(width: 18 * contentScale, height: 8 * contentScale)
 
-                        Text(period.title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            Text(period.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
+                .accessibilityElement(children: .combine)
             }
-            .accessibilityElement(children: .combine)
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedPointID)
         .onDisappear {

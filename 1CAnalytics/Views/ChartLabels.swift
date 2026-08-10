@@ -1,11 +1,11 @@
 import Charts
 import SwiftUI
-import UIKit
 
 extension AnalyticsChart {
     func valueLabel(
         for row: IndicatorRow,
-        usesContrastingForeground: Bool = false
+        usesContrastingForeground: Bool = false,
+        displayText: String? = nil
     ) -> some View {
         ChartValueLabel(
             value: row.value,
@@ -13,7 +13,7 @@ extension AnalyticsChart {
             selectionColor: chartColor(for: row),
             usesContrastingForeground: usesContrastingForeground,
             useCompactNumbers: indicator.useCompactNumbers,
-            displayText: row.valueLabel,
+            displayText: displayText ?? row.valueLabel,
             valueColor: indicator.apiValueColor(for: row)
         )
     }
@@ -26,12 +26,34 @@ extension AnalyticsChart {
         for row: IndicatorRow,
         defaultWhenIdle: Bool = true
     ) -> Bool {
-        ChartValueLabelPolicy.isVisible(
+        if usesTrendValueLabelContract {
+            return TrendPointValueLabelPolicy.isVisible(
+                rowMatchesSelection: rowMatchesSelection(row),
+                showValueLabels: indicator.showValueLabels,
+                alwaysShowPointValues: indicator.alwaysShowPointValues
+            )
+        }
+
+        return ChartValueLabelPolicy.isVisible(
             rowMatchesSelection: rowMatchesSelection(row),
             hasSelection: selectedRowID != nil,
             contractPreference: indicator.showValueLabels,
             defaultLabelsEnabled: showsValueLabels && defaultWhenIdle
         )
+    }
+
+    private var usesTrendValueLabelContract: Bool {
+        if indicator.prefersTrendPresentation {
+            return true
+        }
+
+        switch indicator.chartType {
+        case .line, .area, .splineLine, .splineArea, .forecastLine:
+            return true
+        case .bar, .compactBar, .horizontalBar, .stackedBar, .donut,
+             .percentDonut, .oneValue, .linearProgress, .gauge, .geoMap:
+            return false
+        }
     }
 
     func valueLabelsEnabledWhenIdle(defaultWhenIdle: Bool = true) -> Bool {
@@ -136,53 +158,24 @@ extension AnalyticsChart {
 
     func donutExternalLabels(
         showsPercentages: Bool,
-        size: CGSize,
-        labelInset: CGFloat
+        size: CGSize
     ) -> some View {
-        let positions = donutExternalLabelPositions(in: size, labelInset: labelInset)
+        let positions = donutExternalLabelPositions(in: size)
 
         return ZStack {
             ForEach(positions) { position in
-                Text(donutLabelText(for: position.row, showsPercentages: showsPercentages))
-                    .font(.title3.monospacedDigit().weight(.bold))
-                    .foregroundStyle(
-                        position.row.colorValue == nil && colorScheme == .dark
-                            ? Color.white
-                            : indicator.valueColor(for: position.row)
+                valueLabel(
+                    for: position.row,
+                    displayText: donutLabelText(
+                        for: position.row,
+                        showsPercentages: showsPercentages
                     )
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: true)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(opaqueLabelBackground, in: Capsule())
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(
-                                chartColor(for: position.row).opacity(colorScheme == .dark ? 0.46 : 0.28),
-                                lineWidth: 1
-                            )
-                    }
-                    .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.09), radius: 4, y: 2)
+                )
+                    .zIndex(20)
                     .position(position.labelCenter)
             }
         }
         .allowsHitTesting(false)
-    }
-
-    func donutExternalLabelInset(in size: CGSize) -> CGFloat {
-        let candidateInset = min(max(size.width * 0.12, 42), 56)
-        let plotSize = CGSize(
-            width: max(size.width - candidateInset * 2, 1),
-            height: size.height
-        )
-
-        guard let selectedDonutRow else {
-            return 0
-        }
-
-        return shouldPlaceDonutLabelOutside(selectedDonutRow, plotSize: plotSize)
-            ? candidateInset
-            : 0
     }
 
     func shouldPlaceDonutLabelOutside(
@@ -208,15 +201,11 @@ extension AnalyticsChart {
     }
 
     func donutExternalLabelPositions(
-        in size: CGSize,
-        labelInset: CGFloat
+        in size: CGSize
     ) -> [DonutExternalLabelPosition] {
-        guard labelInset > 0 else {
-            return []
-        }
-
         let rows = indicator.orderedRows
         guard let selectedDonutRow,
+              shouldPlaceDonutLabelOutside(selectedDonutRow, plotSize: size),
               let angle = DonutSelectionGeometryPolicy.middleAngle(
                   for: selectedDonutRow.id,
                   in: rows
@@ -224,9 +213,8 @@ extension AnalyticsChart {
             return []
         }
 
-        let plotSize = CGSize(width: max(size.width - labelInset * 2, 1), height: size.height)
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(plotSize.width, plotSize.height) * 0.46
+        let radius = min(size.width, size.height) * 0.46
         let cosine = CGFloat(cos(angle))
         let sine = CGFloat(sin(angle))
         let labelCenter = CGPoint(
@@ -327,17 +315,8 @@ extension AnalyticsChart {
 
     func trendContentWidth(availableWidth: CGFloat) -> CGFloat {
         ChartPresentationPolicy.contentWidth(
-            availableWidth: availableWidth,
-            categoryCount: categoryLabels.count,
-            seriesCount: max(indicator.barDataShape.series.count, 1),
-            longestValueCharacterCount: longestDisplayValueCharacterCount,
-            style: .trend,
-            allowsHorizontalOverflow: allowsHorizontalChartScrolling
+            availableWidth: availableWidth
         )
-    }
-
-    var allowsHorizontalChartScrolling: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad
     }
 
     func trendAnnotationPosition(for row: IndicatorRow) -> AnnotationPosition {
@@ -405,40 +384,43 @@ private struct ChartValueLabel: View {
     let displayText: String?
     let valueColor: Color?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
-    @ViewBuilder
     var body: some View {
-        if isSelected {
-            Text(valueText)
-                .font(.title3.monospacedDigit().weight(.bold))
-                .foregroundStyle(selectedForeground)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(selectedBackground, in: Capsule())
-                .overlay {
+        let metrics = ChartValueLabelLayoutPolicy.metrics(
+            isSelected: isSelected,
+            usesContrastingForeground: usesContrastingForeground
+        )
+
+        return Text(valueText)
+            .font(
+                (isSelected ? Font.caption : Font.caption2)
+                    .monospacedDigit()
+                    .weight(.bold)
+            )
+            .foregroundStyle(isSelected ? selectedForeground : displayTextColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.65)
+            .allowsTightening(true)
+            .frame(maxWidth: metrics.maximumTextWidth)
+            .padding(.horizontal, metrics.horizontalPadding * contentScale)
+            .padding(.vertical, metrics.verticalPadding * contentScale)
+            .background {
+                if isSelected {
+                    selectedBackground.clipShape(Capsule())
+                } else if !usesContrastingForeground {
+                    opaqueIdleBackground.clipShape(Capsule())
+                }
+            }
+            .overlay {
+                if isSelected {
                     Capsule()
                         .strokeBorder(selectionColor.opacity(colorScheme == .dark ? 0.46 : 0.26), lineWidth: 1)
                 }
-                .subtleTextShadow()
-                .transition(.identity)
-        } else {
-            Text(valueText)
-                .font(.caption2.monospacedDigit().weight(.bold))
-                .foregroundStyle(displayTextColor)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: true)
-                .padding(.horizontal, usesContrastingForeground ? 0 : 5)
-                .padding(.vertical, usesContrastingForeground ? 0 : 3)
-                .background {
-                    if !usesContrastingForeground {
-                        opaqueIdleBackground
-                            .clipShape(Capsule())
-                    }
-                }
-                .subtleTextShadow()
-        }
+            }
+            .subtleTextShadow()
+            .transition(.identity)
+            .zIndex(isSelected ? 20 : 0)
     }
 
     private var valueText: String {

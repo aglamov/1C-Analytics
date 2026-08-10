@@ -7,6 +7,7 @@ struct IndicatorDetailView: View {
     @State private var selectedRowID: IndicatorRow.ID?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
         GeometryReader { proxy in
@@ -34,13 +35,14 @@ struct IndicatorDetailView: View {
         .onDisappear {
             selectedRowID = nil
         }
+        .dashboardScaledTypography()
     }
 
     private func splitDetailContent(availableSize: CGSize) -> some View {
         let headerHeight = splitHeaderHeight(for: availableSize)
         let lowerHeight = splitLowerSectionHeight(for: availableSize, headerHeight: headerHeight)
 
-        return VStack(alignment: .leading, spacing: 16) {
+        return VStack(alignment: .leading, spacing: 16 * contentScale) {
             IndicatorHero(indicator: indicator)
                 .frame(maxWidth: .infinity, minHeight: headerHeight, maxHeight: headerHeight, alignment: .leading)
 
@@ -50,7 +52,7 @@ struct IndicatorDetailView: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
             } else {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: 16 * contentScale) {
                     chartSection(fillsAvailableHeight: false)
                         .frame(
                             maxWidth: .infinity,
@@ -71,7 +73,7 @@ struct IndicatorDetailView: View {
     }
 
     private func compactDetailContent(availableSize: CGSize) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16 * contentScale) {
             IndicatorHero(indicator: indicator)
 
             if indicator.usesContractPlanFactPresentation {
@@ -84,14 +86,14 @@ struct IndicatorDetailView: View {
     }
 
     private var contractPlanFactSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16 * contentScale) {
             ContractPlanFactCompletionChart(indicator: indicator)
-                .padding(16)
+                .padding(16 * contentScale)
                 .premiumPanel()
 
             ContractPlanFactView(indicator: indicator)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(16)
+                .padding(16 * contentScale)
                 .premiumPanel()
         }
     }
@@ -113,7 +115,7 @@ struct IndicatorDetailView: View {
         let desiredHeight = ChartHeightPolicy.detailHeight(
             for: indicator,
             availableWidth: availableWidth
-        )
+        ) * contentScale
         return availableWidth / max(desiredHeight, 1)
     }
 
@@ -126,13 +128,13 @@ struct IndicatorDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else if indicator.chartType == .oneValue {
                 OneValueDashboardContent(indicator: indicator)
-                    .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 150 * contentScale, alignment: .topLeading)
             } else if indicator.chartType == .linearProgress {
                 LinearProgressIndicatorView(indicator: indicator)
-                    .frame(maxWidth: .infinity, minHeight: 80)
+                    .frame(maxWidth: .infinity, minHeight: 80 * contentScale)
             } else if indicator.chartType == .gauge {
                 GaugeIndicatorView(indicator: indicator)
-                    .frame(maxWidth: .infinity, minHeight: 260)
+                    .frame(maxWidth: .infinity, minHeight: 260 * contentScale)
             } else {
                 let chart = AnalyticsChart(
                     indicator: indicator,
@@ -151,7 +153,7 @@ struct IndicatorDetailView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(16 * contentScale)
         .premiumPanel()
     }
 
@@ -166,7 +168,7 @@ struct IndicatorDetailView: View {
         let aggregateTotal = DetailPresentationPolicy.aggregateTotal(for: groups)
         let seriesTotals = DetailPresentationPolicy.seriesTotals(for: groups)
 
-        return VStack(alignment: .leading, spacing: 12) {
+        return VStack(alignment: .leading, spacing: 12 * contentScale) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Детализация")

@@ -3,11 +3,12 @@ import SwiftUI
 struct LinearProgressIndicatorView: View {
     let indicator: Indicator
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 9 * contentScale) {
+            HStack(alignment: .firstTextBaseline, spacing: 10 * contentScale) {
+                VStack(alignment: .leading, spacing: 2 * contentScale) {
                     Text("Выполнено")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -24,8 +25,8 @@ struct LinearProgressIndicatorView: View {
                 Text(progress.formatted(.percent.precision(.fractionLength(0))))
                     .font(.caption.monospacedDigit().weight(.bold))
                     .foregroundStyle(paletteColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8 * contentScale)
+                    .padding(.vertical, 4 * contentScale)
                     .background(paletteColor.opacity(0.11), in: Capsule())
             }
 
@@ -47,7 +48,7 @@ struct LinearProgressIndicatorView: View {
                         }
                 }
             }
-            .frame(height: 10)
+            .frame(height: 10 * contentScale)
 
             HStack {
                 Text("0")
@@ -111,6 +112,7 @@ struct GaugeIndicatorView: View {
     @State private var isVisible = false
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
         GeometryReader { proxy in
@@ -143,27 +145,30 @@ struct GaugeIndicatorView: View {
                 ForEach(0..<11, id: \.self) { tick in
                     Capsule()
                         .fill(tick <= Int(displayedProgress * 10) ? paletteColor : Color.secondary.opacity(0.22))
-                        .frame(width: 2, height: tick.isMultiple(of: 5) ? 9 : 5)
+                        .frame(
+                            width: 2 * contentScale,
+                            height: (tick.isMultiple(of: 5) ? 9 : 5) * contentScale
+                        )
                         .offset(y: -(size * 0.38))
                         .rotationEffect(.degrees(-135 + Double(tick) * 27))
                 }
 
                 Capsule()
                     .fill(indicator.valueColor)
-                    .frame(width: 4, height: size * 0.29)
+                    .frame(width: 4 * contentScale, height: size * 0.29)
                     .offset(y: -(size * 0.145))
                     .rotationEffect(.degrees(-135 + 270 * displayedProgress))
 
                 Circle()
                     .fill(paletteColor)
-                    .frame(width: 15, height: 15)
+                    .frame(width: 15 * contentScale, height: 15 * contentScale)
                     .overlay {
                         Circle()
                             .fill(Color(.systemBackground))
-                            .frame(width: 5, height: 5)
+                            .frame(width: 5 * contentScale, height: 5 * contentScale)
                     }
 
-                VStack(spacing: 7) {
+                VStack(spacing: 7 * contentScale) {
                     Spacer()
 
                     Text(displayedProgress.formatted(.percent.precision(.fractionLength(0))))
@@ -173,30 +178,32 @@ struct GaugeIndicatorView: View {
                         .contentTransition(.numericText(value: displayedProgress))
 
                     if let value = indicator.value, let valueMax = indicator.valueMax {
-                        HStack(alignment: .firstTextBaseline, spacing: 14) {
+                        HStack(alignment: .top, spacing: 4 * contentScale) {
                             gaugeValue(
                                 title: "Сейчас",
                                 value: indicator.rows.first?.valueLabel ?? indicator.formattedNumber(value),
-                                alignment: .leading
+                                alignment: .leading,
+                                frameAlignment: .leading,
+                                textAlignment: .leading
                             )
-
-                            Spacer(minLength: 8)
 
                             gaugeValue(
                                 title: "Цель",
                                 value: indicator.formattedNumber(valueMax),
-                                alignment: .trailing
+                                alignment: .trailing,
+                                frameAlignment: .trailing,
+                                textAlignment: .trailing
                             )
                         }
                     }
                 }
-                .padding(.horizontal, max(14, size * 0.09))
+                .padding(.horizontal, max(6 * contentScale, size * 0.04))
                 .padding(.bottom, max(2, size * 0.015))
             }
             .frame(width: size, height: size)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 8 * contentScale)
         .onAppear {
             isVisible = true
             animateIfNeeded()
@@ -282,19 +289,26 @@ struct GaugeIndicatorView: View {
     private func gaugeValue(
         title: String,
         value: String,
-        alignment: HorizontalAlignment
+        alignment: HorizontalAlignment,
+        frameAlignment: Alignment,
+        textAlignment: TextAlignment
     ) -> some View {
         VStack(alignment: alignment, spacing: 2) {
             Text(title.uppercased())
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
 
             Text(value)
                 .font(.caption.monospacedDigit().weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
+                .lineLimit(nil)
+                .multilineTextAlignment(textAlignment)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity, alignment: frameAlignment)
     }
 
     private var accessibilityValue: String {
@@ -305,4 +319,3 @@ struct GaugeIndicatorView: View {
         return "\(indicator.formattedNumber(value)) из \(indicator.formattedNumber(valueMax))"
     }
 }
-

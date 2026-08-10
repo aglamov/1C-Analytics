@@ -19,6 +19,7 @@ struct AnalyticsChart: View {
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.chartPaletteScheme) var chartPaletteScheme
+    @Environment(\.dashboardContentScale) var dashboardContentScale
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
 
     init(
@@ -42,9 +43,10 @@ struct AnalyticsChart: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12 * dashboardContentScale) {
             chartContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(minHeight: isDonutChart ? 220 * dashboardContentScale : nil)
                 .zIndex(selectedRowID == nil ? 0 : 10)
 
             if displaysLegend, !indicator.orderedRows.isEmpty {
@@ -77,6 +79,7 @@ struct AnalyticsChart: View {
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: selectedRowID)
+        .dashboardScaledTypography()
     }
 
     func animateIfNeeded() {

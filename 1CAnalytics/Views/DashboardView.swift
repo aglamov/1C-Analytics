@@ -8,6 +8,7 @@ struct DashboardView: View {
     let onSignOut: () -> Void
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.corporate.rawValue
+    @AppStorage("dashboardContentScale.v1") private var dashboardContentScale = 1.0
     @State private var collapsedSectionIDs: Set<DashboardSection.ID> = []
     @State private var isEditingLayout = false
     @State private var draggedIndicator: DashboardDraggedIndicator?
@@ -41,6 +42,7 @@ struct DashboardView: View {
                         NavigationLink {
                             DashboardSettingsView(
                                 chartPalette: chartPaletteBinding,
+                                contentScale: contentScaleBinding,
                                 layoutStore: layoutStore,
                                 onSignOut: onSignOut
                             )
@@ -113,6 +115,7 @@ struct DashboardView: View {
             indicatorIDToRestore = indicatorID
         }
         .environment(\.chartPaletteScheme, chartPaletteScheme)
+        .environment(\.dashboardContentScale, CGFloat(normalizedContentScale))
         .onChange(of: viewModel.dashboard?.fetchedAt) { oldDate, newDate in
             guard oldDate != nil, newDate != nil, oldDate != newDate else {
                 return
@@ -194,19 +197,19 @@ struct DashboardView: View {
             if isExpanded {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     ForEach(layoutRows(for: displayedIndicators(in: section))) { row in
-                        HStack(alignment: .top, spacing: 16) {
-                            ForEach(row.indicators) { indicator in
-                                dashboardCard(indicator, in: section)
-                                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                            }
-
-                            if isPad, row.indicators.count == 1 {
-                                Color.clear
-                                    .frame(maxWidth: .infinity)
-                                    .accessibilityHidden(true)
+                        DashboardSlotRowLayout(
+                            slotCapacity: row.slotCapacity,
+                            spans: row.items.map(\.width.slotSpan),
+                            spacing: 16
+                        ) {
+                            ForEach(row.items) { item in
+                                dashboardCard(item.indicator, in: section)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+
+                    extendedSectionControl(for: section)
                 }
                 .padding(.top, 12)
                 .transition(.opacity)
@@ -274,7 +277,7 @@ struct DashboardView: View {
         )
             .overlay(alignment: .topTrailing) {
                 if isEditingLayout {
-                    reorderHandle(for: indicator, in: section)
+                    layoutControls(for: indicator, in: section)
                 } else if indicator.supportsDetail {
                     NavigationLink(value: DashboardRoute.indicator(indicator.id)) {
                         Image(systemName: "arrow.up.right")
@@ -310,22 +313,30 @@ struct DashboardView: View {
             )
     }
 
-    private func reorderHandle(
+    private func layoutControls(
         for indicator: Indicator,
         in section: DashboardSection
     ) -> some View {
-        Image(systemName: "line.3.horizontal")
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    layoutStore.toggleWidth(for: indicator)
+                }
+            } label: {
+                Text(layoutStore.width(for: indicator).title)
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Ширина графика")
+            .accessibilityValue(layoutStore.width(for: indicator).title)
+            .accessibilityHint("Изменить на \(layoutStore.width(for: indicator).toggled.title)")
+
+            Image(systemName: "line.3.horizontal")
             .font(.headline.weight(.semibold))
             .foregroundStyle(.secondary)
             .frame(width: 44, height: 44)
-            .background(
-                Color(.systemBackground).opacity(0.96),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.secondary.opacity(0.16), lineWidth: 1)
-            }
             .contentShape(Rectangle())
             .onDrag {
                 draggedIndicator = DashboardDraggedIndicator(
@@ -340,21 +351,86 @@ struct DashboardView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
             .accessibilityLabel("Переместить \(indicator.title)")
-            .padding(12)
+        }
+        .padding(4)
+        .background(Color(.systemBackground).opacity(0.96), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.secondary.opacity(0.16), lineWidth: 1)
+        }
+        .padding(12)
     }
 
     private func layoutRows(for indicators: [Indicator]) -> [DashboardIndicatorLayoutRow] {
-        DashboardGridLayoutPolicy.rows(for: indicators, isPad: isPad).map {
-            DashboardIndicatorLayoutRow(indicators: $0)
+        let items = indicators.map {
+            DashboardIndicatorLayoutItem(indicator: $0, width: layoutStore.width(for: $0))
         }
+        return DashboardGridLayoutPolicy.rows(
+            for: items,
+            slotCapacity: isRegularPadLayout ? 4 : 2
+        )
     }
 
     private var isPad: Bool {
         UIDevice.current.userInterfaceIdiom == .pad
     }
 
+    private var isRegularPadLayout: Bool {
+        isPad && horizontalSizeClass == .regular
+    }
+
+    @ViewBuilder
+    private func extendedSectionControl(for section: DashboardSection) -> some View {
+        if section.hasExtended {
+            switch viewModel.extendedState(for: section.id) {
+            case .loaded:
+                EmptyView()
+            case .loading:
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Загружаем \(section.title) 2 уровень")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            case .idle:
+                extendedSectionButton(section, errorMessage: nil)
+            case let .failed(message):
+                extendedSectionButton(section, errorMessage: message)
+            }
+        }
+    }
+
+    private func extendedSectionButton(
+        _ section: DashboardSection,
+        errorMessage: String?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            Button {
+                Task {
+                    await viewModel.loadExtendedIndicators(for: section)
+                }
+            } label: {
+                Label("\(section.title) 2 уровень", systemImage: "chart.bar.doc.horizontal")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isEditingLayout)
+        }
+    }
+
     private var chartPaletteScheme: ChartPaletteScheme {
         ChartPaletteScheme(rawValue: chartPaletteSchemeRawValue) ?? .corporate
+    }
+
+    private var normalizedContentScale: Double {
+        DashboardContentScalePolicy.normalized(dashboardContentScale)
     }
 
     private var navigationTitle: String {
@@ -527,6 +603,14 @@ struct DashboardView: View {
             chartPaletteScheme
         } set: { newValue in
             chartPaletteSchemeRawValue = newValue.rawValue
+        }
+    }
+
+    private var contentScaleBinding: Binding<Double> {
+        Binding {
+            normalizedContentScale
+        } set: { newValue in
+            dashboardContentScale = DashboardContentScalePolicy.normalized(newValue)
         }
     }
 }

@@ -65,17 +65,20 @@ struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
     let title: String
     let indicators: [Indicator]
     let fetchedAt: Date?
+    let hasExtended: Bool
 
     init(
         id: String,
         title: String,
         indicators: [Indicator],
-        fetchedAt: Date? = nil
+        fetchedAt: Date? = nil,
+        hasExtended: Bool = false
     ) {
         self.id = id
         self.title = title
         self.indicators = indicators
         self.fetchedAt = fetchedAt
+        self.hasExtended = hasExtended
     }
 }
 
@@ -93,6 +96,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let showValueLabels: Bool?
+    let alwaysShowPointValues: Bool?
     let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
@@ -101,6 +105,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let barLayout: BarLayout?
     let lineStyle: ChartLineStyle?
     let forecastFromIndex: Int?
+    let isExplicitPlanFactProgress: Bool?
     let rows: [IndicatorRow]
 
     init(
@@ -117,6 +122,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showTotal: Bool? = nil,
         showDetails: Bool? = nil,
         showValueLabels: Bool? = nil,
+        alwaysShowPointValues: Bool? = nil,
         showYAxisLabels: Bool? = nil,
         detailsOrientation: DetailsOrientation? = nil,
         widthPercent: Double? = nil,
@@ -125,6 +131,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         barLayout: BarLayout? = nil,
         lineStyle: ChartLineStyle? = nil,
         forecastFromIndex: Int? = nil,
+        isExplicitPlanFactProgress: Bool? = nil,
         rows: [IndicatorRow]
     ) {
         self.id = id
@@ -140,6 +147,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showTotal = showTotal
         self.showDetails = showDetails
         self.showValueLabels = showValueLabels
+        self.alwaysShowPointValues = alwaysShowPointValues
         self.showYAxisLabels = showYAxisLabels
         self.detailsOrientation = detailsOrientation
         self.widthPercent = widthPercent
@@ -148,6 +156,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.barLayout = barLayout
         self.lineStyle = lineStyle
         self.forecastFromIndex = forecastFromIndex
+        self.isExplicitPlanFactProgress = isExplicitPlanFactProgress
         self.rows = rows
     }
 }
@@ -358,6 +367,8 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             self = .horizontalBar
         case "GeoMap", "WorldMap", "Map", "GeoChoropleth":
             self = .geoMap
+        case "PlanFactProgress":
+            self = .horizontalBar
         default:
             throw DecodingError.dataCorruptedError(
                 in: container,
@@ -422,6 +433,22 @@ extension Indicator {
 
     var showsLegend: Bool {
         showLegend ?? (chartType != .geoMap)
+    }
+
+    var showsAggregateValueInHeader: Bool {
+        guard usesContractPlanFactPresentation else {
+            return showsAggregateValue
+        }
+
+        return isExplicitPlanFactProgress == true && showsAggregateValue
+    }
+
+    var showsPlanFactPresentationLegend: Bool {
+        guard usesContractPlanFactPresentation else {
+            return showsLegend
+        }
+
+        return isExplicitPlanFactProgress == true ? showsLegend : true
     }
 
     var showsValueLabels: Bool {
@@ -578,8 +605,9 @@ extension Indicator {
     }
 
     var usesContractPlanFactPresentation: Bool {
-        guard title.isPlanFactIndicatorTitle,
-              title.lowercased().contains("контракт"),
+        let matchesLegacyTitleHeuristic = title.isPlanFactIndicatorTitle
+            && title.lowercased().contains("контракт")
+        guard isExplicitPlanFactProgress == true || matchesLegacyTitleHeuristic,
               !orderedRows.isEmpty else {
             return false
         }
