@@ -76,6 +76,34 @@ enum ChartPresentationPolicy {
     }
 }
 
+enum ChartRenderGeometryPolicy {
+    static func canRender(in size: CGSize) -> Bool {
+        size.width.isFinite
+            && size.height.isFinite
+            && size.width >= 1
+            && size.height >= 1
+    }
+}
+
+struct ValidChartGeometry<Content: View>: View {
+    let size: CGSize
+    private let content: () -> Content
+
+    init(size: CGSize, @ViewBuilder content: @escaping () -> Content) {
+        self.size = size
+        self.content = content
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if ChartRenderGeometryPolicy.canRender(in: size) {
+            content()
+        } else {
+            Color.clear
+        }
+    }
+}
+
 enum ChartHeightPolicy {
     static func horizontalBarHeight(categoryCount: Int, seriesCount: Int) -> CGFloat {
         let rowsPerCategory = max(seriesCount, 1)
@@ -184,6 +212,32 @@ enum TrendLabelPlacementPolicy {
         // Keep intermediate labels away from the point center when several
         // series meet or cross in the same category.
         return index.isMultiple(of: 2) ? .above : .below
+    }
+}
+
+enum SelectedTrendLabelPositionPolicy {
+    static func center(
+        for point: CGPoint,
+        placement: TrendLabelPlacement,
+        in containerSize: CGSize,
+        contentScale: CGFloat
+    ) -> CGPoint {
+        let scale = max(contentScale, 0.8)
+        let horizontalInset = min(64 * scale, max(containerSize.width / 2, 0))
+        let verticalInset = min(20 * scale, max(containerSize.height / 2, 0))
+        let verticalOffset = 24 * scale
+        let proposedY = point.y + (placement == .above ? -verticalOffset : verticalOffset)
+
+        return CGPoint(
+            x: min(
+                max(point.x, horizontalInset),
+                max(horizontalInset, containerSize.width - horizontalInset)
+            ),
+            y: min(
+                max(proposedY, verticalInset),
+                max(verticalInset, containerSize.height - verticalInset)
+            )
+        )
     }
 }
 

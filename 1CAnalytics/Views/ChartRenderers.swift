@@ -8,7 +8,8 @@ extension AnalyticsChart {
                 availableWidth: geometry.size.width
             )
 
-            Chart(indicator.orderedRows) { row in
+            ValidChartGeometry(size: geometry.size) {
+                Chart(indicator.orderedRows) { row in
                 BarMark(
                     x: .value("Группа", row.label),
                     y: .value("Значение", animatedValue(for: row)),
@@ -46,7 +47,8 @@ extension AnalyticsChart {
                     mode: indicator.barLayout == .stacked ? .stackedBar : .verticalBar
                 )
             }
-            .frame(width: contentWidth, height: geometry.size.height)
+                .frame(width: contentWidth, height: geometry.size.height)
+            }
         }
     }
 
@@ -92,7 +94,8 @@ extension AnalyticsChart {
                 availableWidth: geometry.size.width
             )
 
-            Chart(indicator.orderedRows) { row in
+            ValidChartGeometry(size: geometry.size) {
+                Chart(indicator.orderedRows) { row in
                 BarMark(
                     x: .value("Группа", row.label),
                     y: .value("Значение", animatedValue(for: row)),
@@ -133,7 +136,8 @@ extension AnalyticsChart {
             .chartOverlay { proxy in
                 chartTapOverlay(proxy: proxy, mode: .stackedBar)
             }
-            .frame(width: contentWidth, height: geometry.size.height)
+                .frame(width: contentWidth, height: geometry.size.height)
+            }
         }
     }
 
@@ -141,7 +145,8 @@ extension AnalyticsChart {
         GeometryReader { geometry in
             let plotSize = DonutPlotLayoutPolicy.plotSize(in: geometry.size)
 
-            ZStack {
+            ValidChartGeometry(size: geometry.size) {
+                ZStack {
                 Chart(indicator.orderedRows) { row in
                     SectorMark(
                         angle: .value("Доля", animatedValue(for: row)),
@@ -177,6 +182,7 @@ extension AnalyticsChart {
                     size: geometry.size
                 )
                 .zIndex(20)
+                }
             }
         }
     }
@@ -185,7 +191,8 @@ extension AnalyticsChart {
         GeometryReader { geometry in
             let contentWidth = trendContentWidth(availableWidth: geometry.size.width)
 
-            Chart(indicator.orderedRows) { row in
+            ValidChartGeometry(size: geometry.size) {
+                Chart(indicator.orderedRows) { row in
                 if showsLineAreaFill {
                     AreaMark(
                         x: .value("Группа", trendXValue(for: row)),
@@ -224,7 +231,7 @@ extension AnalyticsChart {
                     alignment: trendAnnotationAlignment(for: row),
                     overflowResolution: .init(x: .disabled, y: .disabled)
                 ) {
-                    if shouldShowValueLabel(for: row) {
+                    if shouldShowValueLabel(for: row), selectedRowID != row.id {
                         valueLabel(for: row)
                     }
                 }
@@ -244,7 +251,8 @@ extension AnalyticsChart {
             .chartOverlay { proxy in
                 trendChartOverlay(proxy: proxy)
             }
-            .frame(width: contentWidth, height: geometry.size.height)
+                .frame(width: contentWidth, height: geometry.size.height)
+            }
         }
     }
 
@@ -252,7 +260,8 @@ extension AnalyticsChart {
         GeometryReader { geometry in
             let contentWidth = trendContentWidth(availableWidth: geometry.size.width)
 
-            Chart(indicator.orderedRows) { row in
+            ValidChartGeometry(size: geometry.size) {
+                Chart(indicator.orderedRows) { row in
                 AreaMark(
                     x: .value("Группа", trendXValue(for: row)),
                     yStart: .value("Основание", 0),
@@ -289,7 +298,7 @@ extension AnalyticsChart {
                     alignment: trendAnnotationAlignment(for: row),
                     overflowResolution: .init(x: .disabled, y: .disabled)
                 ) {
-                    if shouldShowValueLabel(for: row) {
+                    if shouldShowValueLabel(for: row), selectedRowID != row.id {
                         valueLabel(for: row)
                     }
                 }
@@ -309,7 +318,8 @@ extension AnalyticsChart {
             .chartOverlay { proxy in
                 trendChartOverlay(proxy: proxy)
             }
-            .frame(width: contentWidth, height: geometry.size.height)
+                .frame(width: contentWidth, height: geometry.size.height)
+            }
         }
     }
 
@@ -317,7 +327,8 @@ extension AnalyticsChart {
         GeometryReader { geometry in
             let contentWidth = trendContentWidth(availableWidth: geometry.size.width)
 
-            Chart {
+            ValidChartGeometry(size: geometry.size) {
+                Chart {
                 ForEach(indicator.orderedRows) { row in
                     LineMark(
                         x: .value("Группа", trendXValue(for: row)),
@@ -344,7 +355,7 @@ extension AnalyticsChart {
                         alignment: trendAnnotationAlignment(for: row),
                         overflowResolution: .init(x: .disabled, y: .disabled)
                     ) {
-                        if shouldShowValueLabel(for: row) {
+                        if shouldShowValueLabel(for: row), selectedRowID != row.id {
                             valueLabel(for: row)
                         }
                     }
@@ -376,7 +387,8 @@ extension AnalyticsChart {
             .chartOverlay { proxy in
                 trendChartOverlay(proxy: proxy)
             }
-            .frame(width: contentWidth, height: geometry.size.height)
+                .frame(width: contentWidth, height: geometry.size.height)
+            }
         }
     }
 

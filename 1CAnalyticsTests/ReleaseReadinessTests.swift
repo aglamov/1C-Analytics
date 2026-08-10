@@ -238,6 +238,34 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testSelectedTrendLabelStaysInsideChartAndRespectsPlacement() {
+        let containerSize = CGSize(width: 320, height: 180)
+
+        let topLeading = SelectedTrendLabelPositionPolicy.center(
+            for: CGPoint(x: 0, y: 0),
+            placement: .above,
+            in: containerSize,
+            contentScale: 1
+        )
+        XCTAssertEqual(topLeading, CGPoint(x: 64, y: 20))
+
+        let bottomTrailing = SelectedTrendLabelPositionPolicy.center(
+            for: CGPoint(x: 320, y: 180),
+            placement: .below,
+            in: containerSize,
+            contentScale: 1
+        )
+        XCTAssertEqual(bottomTrailing, CGPoint(x: 256, y: 160))
+
+        let centeredAbove = SelectedTrendLabelPositionPolicy.center(
+            for: CGPoint(x: 160, y: 90),
+            placement: .above,
+            in: containerSize,
+            contentScale: 1
+        )
+        XCTAssertEqual(centeredAbove, CGPoint(x: 160, y: 66))
+    }
+
     func testSynchronizationTimestampHasStableCompactFormat() throws {
         let date = try XCTUnwrap(
             ISO8601DateFormatter().date(from: "2026-08-10T08:13:00Z")
@@ -340,6 +368,21 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(compactWidth, 320)
         XCTAssertEqual(denseWidth, 320)
         XCTAssertEqual(ChartPresentationPolicy.contentWidth(availableWidth: -20), 0)
+    }
+
+    func testChartsRenderOnlyWithFiniteNonZeroGeometry() {
+        XCTAssertTrue(
+            ChartRenderGeometryPolicy.canRender(in: CGSize(width: 320, height: 240))
+        )
+        XCTAssertFalse(
+            ChartRenderGeometryPolicy.canRender(in: CGSize(width: 320, height: 0))
+        )
+        XCTAssertFalse(
+            ChartRenderGeometryPolicy.canRender(in: CGSize(width: 0, height: 240))
+        )
+        XCTAssertFalse(
+            ChartRenderGeometryPolicy.canRender(in: CGSize(width: CGFloat.infinity, height: 240))
+        )
     }
 
     func testStackedBarLabelsOnlyAppearWhenSegmentCanContainThem() {

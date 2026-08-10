@@ -21,7 +21,6 @@ struct OverflowAwareScrollView<Content: View>: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             content
-                .padding(.bottom, hasOverflow ? 38 : 0)
                 .background {
                     GeometryReader { proxy in
                         Color.clear
@@ -32,6 +31,7 @@ struct OverflowAwareScrollView<Content: View>: View {
                             )
                     }
                 }
+                .padding(.bottom, hasOverflow ? 38 : 0)
         }
         .coordinateSpace(name: "detail-scroll")
         .scrollBounceBehavior(.basedOnSize)
@@ -41,9 +41,9 @@ struct OverflowAwareScrollView<Content: View>: View {
                     .preference(key: DetailViewportHeightKey.self, value: proxy.size.height)
             }
         }
-        .onPreferenceChange(DetailContentHeightKey.self) { contentHeight = $0 }
-        .onPreferenceChange(DetailContentBottomKey.self) { contentBottom = $0 }
-        .onPreferenceChange(DetailViewportHeightKey.self) { viewportHeight = $0 }
+        .onPreferenceChange(DetailContentHeightKey.self) { scheduleContentHeightUpdate($0) }
+        .onPreferenceChange(DetailContentBottomKey.self) { scheduleContentBottomUpdate($0) }
+        .onPreferenceChange(DetailViewportHeightKey.self) { scheduleViewportHeightUpdate($0) }
         .overlay(alignment: .bottom) {
             if showsMoreBelow {
                 VStack(spacing: 0) {
@@ -66,6 +66,48 @@ struct OverflowAwareScrollView<Content: View>: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showsMoreBelow)
+    }
+
+    private func scheduleContentHeightUpdate(_ value: CGFloat) {
+        guard value.isFinite else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard abs(contentHeight - value) >= 1 else {
+                return
+            }
+            contentHeight = value
+        }
+    }
+
+    private func scheduleContentBottomUpdate(_ value: CGFloat) {
+        guard value.isFinite else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard abs(contentBottom - value) >= 1 else {
+                return
+            }
+            contentBottom = value
+        }
+    }
+
+    private func scheduleViewportHeightUpdate(_ value: CGFloat) {
+        guard value.isFinite else {
+            return
+        }
+
+        Task { @MainActor in
+            await Task.yield()
+            guard abs(viewportHeight - value) >= 1 else {
+                return
+            }
+            viewportHeight = value
+        }
     }
 }
 
@@ -92,4 +134,3 @@ private struct DetailContentBottomKey: PreferenceKey {
         value = nextValue()
     }
 }
-

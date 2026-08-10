@@ -88,23 +88,6 @@ struct DashboardView: View {
                         .disabled(isEditingLayout)
                     }
 
-                    if case let .loaded(dashboard) = viewModel.state {
-                        ToolbarItem(placement: .bottomBar) {
-                            HStack(spacing: 0) {
-                                DashboardConnectionStatus(
-                                    date: dashboard.fetchedAt,
-                                    isCached: viewModel.isShowingCachedData,
-                                    isRefreshing: viewModel.isRefreshing,
-                                    hasError: viewModel.refreshErrorMessage != nil,
-                                    onErrorTap: {
-                                        errorNoticePresentationRequest &+= 1
-                                    }
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
                 }
         }
         .onChange(of: navigationPath) { oldPath, newPath in
@@ -162,7 +145,10 @@ struct DashboardView: View {
                 }
                 .coordinateSpace(name: DashboardScrollCoordinateSpace.name)
                 .onPreferenceChange(DashboardSectionOffsetPreferenceKey.self) { offsets in
-                    updateCurrentSection(using: offsets, in: dashboard)
+                    Task { @MainActor in
+                        await Task.yield()
+                        updateCurrentSection(using: offsets, in: dashboard)
+                    }
                 }
                 .onChange(of: indicatorIDToRestore) { _, indicatorID in
                     guard let indicatorID else {
@@ -178,12 +164,34 @@ struct DashboardView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                DashboardOfflineNotice(
-                    date: dashboard.fetchedAt,
-                    isCached: viewModel.isShowingCachedData,
-                    errorMessage: viewModel.refreshErrorMessage,
-                    presentationRequest: errorNoticePresentationRequest
-                )
+                VStack(spacing: 0) {
+                    DashboardOfflineNotice(
+                        date: dashboard.fetchedAt,
+                        isCached: viewModel.isShowingCachedData,
+                        errorMessage: viewModel.refreshErrorMessage,
+                        presentationRequest: errorNoticePresentationRequest
+                    )
+
+                    DashboardConnectionStatus(
+                        date: dashboard.fetchedAt,
+                        isCached: viewModel.isShowingCachedData,
+                        isRefreshing: viewModel.isRefreshing,
+                        hasError: viewModel.refreshErrorMessage != nil,
+                        onErrorTap: {
+                            errorNoticePresentationRequest &+= 1
+                        }
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12)
+                    .background(.bar, in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(Color.secondary.opacity(0.12), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.10), radius: 12, y: 5)
+                    .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
+                    .padding(.vertical, 6)
+                }
             }
             .background(Color(.systemBackground).ignoresSafeArea())
         }

@@ -134,7 +134,9 @@ struct AnalyticsChart: View {
 
     @ViewBuilder
     var chartContent: some View {
-        if indicator.hasOnlyZeroValues {
+        if indicator.orderedRows.isEmpty {
+            emptyDataState(message: "Для показателя пока нет значений")
+        } else if indicator.hasOnlyZeroValues {
             emptyDataState
         } else if indicator.usesMixedUnitPersonnelPresentation {
             personnelComposition
@@ -177,6 +179,10 @@ struct AnalyticsChart: View {
     }
 
     var emptyDataState: some View {
+        emptyDataState(message: "Плановые и фактические значения равны нулю")
+    }
+
+    func emptyDataState(message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 34, weight: .semibold))
@@ -186,7 +192,7 @@ struct AnalyticsChart: View {
                 .font(.headline)
                 .foregroundStyle(.primary)
 
-            Text("Плановые и фактические значения равны нулю")
+            Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
