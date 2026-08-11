@@ -238,6 +238,39 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testOneValueAnimationMatchesCatalogTimingAndNumberPrecision() throws {
+        XCTAssertEqual(OneValueAnimationPolicy.initialDelay, .milliseconds(80))
+        XCTAssertEqual(OneValueAnimationPolicy.duration, 0.85, accuracy: 0.000_001)
+
+        XCTAssertEqual(OneValueAnimationPolicy.fractionDigits(for: 247), 0)
+        XCTAssertEqual(
+            OneValueAnimationPolicy.fractionDigits(
+                for: try XCTUnwrap(Decimal(string: "24.7"))
+            ),
+            1
+        )
+        XCTAssertEqual(
+            OneValueAnimationPolicy.fractionDigits(
+                for: try XCTUnwrap(Decimal(string: "24.75"))
+            ),
+            2
+        )
+
+        XCTAssertEqual(
+            NSDecimalNumber(
+                decimal: OneValueAnimationPolicy.roundedValue(123.7, fractionDigits: 0)
+            ).doubleValue,
+            124
+        )
+        XCTAssertEqual(
+            NSDecimalNumber(
+                decimal: OneValueAnimationPolicy.roundedValue(12.34, fractionDigits: 1)
+            ).doubleValue,
+            12.3,
+            accuracy: 0.000_001
+        )
+    }
+
     func testSelectedTrendLabelStaysInsideChartAndRespectsPlacement() {
         let containerSize = CGSize(width: 320, height: 180)
 

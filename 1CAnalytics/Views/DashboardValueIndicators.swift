@@ -226,7 +226,7 @@ struct OneValueDashboardContent: View {
                 .offset(x: 8, y: 20)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 18 * contentScale) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center) {
                     Text(indicator.title)
                         .font(.headline.weight(.bold))
@@ -239,36 +239,201 @@ struct OneValueDashboardContent: View {
                 }
                 .padding(.trailing, reservesDetailButtonSpace && indicator.supportsDetail ? 42 : 0)
 
+                Spacer(minLength: 4 * contentScale)
+
                 if indicator.showsAggregateValue {
-                    Text(valueText)
+                    OneValueCountUpText(
+                        animationKey: indicator.id,
+                        value: indicator.value,
+                        customText: indicator.rows.first?.valueLabel,
+                        formatter: indicator.formattedValueWithUnit
+                    )
                         .font(.system(size: valueFontSize * contentScale, weight: .bold, design: .rounded))
                         .foregroundStyle(indicator.valueColor)
                         .monospacedDigit()
-                        .contentTransition(.numericText())
                         .minimumScaleFactor(0.58)
                         .lineLimit(1)
                         .allowsTightening(true)
                         .subtleTextShadow()
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
-    }
-
-    private var valueText: String {
-        if let valueLabel = indicator.rows.first?.valueLabel {
-            return valueLabel
-        }
-
-        guard let value = indicator.value else {
-            return "нет данных"
-        }
-
-        return indicator.formattedValueWithUnit(value)
     }
 
     private var paletteColor: Color {
         indicator.paletteColor(scheme: chartPaletteScheme)
+    }
+}
+
+enum OneValueAnimationPolicy {
+    static let initialDelay: Duration = .milliseconds(80)
+    static let duration = 0.85
+
+    static func fractionDigits(for value: Decimal) -> Int {
+        let string = NSDecimalNumber(decimal: value).stringValue
+        guard let separator = string.firstIndex(of: ".") else {
+            return 0
+        }
+
+        return min(string.distance(from: string.index(after: separator), to: string.endIndex), 2)
+    }
+
+    static func roundedValue(_ value: Double, fractionDigits: Int) -> Decimal {
+        let scale = pow(10, Double(max(fractionDigits, 0)))
+        return Decimal((value * scale).rounded() / scale)
+    }
+}
+
+@MainActor
+private enum OneValueFirstAppearanceRegistry {
+    private static var animatedKeys = Set<String>()
+
+    static func contains(_ key: String) -> Bool {
+        animatedKeys.contains(key)
+    }
+
+    static func claim(_ key: String) -> Bool {
+        animatedKeys.insert(key).inserted
+    }
+}
+
+private enum OneValueAnimationPhase {
+    case unresolved
+    case waiting
+    case finished
+}
+
+private struct OneValueCountUpText: View {
+    let animationKey: String
+    let value: Decimal?
+    let customText: String?
+    let formatter: (Decimal) -> String
+
+    @State private var phase = OneValueAnimationPhase.unresolved
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+
+    var body: some View {
+        displayedText
+            .task {
+                await runFirstAppearanceAnimationIfNeeded()
+            }
+            .onChange(of: accessibilityReduceMotion) { _, reduceMotion in
+                if reduceMotion {
+                    showFinalStateWithoutAnimation()
+                }
+            }
+            .accessibilityLabel(finalText)
+    }
+
+    @ViewBuilder
+    private var displayedText: some View {
+        if let customText {
+            Text(customText)
+        } else if let targetValue, let value {
+            OneValueInterpolatingNumberText(
+                value: displaysFinalValue ? targetValue : 0,
+                fractionDigits: OneValueAnimationPolicy.fractionDigits(for: value),
+                formatter: formatter
+            )
+        } else {
+            Text("нет данных")
+        }
+    }
+
+    private var targetValue: Double? {
+        guard let value else {
+            return nil
+        }
+
+        let result = NSDecimalNumber(decimal: value).doubleValue
+        return result.isFinite ? result : nil
+    }
+
+    private var displaysFinalValue: Bool {
+        switch phase {
+        case .finished:
+            return true
+        case .waiting:
+            return false
+        case .unresolved:
+            return OneValueFirstAppearanceRegistry.contains(animationKey)
+        }
+    }
+
+    private var finalText: String {
+        if let customText {
+            return customText
+        }
+        if let value {
+            return formatter(value)
+        }
+        return "нет данных"
+    }
+
+    @MainActor
+    private func runFirstAppearanceAnimationIfNeeded() async {
+        let isFirstAppearance = OneValueFirstAppearanceRegistry.claim(animationKey)
+
+        guard customText == nil, targetValue != nil else {
+            showFinalStateWithoutAnimation()
+            return
+        }
+        guard !accessibilityReduceMotion else {
+            showFinalStateWithoutAnimation()
+            return
+        }
+        guard isFirstAppearance else {
+            showFinalStateWithoutAnimation()
+            return
+        }
+
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            phase = .waiting
+        }
+
+        do {
+            try await Task.sleep(for: OneValueAnimationPolicy.initialDelay)
+        } catch {
+            return
+        }
+
+        withAnimation(.easeOut(duration: OneValueAnimationPolicy.duration)) {
+            phase = .finished
+        }
+    }
+
+    private func showFinalStateWithoutAnimation() {
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            phase = .finished
+        }
+    }
+}
+
+private struct OneValueInterpolatingNumberText: View, @preconcurrency Animatable {
+    var value: Double
+    let fractionDigits: Int
+    let formatter: (Decimal) -> String
+
+    var animatableData: Double {
+        get { value }
+        set { value = newValue }
+    }
+
+    var body: some View {
+        Text(
+            formatter(
+                OneValueAnimationPolicy.roundedValue(
+                    value,
+                    fractionDigits: fractionDigits
+                )
+            )
+        )
     }
 }

@@ -3,46 +3,35 @@ import SwiftUI
 struct IndicatorDashboardCard: View {
     let indicator: Indicator
     let animationTrigger: String
-    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
     @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16 * contentScale) {
             cardContent
         }
-        .padding(18 * contentScale)
+        .padding(.horizontal, 18 * contentScale)
+        .padding(.vertical, cardVerticalPadding)
         .frame(
             maxWidth: .infinity,
-            minHeight: indicator.chartType == .oneValue ? 164 * contentScale : nil,
+            minHeight: indicator.chartType == .oneValue ? 110 * contentScale : nil,
             maxHeight: .infinity,
             alignment: .topLeading
         )
-        .background(
-            indicator.chartType == .oneValue ? paletteColor.opacity(0.075) : .clear,
-            in: RoundedRectangle(cornerRadius: 8)
-        )
         .premiumPanel(isElevated: false)
-        .overlay(alignment: .leading) {
-            if indicator.chartType == .oneValue {
-                Capsule()
-                    .fill(paletteColor)
-                    .frame(width: 4)
-                    .padding(.vertical, 14)
-                    .offset(x: 6)
-                    .accessibilityHidden(true)
-            }
-        }
         .dashboardScaledTypography()
     }
 
-    private var paletteColor: Color {
-        indicator.paletteColor(scheme: chartPaletteScheme)
+    private var cardVerticalPadding: CGFloat {
+        (indicator.chartType == .oneValue ? 8 : 18) * contentScale
     }
 
     @ViewBuilder
     private var cardContent: some View {
         if indicator.chartType == .oneValue {
-            OneValueDashboardContent(indicator: indicator, reservesDetailButtonSpace: true)
+            OneValueDashboardContent(
+                indicator: indicator,
+                reservesDetailButtonSpace: true
+            )
         } else {
             header
             visualization
