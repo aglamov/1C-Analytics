@@ -172,7 +172,9 @@ struct AnalyticsChart: View {
                 trendArea(smooth: true)
             case .forecastLine:
                 forecastLine
-            case .oneValue, .linearProgress, .gauge, .geoMap:
+            case .radar:
+                radarChart
+            case .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy:
                 EmptyView()
             }
         }

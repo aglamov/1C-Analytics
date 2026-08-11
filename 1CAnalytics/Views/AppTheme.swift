@@ -233,9 +233,11 @@ extension Indicator {
         switch chartType {
         case .stackedBar:
             return orderedRows.uniqueValues { $0.series ?? "Значение" }
-        case .line, .area, .splineLine, .splineArea, .forecastLine:
+        case .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             let series = orderedRows.uniqueValues { $0.series ?? "" }.filter { !$0.isEmpty }
             return series.isEmpty ? [title] : series
+        case .expandableHierarchy:
+            return hierarchy?.displayedSeries.map(\.name) ?? []
         case .bar where !barDataShape.series.isEmpty,
              .horizontalBar where !barDataShape.series.isEmpty:
             return barDataShape.series
@@ -251,14 +253,14 @@ extension Indicator {
         switch chartType {
         case .stackedBar:
             key = row.series ?? "Значение"
-        case .line, .area, .splineLine, .splineArea, .forecastLine:
+        case .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             key = row.series ?? title
         case .bar where !barDataShape.series.isEmpty,
              .horizontalBar where !barDataShape.series.isEmpty:
             key = row.series ?? "Значение"
         case .bar, .compactBar, .horizontalBar, .donut, .percentDonut:
             key = row.label
-        case .oneValue, .linearProgress, .gauge, .geoMap:
+        case .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy:
             return accent.primary
         }
 

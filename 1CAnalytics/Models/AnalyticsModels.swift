@@ -106,6 +106,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let lineStyle: ChartLineStyle?
     let forecastFromIndex: Int?
     let isExplicitPlanFactProgress: Bool?
+    let hierarchy: ExpandableHierarchy?
     let rows: [IndicatorRow]
 
     init(
@@ -132,6 +133,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         lineStyle: ChartLineStyle? = nil,
         forecastFromIndex: Int? = nil,
         isExplicitPlanFactProgress: Bool? = nil,
+        hierarchy: ExpandableHierarchy? = nil,
         rows: [IndicatorRow]
     ) {
         self.id = id
@@ -157,6 +159,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.lineStyle = lineStyle
         self.forecastFromIndex = forecastFromIndex
         self.isExplicitPlanFactProgress = isExplicitPlanFactProgress
+        self.hierarchy = hierarchy
         self.rows = rows
     }
 }
@@ -212,6 +215,64 @@ enum ChartLineStyle: String, Codable, Sendable {
 enum DetailsOrientation: String, Codable, Sendable {
     case vertical
     case horizontal
+}
+
+enum ExpandableHierarchyBarMode: String, Codable, Sendable {
+    case stacked
+    case grouped
+    case single
+}
+
+struct ExpandableHierarchySeries: Identifiable, Codable, Equatable, Sendable {
+    let key: String
+    let name: String
+    let colorGraph: String?
+    let colorValue: String?
+    let unit: String?
+
+    var id: String { key }
+}
+
+struct ExpandableHierarchyValue: Codable, Equatable, Sendable {
+    let value: Double
+    let valueLabel: String?
+}
+
+struct ExpandableHierarchyNode: Identifiable, Codable, Equatable, Sendable {
+    let id: String
+    let label: String
+    let values: [String: ExpandableHierarchyValue]
+    let children: [ExpandableHierarchyNode]
+}
+
+struct ExpandableHierarchy: Codable, Equatable, Sendable {
+    let barMode: ExpandableHierarchyBarMode
+    let series: [ExpandableHierarchySeries]
+    let nodes: [ExpandableHierarchyNode]
+    let totalSeries: String?
+
+    var displayedSeries: [ExpandableHierarchySeries] {
+        let visible = series.filter { $0.key != resolvedTotalSeriesKey }
+        return barMode == .single ? Array(visible.prefix(1)) : visible
+    }
+
+    func displayedTotal(for node: ExpandableHierarchyNode) -> Double? {
+        guard resolvedTotalSeriesKey != "" else {
+            return nil
+        }
+
+        if let resolvedTotalSeriesKey {
+            return node.values[resolvedTotalSeriesKey]?.value
+        }
+
+        return displayedSeries.reduce(0) { partial, series in
+            partial + (node.values[series.key]?.value ?? 0)
+        }
+    }
+
+    private var resolvedTotalSeriesKey: String? {
+        totalSeries?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 struct IndicatorRowGroup: Identifiable, Equatable, Sendable {
@@ -327,6 +388,8 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
     case splineLine = "SplineLineMark"
     case splineArea = "SplineAreaMark"
     case forecastLine = "ForecastLineMark"
+    case radar = "RadarMark"
+    case expandableHierarchy = "ExpandableTableMark"
     case oneValue = "OneValue"
     case linearProgress = "LinearProgressIndicator"
     case gauge = "Gauge"
@@ -361,6 +424,10 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             self = .splineArea
         case "ForecastLineMark", "ForecastLine", "PredictionLineMark":
             self = .forecastLine
+        case "RadarMark", "RadarChart", "SpiderMark", "SpiderChart", "Spider", "WebChart":
+            self = .radar
+        case "ExpandableTableMark":
+            self = .expandableHierarchy
         case Self.stackedBar.rawValue:
             self = .stackedBar
         case Self.horizontalBar.rawValue:
@@ -406,6 +473,10 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             "SplineAreaMark"
         case .forecastLine:
             "ForecastLineMark"
+        case .radar:
+            "RadarMark"
+        case .expandableHierarchy:
+            "ExpandableTableMark"
         case .oneValue:
             "OneValue"
         case .linearProgress:
@@ -420,7 +491,7 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
 
 extension Indicator {
     var showsAggregateValue: Bool {
-        showTotal ?? (chartType != .geoMap)
+        showTotal ?? (chartType != .geoMap && chartType != .radar)
     }
 
     var displayUnit: String? {
@@ -436,6 +507,10 @@ extension Indicator {
     }
 
     var showsAggregateValueInHeader: Bool {
+        if chartType == .expandableHierarchy {
+            return false
+        }
+
         guard usesContractPlanFactPresentation else {
             return showsAggregateValue
         }
@@ -655,9 +730,9 @@ extension Indicator {
             .orange
         default:
             switch chartType {
-            case .bar, .compactBar, .line, .forecastLine:
+            case .bar, .compactBar, .line, .forecastLine, .radar:
                 .blue
-            case .horizontalBar, .area:
+            case .horizontalBar, .area, .expandableHierarchy:
                 .green
             case .stackedBar, .splineLine, .splineArea:
                 .violet

@@ -51,6 +51,11 @@ struct IndicatorDetailView: View {
                     contractPlanFactSection
                 }
                 .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
+            } else if indicator.chartType == .expandableHierarchy {
+                OverflowAwareScrollView {
+                    expandableHierarchySection
+                }
+                .frame(maxWidth: .infinity, minHeight: lowerHeight, maxHeight: lowerHeight, alignment: .topLeading)
             } else {
                 HStack(alignment: .top, spacing: 16 * contentScale) {
                     chartSection(fillsAvailableHeight: false)
@@ -78,6 +83,8 @@ struct IndicatorDetailView: View {
 
             if indicator.usesContractPlanFactPresentation {
                 contractPlanFactSection
+            } else if indicator.chartType == .expandableHierarchy {
+                expandableHierarchySection
             } else {
                 chartSection(fillsAvailableHeight: false, aspectRatio: compactChartAspectRatio(for: availableSize))
                 rowsSection
@@ -96,6 +103,16 @@ struct IndicatorDetailView: View {
                 .padding(16 * contentScale)
                 .premiumPanel()
         }
+    }
+
+    private var expandableHierarchySection: some View {
+        ExpandableHierarchyChartView(
+            indicator: indicator,
+            showsExpandedHierarchy: true
+        )
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(16 * contentScale)
+        .premiumPanel()
     }
 
     private func splitHeaderHeight(for availableSize: CGSize) -> CGFloat {

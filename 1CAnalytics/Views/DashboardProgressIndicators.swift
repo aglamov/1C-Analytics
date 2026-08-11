@@ -177,7 +177,9 @@ struct GaugeIndicatorView: View {
                         .monospacedDigit()
                         .contentTransition(.numericText(value: displayedProgress))
 
-                    if let value = indicator.value, let valueMax = indicator.valueMax {
+                    if indicator.showsValueLabels,
+                       let value = indicator.value,
+                       let valueMax = indicator.valueMax {
                         HStack(alignment: .top, spacing: 4 * contentScale) {
                             gaugeValue(
                                 title: "Сейчас",

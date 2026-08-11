@@ -166,7 +166,7 @@ struct IndicatorCard: View {
             "chart.bar.fill"
         case .donut, .percentDonut:
             "chart.pie.fill"
-        case .line, .splineLine, .forecastLine:
+        case .line, .splineLine, .forecastLine, .radar:
             "chart.xyaxis.line"
         case .area, .splineArea:
             "chart.xyaxis.line"
@@ -178,6 +178,8 @@ struct IndicatorCard: View {
             "gauge.with.dots.needle.67percent"
         case .geoMap:
             "map.fill"
+        case .expandableHierarchy:
+            "chart.bar.doc.horizontal.fill"
         }
     }
 

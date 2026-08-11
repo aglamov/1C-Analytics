@@ -41,6 +41,7 @@
 		A10000000000000000000038 /* DetailPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000038 /* DetailPresentationPolicy.swift */; };
 		A10000000000000000000039 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000039 /* AppTheme.swift */; };
 		A10000000000000000000040 /* DashboardStatusViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* DashboardStatusViews.swift */; };
+		A10000000000000000000041 /* AdvancedChartViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* AdvancedChartViews.swift */; };
 		B10000000000000000000001 /* ReleaseReadinessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000000000000000000002 /* ReleaseReadinessTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -94,6 +95,7 @@
 		A20000000000000000000038 /* DetailPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailPresentationPolicy.swift; sourceTree = "<group>"; };
 		A20000000000000000000039 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		A20000000000000000000040 /* DashboardStatusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStatusViews.swift; sourceTree = "<group>"; };
+		A20000000000000000000041 /* AdvancedChartViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedChartViews.swift; sourceTree = "<group>"; };
 		B20000000000000000000001 /* 1C AnalyticsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "1C AnalyticsTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000000000000000000002 /* ReleaseReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseReadinessTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -196,6 +198,7 @@
 				A20000000000000000000039 /* AppTheme.swift */,
 				A20000000000000000000011 /* Components.swift */,
 				A20000000000000000000040 /* DashboardStatusViews.swift */,
+				A20000000000000000000041 /* AdvancedChartViews.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -362,6 +365,7 @@
 				A10000000000000000000039 /* AppTheme.swift in Sources */,
 				A10000000000000000000011 /* Components.swift in Sources */,
 				A10000000000000000000040 /* DashboardStatusViews.swift in Sources */,
+				A10000000000000000000041 /* AdvancedChartViews.swift in Sources */,
 				A10000000000000000000017 /* AuthenticationService.swift in Sources */,
 				A10000000000000000000018 /* AuthenticationViewModel.swift in Sources */,
 				A10000000000000000000019 /* AuthenticationView.swift in Sources */,

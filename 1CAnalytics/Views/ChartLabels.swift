@@ -51,7 +51,8 @@ extension AnalyticsChart {
         case .line, .area, .splineLine, .splineArea, .forecastLine:
             return true
         case .bar, .compactBar, .horizontalBar, .stackedBar, .donut,
-             .percentDonut, .oneValue, .linearProgress, .gauge, .geoMap:
+             .percentDonut, .radar, .expandableHierarchy,
+             .oneValue, .linearProgress, .gauge, .geoMap:
             return false
         }
     }

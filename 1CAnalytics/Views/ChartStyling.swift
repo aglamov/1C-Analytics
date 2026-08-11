@@ -220,7 +220,7 @@ extension AnalyticsChart {
 
     var usesSeriesLegend: Bool {
         switch indicator.chartType {
-        case .line, .area, .splineLine, .splineArea, .forecastLine:
+        case .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             return true
         case .bar, .horizontalBar:
             return !indicator.barDataShape.series.isEmpty
@@ -230,7 +230,7 @@ extension AnalyticsChart {
             return indicator.prefersHorizontalGroupedBars
                 && !indicator.barDataShape.series.isEmpty
         case .donut, .percentDonut,
-             .oneValue, .linearProgress, .gauge, .geoMap:
+             .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy:
             return false
         }
     }

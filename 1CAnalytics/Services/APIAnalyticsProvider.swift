@@ -419,6 +419,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let lineStyle: ChartLineStyle?
     let forecastFromIndex: Int?
     let isExplicitPlanFactProgress: Bool
+    let hierarchy: ExpandableHierarchy?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -462,6 +463,10 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case lineStyle
         case dashed
         case forecastFromIndex
+        case barMode
+        case series
+        case nodes
+        case totalSeries
         case widthPercent
         case width
         case halfWidth
@@ -476,6 +481,37 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         type = try container.decodeIfPresent(ChartType.self, forKey: .type) ?? .bar
         isExplicitPlanFactProgress = try container.decodeFlexibleString(forKey: .type)
             == "PlanFactProgress"
+
+        if type == .expandableHierarchy {
+            let rawBarMode = try container.decodeFlexibleString(forKey: .barMode)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard let rawBarMode,
+                  let barMode = ExpandableHierarchyBarMode(rawValue: rawBarMode) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .barMode,
+                    in: container,
+                    debugDescription: "ExpandableTableMark requires barMode: stacked, grouped, or single"
+                )
+            }
+
+            let hierarchySeries = try container.decodeFlexibleArray(
+                AnalyticsAPIHierarchySeries.self,
+                forKey: .series
+            )
+            let hierarchyNodes = try container.decodeFlexibleArray(
+                AnalyticsAPIHierarchyNode.self,
+                forKey: .nodes
+            )
+            hierarchy = AnalyticsAPIHierarchy(
+                barMode: barMode,
+                series: hierarchySeries,
+                nodes: hierarchyNodes,
+                totalSeries: try container.decodeFlexibleString(forKey: .totalSeries)
+            ).toDomainModel()
+        } else {
+            hierarchy = nil
+        }
         value = try container.decodeFlexibleDouble(forKey: .value)
         valueMax = try container.decodeFlexibleDouble(forKey: .valueMax)
         unit = try container.decodeFlexibleString(forKey: .unit)
@@ -624,11 +660,16 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             lineStyle: lineStyle,
             forecastFromIndex: forecastFromIndex,
             isExplicitPlanFactProgress: isExplicitPlanFactProgress,
+            hierarchy: hierarchy,
             rows: rows
         )
     }
 
     private var resolvedChartType: ChartType {
+        if type == .radar || type == .expandableHierarchy {
+            return type
+        }
+
         let normalizedName = AnalyticsAPIContract.normalize(name)
         let citizenshipIndicatorName = AnalyticsAPIContract.normalize("Всего обучающихся РФ и ИГ")
 
@@ -661,11 +702,163 @@ private extension ChartType {
     var displaysRows: Bool {
         switch self {
         case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .percentDonut,
-             .line, .area, .splineLine, .splineArea, .forecastLine, .geoMap:
+             .line, .area, .splineLine, .splineArea, .forecastLine, .radar, .geoMap:
             true
-        case .oneValue, .linearProgress, .gauge:
+        case .oneValue, .linearProgress, .gauge, .expandableHierarchy:
             false
         }
+    }
+}
+
+private struct AnalyticsAPIHierarchy: Sendable {
+    let barMode: ExpandableHierarchyBarMode
+    let series: [AnalyticsAPIHierarchySeries]
+    let nodes: [AnalyticsAPIHierarchyNode]
+    let totalSeries: String?
+
+    func toDomainModel() -> ExpandableHierarchy {
+        var seriesKeys = Set<String>()
+        let uniqueSeries = series.compactMap { apiSeries -> ExpandableHierarchySeries? in
+            let model = apiSeries.domainModel
+            guard !model.key.isEmpty, seriesKeys.insert(model.key).inserted else {
+                return nil
+            }
+            return model
+        }
+
+        return ExpandableHierarchy(
+            barMode: barMode,
+            series: uniqueSeries,
+            nodes: Self.domainNodes(nodes, parentPath: "node"),
+            totalSeries: totalSeries
+        )
+    }
+
+    private static func domainNodes(
+        _ nodes: [AnalyticsAPIHierarchyNode],
+        parentPath: String
+    ) -> [ExpandableHierarchyNode] {
+        var siblingCounts = [String: Int]()
+
+        return nodes.enumerated().map { index, node in
+            let explicitID = node.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let baseID = explicitID.isEmpty ? String(index + 1) : explicitID
+            let occurrence = siblingCounts[baseID, default: 0]
+            siblingCounts[baseID] = occurrence + 1
+            let uniqueID = occurrence == 0 ? baseID : "\(baseID)#\(occurrence + 1)"
+            let path = "\(parentPath)/\(uniqueID)"
+
+            return ExpandableHierarchyNode(
+                id: path,
+                label: node.label,
+                values: node.values.mapValues(\.domainModel),
+                children: domainNodes(node.children, parentPath: path)
+            )
+        }
+    }
+}
+
+private struct AnalyticsAPIHierarchySeries: Decodable, Sendable {
+    let key: String
+    let name: String
+    let colorGraph: String?
+    let colorValue: String?
+    let unit: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case name
+        case colorGraph
+        case colorValue
+        case unit
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decodeFlexibleString(forKey: .key) ?? ""
+        name = try container.decodeFlexibleString(forKey: .name) ?? key
+        colorGraph = try container.decodeFlexibleString(forKey: .colorGraph)
+        colorValue = try container.decodeFlexibleString(forKey: .colorValue)
+        unit = try container.decodeFlexibleString(forKey: .unit)
+    }
+
+    var domainModel: ExpandableHierarchySeries {
+        let normalizedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ExpandableHierarchySeries(
+            key: normalizedKey,
+            name: normalizedName.isEmpty ? normalizedKey : normalizedName,
+            colorGraph: colorGraph,
+            colorValue: colorValue,
+            unit: unit
+        )
+    }
+}
+
+private struct AnalyticsAPIHierarchyNode: Decodable, Sendable {
+    let id: String?
+    let label: String
+    let values: [String: AnalyticsAPIHierarchyValue]
+    let children: [AnalyticsAPIHierarchyNode]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case values
+        case children
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeFlexibleString(forKey: .id)
+        label = try container.decodeFlexibleString(forKey: .label) ?? ""
+        values = try container.decodeIfPresent(
+            [String: AnalyticsAPIHierarchyValue].self,
+            forKey: .values
+        ) ?? [:]
+        children = try container.decodeFlexibleArray(
+            AnalyticsAPIHierarchyNode.self,
+            forKey: .children
+        )
+    }
+}
+
+private struct AnalyticsAPIHierarchyValue: Decodable, Sendable {
+    let value: Double
+    let valueLabel: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case value
+        case valueLabel
+        case displayValue
+        case displayLabel
+    }
+
+    init(from decoder: any Decoder) throws {
+        if let scalar = try? decoder.singleValueContainer(),
+           let value = try? scalar.decode(Double.self) {
+            self.value = value
+            valueLabel = nil
+            return
+        }
+
+        if let scalar = try? decoder.singleValueContainer(),
+           let string = try? scalar.decode(String.self),
+           let value = Double(string.replacingOccurrences(of: ",", with: ".")) {
+            self.value = value
+            valueLabel = nil
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        value = try container.decodeFlexibleDouble(forKey: .value) ?? 0
+        valueLabel = try container.decodeFlexibleString(forKey: .valueLabel)
+            ?? container.decodeFlexibleString(forKey: .displayValue)
+            ?? container.decodeFlexibleString(forKey: .displayLabel)
+    }
+
+    var domainModel: ExpandableHierarchyValue {
+        ExpandableHierarchyValue(value: value, valueLabel: valueLabel)
     }
 }
 

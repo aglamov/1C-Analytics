@@ -124,8 +124,15 @@ enum ChartHeightPolicy {
             return horizontalBarHeight(categoryCount: categoryCount, seriesCount: seriesCount)
         case .donut, .percentDonut:
             return indicator.orderedRows.count > 4 ? 380 : 340
-        case .line, .area, .splineLine, .splineArea, .forecastLine:
+        case .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             return min(max(availableWidth * 0.72, 300), 420)
+        case .expandableHierarchy:
+            let rootCount = max(indicator.hierarchy?.nodes.count ?? 0, 1)
+            let seriesCount = max(indicator.hierarchy?.displayedSeries.count ?? 0, 1)
+            let rowHeight: CGFloat = indicator.hierarchy?.barMode == .grouped
+                ? CGFloat(seriesCount) * 34 + 42
+                : 74
+            return max(220, CGFloat(rootCount) * rowHeight + 64)
         case .bar, .compactBar, .stackedBar:
             return min(max(availableWidth * 0.68, 280), 390)
         case .oneValue:

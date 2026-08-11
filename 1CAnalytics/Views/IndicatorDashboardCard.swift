@@ -65,6 +65,9 @@ struct IndicatorDashboardCard: View {
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: chartHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+        case .expandableHierarchy:
+            ExpandableHierarchyChartView(indicator: indicator, showsExpandedHierarchy: false)
+                .frame(minHeight: chartHeight, alignment: .top)
         case .compactBar:
             VStack(alignment: .leading, spacing: 12) {
                 AnalyticsChart(
@@ -82,7 +85,7 @@ struct IndicatorDashboardCard: View {
                 }
             }
         case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
-             .line, .area, .splineLine, .splineArea, .forecastLine:
+             .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             AnalyticsChart(
                 indicator: indicator,
                 usesCardBackground: false,
@@ -132,6 +135,15 @@ struct IndicatorDashboardCard: View {
             return 214
         case .line, .area, .splineLine, .splineArea, .forecastLine:
             return 264
+        case .radar:
+            return 300
+        case .expandableHierarchy:
+            let rootCount = max(indicator.hierarchy?.nodes.count ?? 0, 1)
+            let seriesCount = max(indicator.hierarchy?.displayedSeries.count ?? 0, 1)
+            let rowHeight: CGFloat = indicator.hierarchy?.barMode == .grouped
+                ? CGFloat(seriesCount) * 32 + 40
+                : 70
+            return max(190, CGFloat(rootCount) * rowHeight + 52)
         case .donut, .percentDonut:
             return indicator.orderedRows.count > 4 ? 310 : 286
         case .gauge:

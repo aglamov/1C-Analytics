@@ -788,6 +788,169 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(indicators.map(\.alwaysShowPointValues), [false, false, true, nil])
     }
 
+    func testRadarContractDecodesAliasesSeriesAndDefaults() throws {
+        let aliases = ["RadarMark", "RadarChart", "SpiderMark", "SpiderChart", "Spider", "WebChart"]
+
+        for alias in aliases {
+            let data = Data(
+                """
+                {
+                  "sections": [{
+                    "name": "Стратегия",
+                    "values": [{
+                      "name": "Профиль направлений",
+                      "type": "\(alias)",
+                      "values": [
+                        {"group":"Продажи","subgroup":[{"name":"План","value":80},{"name":"Факт","value":72,"lineStyle":"dashed"}]},
+                        {"group":"Маржа","subgroup":[{"name":"План","value":65},{"name":"Факт","value":58}]},
+                        {"group":"Качество","subgroup":[{"name":"План","value":90},{"name":"Факт","value":84}]}
+                      ]
+                    }]
+                  }]
+                }
+                """.utf8
+            )
+
+            let indicator = try XCTUnwrap(
+                JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                    .toDashboard()
+                    .indicators
+                    .first
+            )
+
+            XCTAssertEqual(indicator.chartType, .radar)
+            XCTAssertFalse(indicator.showsAggregateValue)
+            XCTAssertTrue(indicator.showsLegend)
+            XCTAssertEqual(indicator.rowGroups.map(\.label), ["Продажи", "Маржа", "Качество"])
+            XCTAssertEqual(indicator.barDataShape.series, ["План", "Факт"])
+            XCTAssertEqual(
+                indicator.rows.first { $0.series == "Факт" }?.lineStyle,
+                .dashed
+            )
+        }
+    }
+
+    func testExpandableHierarchyDecodesRecursiveNodesAndTotalSeries() throws {
+        let data = Data(
+            #"""
+            {
+              "sections": [{
+                "name": "Образование",
+                "values": [{
+                  "name": "Всего обучающихся РФ и ИГ",
+                  "type": "ExpandableTableMark",
+                  "barMode": "stacked",
+                  "totalSeries": "total",
+                  "series": [
+                    {"key":"total","name":"Всего"},
+                    {"key":"rf","name":"РФ","unit":"чел."},
+                    {"key":"foreign","name":"ИГ"}
+                  ],
+                  "nodes": [{
+                    "id":"bachelor",
+                    "label":"Бакалавриат",
+                    "values": {
+                      "total":19368,
+                      "rf":{"value":16155,"valueLabel":"16 155 чел."},
+                      "foreign":3213
+                    },
+                    "children":[
+                      {"label":"Профиль 1","values":{"total":1200,"rf":1110,"foreign":90}},
+                      {"label":"Профиль 2","values":{"total":900,"rf":850,"foreign":50}}
+                    ]
+                  }]
+                }]
+              }]
+            }
+            """#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+        let hierarchy = try XCTUnwrap(indicator.hierarchy)
+        let root = try XCTUnwrap(hierarchy.nodes.first)
+
+        XCTAssertEqual(indicator.chartType, .expandableHierarchy)
+        XCTAssertTrue(indicator.rows.isEmpty)
+        XCTAssertFalse(indicator.showsAggregateValueInHeader)
+        XCTAssertEqual(hierarchy.barMode, .stacked)
+        XCTAssertEqual(hierarchy.displayedSeries.map(\.key), ["rf", "foreign"])
+        XCTAssertEqual(hierarchy.displayedTotal(for: root), 19_368)
+        XCTAssertEqual(root.values["rf"]?.valueLabel, "16 155 чел.")
+        XCTAssertEqual(root.children.count, 2)
+        XCTAssertNotEqual(root.children[0].id, root.children[1].id)
+        XCTAssertTrue(root.children.allSatisfy { $0.id.hasPrefix(root.id) })
+
+        let roundTrip = try JSONDecoder().decode(
+            Indicator.self,
+            from: JSONEncoder().encode(indicator)
+        )
+        XCTAssertEqual(roundTrip, indicator)
+    }
+
+    func testExpandableHierarchyTotalModesAndSingleSeries() {
+        let first = ExpandableHierarchySeries(
+            key: "first",
+            name: "Первый",
+            colorGraph: nil,
+            colorValue: nil,
+            unit: nil
+        )
+        let second = ExpandableHierarchySeries(
+            key: "second",
+            name: "Второй",
+            colorGraph: nil,
+            colorValue: nil,
+            unit: nil
+        )
+        let node = ExpandableHierarchyNode(
+            id: "node",
+            label: "Узел",
+            values: [
+                "first": ExpandableHierarchyValue(value: 10, valueLabel: nil),
+                "second": ExpandableHierarchyValue(value: 4, valueLabel: nil)
+            ],
+            children: []
+        )
+
+        let automatic = ExpandableHierarchy(
+            barMode: .stacked,
+            series: [first, second],
+            nodes: [node],
+            totalSeries: nil
+        )
+        XCTAssertEqual(automatic.displayedTotal(for: node), 14)
+
+        let hidden = ExpandableHierarchy(
+            barMode: .grouped,
+            series: [first, second],
+            nodes: [node],
+            totalSeries: ""
+        )
+        XCTAssertNil(hidden.displayedTotal(for: node))
+
+        let single = ExpandableHierarchy(
+            barMode: .single,
+            series: [first, second],
+            nodes: [node],
+            totalSeries: nil
+        )
+        XCTAssertEqual(single.displayedSeries.map(\.key), ["first"])
+        XCTAssertEqual(single.displayedTotal(for: node), 10)
+    }
+
+    func testExpandableHierarchyRequiresBarMode() {
+        let data = Data(
+            #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"ExpandableTableMark","series":[],"nodes":[]}]}]}"#.utf8
+        )
+
+        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
+    }
+
     func testResponseMappingUsesFetchTimeAndCalculatesSubgroupSummary() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Контингент","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":10},{"name":"ИГ","value":2}]}],"type":"BarMarkStacking"}]}]}"#.utf8
