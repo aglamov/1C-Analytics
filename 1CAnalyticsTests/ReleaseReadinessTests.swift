@@ -830,6 +830,29 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testDenseRadarMovesSmallValueLabelsAwayFromCenter() {
+        XCTAssertEqual(
+            RadarPresentationPolicy.labelRadiusFraction(valueFraction: 0.001, axisCount: 9),
+            0.62,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            RadarPresentationPolicy.labelRadiusFraction(valueFraction: 0.72, axisCount: 9),
+            0.72,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            RadarPresentationPolicy.labelRadiusFraction(valueFraction: 0.10, axisCount: 5),
+            0.34,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            RadarPresentationPolicy.labelRadiusFraction(valueFraction: 1, axisCount: 5),
+            0.84,
+            accuracy: 0.000_001
+        )
+    }
+
     func testExpandableHierarchyDecodesRecursiveNodesAndTotalSeries() throws {
         let data = Data(
             #"""

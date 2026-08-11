@@ -51,14 +51,15 @@ private struct RadarChartView: View {
                     Canvas { context, _ in
                         drawGrid(context: &context, layout: layout)
                         drawSeries(context: &context, layout: layout)
+                        drawLabelLeaders(context: &context, layout: layout)
                     }
 
                     axisLabels(layout: layout)
                     pointLabels(layout: layout)
                 }
                 .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
+                .simultaneousGesture(
+                    SpatialTapGesture()
                         .onEnded { gesture in
                             selectNearestPoint(to: gesture.location, layout: layout)
                         }
@@ -143,16 +144,49 @@ private struct RadarChartView: View {
         }
     }
 
+    private func drawLabelLeaders(context: inout GraphicsContext, layout: RadarLayout) {
+        guard indicator.showsValueLabels else {
+            return
+        }
+
+        for (axisIndex, group) in groups.enumerated() {
+            for row in group.rows where selectedRowID == nil || row.id == selectedRowID {
+                let valueFraction = max(row.value, 0) / maximumValue
+                let labelFraction = RadarPresentationPolicy.labelRadiusFraction(
+                    valueFraction: valueFraction,
+                    axisCount: groups.count
+                )
+                guard abs(labelFraction - valueFraction) > 0.04 else {
+                    continue
+                }
+
+                var path = Path()
+                path.move(to: layout.point(axis: axisIndex, radiusFraction: valueFraction * progress))
+                path.addLine(to: layout.point(axis: axisIndex, radiusFraction: labelFraction * progress))
+                context.stroke(
+                    path,
+                    with: .color(seriesColor(for: row).opacity(0.28)),
+                    style: StrokeStyle(lineWidth: 0.8, dash: [2, 3])
+                )
+            }
+        }
+    }
+
     private func axisLabels(layout: RadarLayout) -> some View {
         ForEach(Array(groups.enumerated()), id: \.element.id) { index, group in
-            let position = layout.point(axis: index, radiusFraction: 1.18)
+            let labelSize = CGSize(width: 72 * contentScale, height: 30 * contentScale)
+            let position = layout.labelPosition(
+                axis: index,
+                radiusFraction: 1.14,
+                labelSize: labelSize
+            )
             Text(group.label)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.72)
-                .frame(width: 88 * contentScale)
+                .frame(width: labelSize.width)
                 .position(position)
                 .allowsHitTesting(false)
         }
@@ -165,9 +199,22 @@ private struct RadarChartView: View {
                 if indicator.showsValueLabels,
                    selectedRowID == nil || row.id == selectedRowID {
                     let seriesIndex = max(seriesNames.firstIndex(of: row.series ?? indicator.title) ?? 0, 0)
-                    let position = layout.point(
+                    let valueFraction = max(row.value, 0) / maximumValue
+                    let basePosition = layout.point(
                         axis: axisIndex,
-                        radiusFraction: max(row.value, 0) / maximumValue * progress
+                        radiusFraction: RadarPresentationPolicy.labelRadiusFraction(
+                            valueFraction: valueFraction,
+                            axisCount: groups.count
+                        ) * progress
+                    )
+                    let horizontalOffset: CGFloat = seriesIndex.isMultiple(of: 2) ? -8 : 8
+                    let adjustedPosition = CGPoint(
+                        x: basePosition.x + horizontalOffset * contentScale,
+                        y: basePosition.y + (CGFloat(seriesIndex) * 8 - 8) * contentScale
+                    )
+                    let position = layout.clampedLabelPosition(
+                        adjustedPosition,
+                        labelSize: CGSize(width: 92 * contentScale, height: 34 * contentScale)
                     )
                     pointLabel(row: row, seriesIndex: seriesIndex, position: position)
                 }
@@ -182,8 +229,7 @@ private struct RadarChartView: View {
     ) -> some View {
         let isSelected = row.id == selectedRowID
         let text = row.valueLabel ?? indicator.formattedNumber(row.value)
-        let font: Font = isSelected ? .caption : .caption2
-        let horizontalOffset: CGFloat = seriesIndex.isMultiple(of: 2) ? -8 : 8
+        let font: Font = isSelected ? .subheadline : .caption
 
         return Text(text)
             .font(font.monospacedDigit().weight(.bold))
@@ -199,10 +245,6 @@ private struct RadarChartView: View {
                         lineWidth: isSelected ? 1.5 : 0.6
                     )
             }
-            .offset(
-                x: horizontalOffset * contentScale,
-                y: CGFloat(seriesIndex) * 8 * contentScale - 8 * contentScale
-            )
             .position(position)
             .zIndex(isSelected ? 100 : Double(seriesIndex))
             .allowsHitTesting(false)
@@ -249,12 +291,36 @@ private struct RadarLayout {
     }
 
     var radius: CGFloat {
-        max(min(size.width, size.height) / 2 - 48 * scale, 24)
+        max(min(size.width, size.height) / 2 - 22 * scale, 24)
     }
 
     func point(axis: Int, radiusFraction: Double) -> CGPoint {
+        rawPoint(axis: axis, radiusFraction: min(max(radiusFraction, 0), 1))
+    }
+
+    func labelPosition(
+        axis: Int,
+        radiusFraction: Double,
+        labelSize: CGSize
+    ) -> CGPoint {
+        clampedLabelPosition(
+            rawPoint(axis: axis, radiusFraction: radiusFraction),
+            labelSize: labelSize
+        )
+    }
+
+    func clampedLabelPosition(_ point: CGPoint, labelSize: CGSize) -> CGPoint {
+        let horizontalInset = labelSize.width / 2
+        let verticalInset = labelSize.height / 2
+        return CGPoint(
+            x: min(max(point.x, horizontalInset), max(size.width - horizontalInset, horizontalInset)),
+            y: min(max(point.y, verticalInset), max(size.height - verticalInset, verticalInset))
+        )
+    }
+
+    private func rawPoint(axis: Int, radiusFraction: Double) -> CGPoint {
         let angle = -Double.pi / 2 + Double(axis) * 2 * Double.pi / Double(max(axisCount, 1))
-        let resolvedRadius = radius * CGFloat(min(max(radiusFraction, 0), 1))
+        let resolvedRadius = radius * CGFloat(max(radiusFraction, 0))
         return CGPoint(
             x: center.x + CGFloat(cos(angle)) * resolvedRadius,
             y: center.y + CGFloat(sin(angle)) * resolvedRadius
@@ -263,6 +329,23 @@ private struct RadarLayout {
 
     func polygonPoints(radiusFraction: Double) -> [CGPoint] {
         (0..<axisCount).map { point(axis: $0, radiusFraction: radiusFraction) }
+    }
+}
+
+enum RadarPresentationPolicy {
+    static func labelRadiusFraction(valueFraction: Double, axisCount: Int) -> Double {
+        let minimumFraction: Double
+        switch axisCount {
+        case 8...:
+            minimumFraction = 0.62
+        case 6...7:
+            minimumFraction = 0.48
+        default:
+            minimumFraction = 0.34
+        }
+
+        let maximumFraction = axisCount >= 8 ? 0.82 : 0.84
+        return min(max(valueFraction, minimumFraction), maximumFraction)
     }
 }
 
