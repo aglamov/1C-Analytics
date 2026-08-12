@@ -96,46 +96,39 @@ extension AnalyticsChart {
 
             ValidChartGeometry(size: geometry.size) {
                 Chart(indicator.orderedRows) { row in
-                BarMark(
-                    x: .value("Группа", row.label),
-                    y: .value("Значение", animatedValue(for: row)),
-                    width: barMarkDimension
-                )
-                .foregroundStyle(verticalBarStyle(for: row))
-                .alignsMarkStylesWithPlotArea(false)
-                .opacity(opacity(for: row))
-                .cornerRadius(3)
-                .annotation(position: .overlay, alignment: .center) {
-                    if shouldShowStackedValueLabel(for: row) {
-                        valueLabel(for: row, usesContrastingForeground: true)
-                    }
-                }
-
-                if isLastRowInGroup(row), let group = rowGroup(for: row) {
-                    PointMark(
-                        x: .value("Группа", group.label),
-                        y: .value("Итого", group.totalValue)
+                    BarMark(
+                        x: .value("Группа", row.label),
+                        y: .value("Значение", animatedValue(for: row)),
+                        width: barMarkDimension
                     )
-                    .symbolSize(0)
-                    .annotation(position: .top, alignment: .center, spacing: 5) {
-                        groupTotalLabel(group)
+                    .foregroundStyle(verticalBarStyle(for: row))
+                    .alignsMarkStylesWithPlotArea(false)
+                    .opacity(opacity(for: row))
+                    .cornerRadius(3)
+                    .annotation(position: .overlay, alignment: .center) {
+                        if shouldShowStackedValueLabel(for: row) {
+                            valueLabel(for: row, usesContrastingForeground: true)
+                        }
+                    }
+
+                    if isLastRowInGroup(row), let group = rowGroup(for: row) {
+                        PointMark(
+                            x: .value("Группа", group.label),
+                            y: .value("Итого", group.totalValue)
+                        )
+                        .symbolSize(0)
+                        .annotation(position: .top, alignment: .center, spacing: 5) {
+                            groupTotalLabel(group)
+                        }
                     }
                 }
-            }
-            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-            .chartYScale(domain: stackedBarValueLabelDomain)
-            .chartYAxis {
-                humanReadableValueAxis(
-                    position: .leading,
-                    font: histogramYAxisFont
-                )
-            }
-            .chartXAxis {
-                responsiveCategoryAxis(availableWidth: contentWidth)
-            }
-            .chartOverlay { proxy in
-                chartTapOverlay(proxy: proxy, mode: .stackedBar)
-            }
+                .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartYScale(domain: stackedBarValueLabelDomain)
+                .chartYAxis {
+                    humanReadableValueAxis(position: .leading, font: histogramYAxisFont)
+                }
+                .chartXAxis { responsiveCategoryAxis(availableWidth: contentWidth) }
+                .chartOverlay { proxy in chartTapOverlay(proxy: proxy, mode: .stackedBar) }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
         }
@@ -192,65 +185,54 @@ extension AnalyticsChart {
             let contentWidth = trendContentWidth(availableWidth: geometry.size.width)
 
             ValidChartGeometry(size: geometry.size) {
-                Chart(indicator.orderedRows) { row in
-                if showsLineAreaFill {
-                    AreaMark(
-                        x: .value("Группа", trendXValue(for: row)),
-                        yStart: .value("Основание", 0),
-                        yEnd: .value("Значение", animatedValue(for: row)),
-                        series: .value("Серия", row.series ?? indicator.title)
-                    )
-                    .interpolationMethod(smooth ? .catmullRom : .monotone)
-                    .foregroundStyle(areaGradient(for: row))
-                    .alignsMarkStylesWithPlotArea(false)
-                    .opacity(opacity(for: row))
-                }
+                Chart {
+                    ForEach(indicator.orderedRows) { row in
+                        if showsLineAreaFill {
+                            AreaMark(
+                                x: .value("Группа", trendXValue(for: row)),
+                                yStart: .value("Основание", 0),
+                                yEnd: .value("Значение", animatedValue(for: row)),
+                                series: .value("Серия", row.series ?? indicator.title)
+                            )
+                            .interpolationMethod(smooth ? .catmullRom : .monotone)
+                            .foregroundStyle(areaGradient(for: row))
+                            .alignsMarkStylesWithPlotArea(false)
+                            .opacity(opacity(for: row))
+                        }
 
-                LineMark(
-                    x: .value("Группа", trendXValue(for: row)),
-                    y: .value("Значение", animatedValue(for: row)),
-                    series: .value("Серия", row.series ?? indicator.title)
-                )
-                .interpolationMethod(smooth ? .catmullRom : .monotone)
-                .lineStyle(strokeStyle(for: row))
-                .foregroundStyle(chartColor(for: row))
-                .opacity(opacity(for: row))
+                        LineMark(
+                            x: .value("Группа", trendXValue(for: row)),
+                            y: .value("Значение", animatedValue(for: row)),
+                            series: .value("Серия", row.series ?? indicator.title)
+                        )
+                        .interpolationMethod(smooth ? .catmullRom : .monotone)
+                        .lineStyle(strokeStyle(for: row))
+                        .foregroundStyle(chartColor(for: row))
+                        .opacity(opacity(for: row))
 
-                PointMark(
-                    x: .value("Группа", trendXValue(for: row)),
-                    y: .value("Значение", animatedValue(for: row))
-                )
-                .foregroundStyle(chartColor(for: row))
-                .symbolSize(
-                    (rowMatchesSelection(row) ? 62 : 24)
-                        * dashboardContentScale * dashboardContentScale
-                )
-                .opacity(opacity(for: row))
-                .annotation(
-                    position: trendAnnotationPosition(for: row),
-                    alignment: trendAnnotationAlignment(for: row),
-                    overflowResolution: .init(x: .disabled, y: .disabled)
-                ) {
-                    if shouldShowValueLabel(for: row), selectedRowID != row.id {
-                        valueLabel(for: row)
+                        PointMark(
+                            x: .value("Группа", trendXValue(for: row)),
+                            y: .value("Значение", animatedValue(for: row))
+                        )
+                        .foregroundStyle(chartColor(for: row))
+                        .symbolSize((rowMatchesSelection(row) ? 62 : 24) * dashboardContentScale * dashboardContentScale)
+                        .opacity(opacity(for: row))
+                        .annotation(
+                            position: trendAnnotationPosition(for: row),
+                            alignment: trendAnnotationAlignment(for: row),
+                            overflowResolution: .init(x: .disabled, y: .disabled)
+                        ) {
+                            if shouldShowValueLabel(for: row), selectedRowID != row.id { valueLabel(for: row) }
+                        }
                     }
+                    crossingHighlightMarks(smooth: smooth, forecastAware: false)
                 }
-            }
-            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-            .chartXScale(
-                domain: trendXDomain,
-                range: .plotDimension(startPadding: 0, endPadding: 5)
-            )
-            .chartYScale(domain: trendValueLabelDomain(includesZero: showsLineAreaFill))
-            .chartYAxis {
-                valueAxis
-            }
-            .chartXAxis {
-                responsiveTrendAxis(availableWidth: contentWidth)
-            }
-            .chartOverlay { proxy in
-                trendChartOverlay(proxy: proxy)
-            }
+                .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartXScale(domain: trendXDomain, range: .plotDimension(startPadding: 0, endPadding: 5))
+                .chartYScale(domain: trendValueLabelDomain(includesZero: showsLineAreaFill))
+                .chartYAxis { valueAxis }
+                .chartXAxis { responsiveTrendAxis(availableWidth: contentWidth) }
+                .chartOverlay { proxy in trendChartOverlay(proxy: proxy) }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
         }
@@ -261,63 +243,49 @@ extension AnalyticsChart {
             let contentWidth = trendContentWidth(availableWidth: geometry.size.width)
 
             ValidChartGeometry(size: geometry.size) {
-                Chart(indicator.orderedRows) { row in
-                AreaMark(
-                    x: .value("Группа", trendXValue(for: row)),
-                    yStart: .value("Основание", 0),
-                    yEnd: .value("Значение", animatedValue(for: row)),
-                    series: .value("Серия", row.series ?? indicator.title)
-                )
-                .interpolationMethod(smooth ? .catmullRom : .monotone)
-                .foregroundStyle(areaGradient(for: row))
-                .alignsMarkStylesWithPlotArea(false)
-                .opacity(opacity(for: row))
+                Chart {
+                    ForEach(indicator.orderedRows) { row in
+                        AreaMark(
+                            x: .value("Группа", trendXValue(for: row)),
+                            yStart: .value("Основание", 0),
+                            yEnd: .value("Значение", animatedValue(for: row)),
+                            series: .value("Серия", row.series ?? indicator.title)
+                        )
+                        .interpolationMethod(smooth ? .catmullRom : .monotone)
+                        .foregroundStyle(areaGradient(for: row))
+                        .alignsMarkStylesWithPlotArea(false)
+                        .opacity(opacity(for: row))
 
-                LineMark(
-                    x: .value("Группа", trendXValue(for: row)),
-                    y: .value("Значение", animatedValue(for: row)),
-                    series: .value("Серия", row.series ?? indicator.title)
-                )
-                .interpolationMethod(smooth ? .catmullRom : .monotone)
-                .lineStyle(strokeStyle(for: row))
-                .foregroundStyle(chartColor(for: row))
-                .opacity(opacity(for: row))
+                        LineMark(
+                            x: .value("Группа", trendXValue(for: row)),
+                            y: .value("Значение", animatedValue(for: row)),
+                            series: .value("Серия", row.series ?? indicator.title)
+                        )
+                        .interpolationMethod(smooth ? .catmullRom : .monotone)
+                        .lineStyle(strokeStyle(for: row))
+                        .foregroundStyle(chartColor(for: row))
+                        .opacity(opacity(for: row))
 
-                PointMark(
-                    x: .value("Группа", trendXValue(for: row)),
-                    y: .value("Значение", animatedValue(for: row))
-                )
-                .foregroundStyle(chartColor(for: row))
-                .symbolSize(
-                    (rowMatchesSelection(row) ? 58 : 20)
-                        * dashboardContentScale * dashboardContentScale
-                )
-                .opacity(opacity(for: row))
-                .annotation(
-                    position: trendAnnotationPosition(for: row),
-                    alignment: trendAnnotationAlignment(for: row),
-                    overflowResolution: .init(x: .disabled, y: .disabled)
-                ) {
-                    if shouldShowValueLabel(for: row), selectedRowID != row.id {
-                        valueLabel(for: row)
+                        PointMark(x: .value("Группа", trendXValue(for: row)), y: .value("Значение", animatedValue(for: row)))
+                            .foregroundStyle(chartColor(for: row))
+                            .symbolSize((rowMatchesSelection(row) ? 58 : 20) * dashboardContentScale * dashboardContentScale)
+                            .opacity(opacity(for: row))
+                            .annotation(
+                                position: trendAnnotationPosition(for: row),
+                                alignment: trendAnnotationAlignment(for: row),
+                                overflowResolution: .init(x: .disabled, y: .disabled)
+                            ) {
+                                if shouldShowValueLabel(for: row), selectedRowID != row.id { valueLabel(for: row) }
+                            }
                     }
+                    crossingHighlightMarks(smooth: smooth, forecastAware: false)
                 }
-            }
-            .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-            .chartXScale(
-                domain: trendXDomain,
-                range: .plotDimension(startPadding: 0, endPadding: 5)
-            )
-            .chartYScale(domain: trendValueLabelDomain(includesZero: true))
-            .chartYAxis {
-                valueAxis
-            }
-            .chartXAxis {
-                responsiveTrendAxis(availableWidth: contentWidth)
-            }
-            .chartOverlay { proxy in
-                trendChartOverlay(proxy: proxy)
-            }
+                .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
+                .chartXScale(domain: trendXDomain, range: .plotDimension(startPadding: 0, endPadding: 5))
+                .chartYScale(domain: trendValueLabelDomain(includesZero: true))
+                .chartYAxis { valueAxis }
+                .chartXAxis { responsiveTrendAxis(availableWidth: contentWidth) }
+                .chartOverlay { proxy in trendChartOverlay(proxy: proxy) }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
         }
@@ -360,6 +328,8 @@ extension AnalyticsChart {
                         }
                     }
                 }
+
+                crossingHighlightMarks(smooth: false, forecastAware: true)
 
                 if let forecastStartLabel {
                     RuleMark(x: .value("Начало прогноза", trendXValue(for: forecastStartLabel)))

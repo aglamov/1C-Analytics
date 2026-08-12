@@ -7,7 +7,9 @@ struct Dashboard: Identifiable, Codable, Equatable, Sendable {
     let sections: [DashboardSection]
 
     var indicators: [Indicator] {
-        sections.flatMap(\.indicators)
+        sections.flatMap { section in
+            section.indicators + (section.extended?.indicators ?? [])
+        }
     }
 
     init(id: String, title: String, fetchedAt: Date?, indicators: [Indicator]) {
@@ -66,19 +68,36 @@ struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
     let indicators: [Indicator]
     let fetchedAt: Date?
     let hasExtended: Bool
+    let extended: DashboardExtendedSection?
 
     init(
         id: String,
         title: String,
         indicators: [Indicator],
         fetchedAt: Date? = nil,
-        hasExtended: Bool = false
+        hasExtended: Bool = false,
+        extended: DashboardExtendedSection? = nil
     ) {
         self.id = id
         self.title = title
         self.indicators = indicators
         self.fetchedAt = fetchedAt
         self.hasExtended = hasExtended
+        self.extended = extended
+    }
+}
+
+struct DashboardExtendedSection: Identifiable, Codable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let indicators: [Indicator]
+    let fetchedAt: Date?
+
+    init(id: String, title: String, indicators: [Indicator], fetchedAt: Date? = nil) {
+        self.id = id
+        self.title = title
+        self.indicators = indicators
+        self.fetchedAt = fetchedAt
     }
 }
 
@@ -96,6 +115,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let showValueLabels: Bool?
+    let showRowValues: Bool?
     let alwaysShowPointValues: Bool?
     let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
@@ -105,6 +125,9 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let barLayout: BarLayout?
     let lineStyle: ChartLineStyle?
     let forecastFromIndex: Int?
+    let highlightCrossing: Bool?
+    let highlightSeriesIndex: Int?
+    let referenceSeriesIndex: Int?
     let isExplicitPlanFactProgress: Bool?
     let hierarchy: ExpandableHierarchy?
     let rows: [IndicatorRow]
@@ -123,6 +146,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showTotal: Bool? = nil,
         showDetails: Bool? = nil,
         showValueLabels: Bool? = nil,
+        showRowValues: Bool? = nil,
         alwaysShowPointValues: Bool? = nil,
         showYAxisLabels: Bool? = nil,
         detailsOrientation: DetailsOrientation? = nil,
@@ -132,6 +156,9 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         barLayout: BarLayout? = nil,
         lineStyle: ChartLineStyle? = nil,
         forecastFromIndex: Int? = nil,
+        highlightCrossing: Bool? = nil,
+        highlightSeriesIndex: Int? = nil,
+        referenceSeriesIndex: Int? = nil,
         isExplicitPlanFactProgress: Bool? = nil,
         hierarchy: ExpandableHierarchy? = nil,
         rows: [IndicatorRow]
@@ -149,6 +176,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showTotal = showTotal
         self.showDetails = showDetails
         self.showValueLabels = showValueLabels
+        self.showRowValues = showRowValues
         self.alwaysShowPointValues = alwaysShowPointValues
         self.showYAxisLabels = showYAxisLabels
         self.detailsOrientation = detailsOrientation
@@ -158,6 +186,9 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.barLayout = barLayout
         self.lineStyle = lineStyle
         self.forecastFromIndex = forecastFromIndex
+        self.highlightCrossing = highlightCrossing
+        self.highlightSeriesIndex = highlightSeriesIndex
+        self.referenceSeriesIndex = referenceSeriesIndex
         self.isExplicitPlanFactProgress = isExplicitPlanFactProgress
         self.hierarchy = hierarchy
         self.rows = rows
@@ -528,6 +559,10 @@ extension Indicator {
 
     var showsValueLabels: Bool {
         showValueLabels ?? true
+    }
+
+    var showsRowValues: Bool {
+        showRowValues ?? true
     }
 
     var showsYAxisLabels: Bool {

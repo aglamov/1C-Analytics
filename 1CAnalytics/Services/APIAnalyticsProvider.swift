@@ -21,7 +21,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
     }
 
     func fetchDashboard(
-        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+        onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
         let preparedRequests: [(Int, AnalyticsAPIContract.Section, URLRequest)]
         do {
@@ -35,6 +35,8 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         let session = urlSession
         var receivedSections = [Int: DashboardSection]()
         var failedSections = [(index: Int, name: String, failure: SectionFetchFailure)]()
+
+        AnalyticsAPIContract.sections.forEach { onEvent(.started($0)) }
 
         await withTaskGroup(of: SectionFetchOutcome.self) { group in
             for (index, section, request) in preparedRequests {
@@ -51,9 +53,12 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             for await outcome in group {
                 if let section = outcome.section {
                     receivedSections[outcome.index] = section
-                    onSectionReceived(section)
+                    let contract = AnalyticsAPIContract.sections[outcome.index]
+                    onEvent(.succeeded(contract, section))
                 } else if let failure = outcome.failure {
                     failedSections.append((outcome.index, outcome.displayName, failure))
+                    let contract = AnalyticsAPIContract.sections[outcome.index]
+                    onEvent(.failed(contract, failure.error.localizedDescription))
                 }
             }
         }
@@ -117,13 +122,10 @@ final class APIAnalyticsProvider: AnalyticsProvider {
 
         var queryItems = components.queryItems ?? []
         queryItems.removeAll { $0.name == "id" || $0.name == "section" }
-        queryItems.append(contentsOf: [
-            URLQueryItem(name: "id", value: AnalyticsAPIContract.requestID),
-            URLQueryItem(
-                name: "section",
-                value: isExtended ? "\(section.queryValue)_Расширенный" : section.queryValue
-            )
-        ])
+        queryItems.append(URLQueryItem(
+            name: "section",
+            value: isExtended ? "\(section.queryValue)_Расширенный" : section.queryValue
+        ))
         components.queryItems = queryItems
 
         guard let url = components.url else {
@@ -409,6 +411,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showTotal: Bool?
     let showDetails: Bool?
     let showValueLabels: Bool?
+    let showRowValues: Bool?
     let alwaysShowPointValues: Bool?
     let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
@@ -418,6 +421,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let barLayout: BarLayout?
     let lineStyle: ChartLineStyle?
     let forecastFromIndex: Int?
+    let highlightCrossing: Bool?
+    let highlightSeriesIndex: Int?
+    let referenceSeriesIndex: Int?
     let isExplicitPlanFactProgress: Bool
     let hierarchy: ExpandableHierarchy?
 
@@ -440,6 +446,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case showDetailsSnake = "show_details"
         case displayDetails
         case showValueLabels
+        case showRowValues
         case showLabels
         case displayValueLabels
         case alwaysShowPointValues
@@ -463,6 +470,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case lineStyle
         case dashed
         case forecastFromIndex
+        case highlightCrossing
+        case highlightSeriesIndex
+        case referenceSeriesIndex
         case barMode
         case series
         case nodes
@@ -503,7 +513,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
                 AnalyticsAPIHierarchyNode.self,
                 forKey: .nodes
             )
-            hierarchy = AnalyticsAPIHierarchy(
+            hierarchy = try AnalyticsAPIHierarchy(
                 barMode: barMode,
                 series: hierarchySeries,
                 nodes: hierarchyNodes,
@@ -527,6 +537,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         showValueLabels = try container.decodeFlexibleBool(forKey: .showValueLabels)
             ?? container.decodeFlexibleBool(forKey: .showLabels)
             ?? container.decodeFlexibleBool(forKey: .displayValueLabels)
+        showRowValues = try container.decodeFlexibleBool(forKey: .showRowValues)
         alwaysShowPointValues = try container.decodeFlexibleBool(forKey: .alwaysShowPointValues)
             ?? container.decodeFlexibleBool(forKey: .showPointValues)
             ?? container.decodeFlexibleBool(forKey: .displayPointValues)
@@ -561,6 +572,24 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         )
         forecastFromIndex = try container.decodeFlexibleDouble(forKey: .forecastFromIndex)
             .map { max(0, Int($0)) }
+        highlightCrossing = try container.decodeFlexibleBool(forKey: .highlightCrossing)
+        highlightSeriesIndex = try container.decodeFlexibleDouble(forKey: .highlightSeriesIndex)
+            .map(Int.init)
+        referenceSeriesIndex = try container.decodeFlexibleDouble(forKey: .referenceSeriesIndex)
+            .map(Int.init)
+
+        if type == .radar {
+            guard values.count >= 3, !values.contains(where: { value in
+                if let scalar = value.value, scalar < 0 { return true }
+                return value.subgroup?.contains(where: { ($0.value ?? 0) < 0 }) == true
+            }) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .values,
+                    in: container,
+                    debugDescription: "RadarMark requires at least three axes and non-negative values"
+                )
+            }
+        }
 
         let rawWidth = try container.decodeFlexibleDouble(forKey: .widthPercent)
             ?? container.decodeFlexibleDouble(forKey: .width)
@@ -650,6 +679,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             showTotal: isExplicitPlanFactProgress ? (showTotal ?? false) : showTotal,
             showDetails: showDetails,
             showValueLabels: showValueLabels,
+            showRowValues: showRowValues,
             alwaysShowPointValues: alwaysShowPointValues,
             showYAxisLabels: showYAxisLabels,
             detailsOrientation: detailsOrientation,
@@ -659,6 +689,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             barLayout: barLayout,
             lineStyle: lineStyle,
             forecastFromIndex: forecastFromIndex,
+            highlightCrossing: highlightCrossing,
+            highlightSeriesIndex: highlightSeriesIndex,
+            referenceSeriesIndex: referenceSeriesIndex,
             isExplicitPlanFactProgress: isExplicitPlanFactProgress,
             hierarchy: hierarchy,
             rows: rows
@@ -716,7 +749,7 @@ private struct AnalyticsAPIHierarchy: Sendable {
     let nodes: [AnalyticsAPIHierarchyNode]
     let totalSeries: String?
 
-    func toDomainModel() -> ExpandableHierarchy {
+    func toDomainModel() throws -> ExpandableHierarchy {
         var seriesKeys = Set<String>()
         let uniqueSeries = series.compactMap { apiSeries -> ExpandableHierarchySeries? in
             let model = apiSeries.domainModel
@@ -729,7 +762,7 @@ private struct AnalyticsAPIHierarchy: Sendable {
         return ExpandableHierarchy(
             barMode: barMode,
             series: uniqueSeries,
-            nodes: Self.domainNodes(nodes, parentPath: "node"),
+            nodes: try Self.domainNodes(nodes, parentPath: "node"),
             totalSeries: totalSeries
         )
     }
@@ -737,22 +770,25 @@ private struct AnalyticsAPIHierarchy: Sendable {
     private static func domainNodes(
         _ nodes: [AnalyticsAPIHierarchyNode],
         parentPath: String
-    ) -> [ExpandableHierarchyNode] {
-        var siblingCounts = [String: Int]()
+    ) throws -> [ExpandableHierarchyNode] {
+        var explicitSiblingIDs = Set<String>()
 
-        return nodes.enumerated().map { index, node in
+        return try nodes.enumerated().map { index, node in
             let explicitID = node.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let baseID = explicitID.isEmpty ? String(index + 1) : explicitID
-            let occurrence = siblingCounts[baseID, default: 0]
-            siblingCounts[baseID] = occurrence + 1
-            let uniqueID = occurrence == 0 ? baseID : "\(baseID)#\(occurrence + 1)"
-            let path = "\(parentPath)/\(uniqueID)"
+            if !explicitID.isEmpty, !explicitSiblingIDs.insert(explicitID).inserted {
+                throw DecodingError.dataCorrupted(.init(
+                    codingPath: [],
+                    debugDescription: "ExpandableTableMark contains duplicate sibling id: \(explicitID)"
+                ))
+            }
+            let nodeID = explicitID.isEmpty ? String(index + 1) : explicitID
+            let path = "\(parentPath)/\(nodeID)"
 
             return ExpandableHierarchyNode(
                 id: path,
                 label: node.label,
                 values: node.values.mapValues(\.domainModel),
-                children: domainNodes(node.children, parentPath: path)
+                children: try domainNodes(node.children, parentPath: path)
             )
         }
     }

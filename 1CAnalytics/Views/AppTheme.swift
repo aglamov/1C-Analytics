@@ -299,9 +299,10 @@ extension Indicator {
 
 extension Array where Element == IndicatorRow {
     func uniqueValues(_ transform: (IndicatorRow) -> String) -> [String] {
-        reduce(into: [String]()) { values, row in
+        var seen = Set<String>()
+        return reduce(into: [String]()) { values, row in
             let value = transform(row)
-            if !values.contains(value) {
+            if seen.insert(value).inserted {
                 values.append(value)
             }
         }

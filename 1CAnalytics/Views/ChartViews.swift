@@ -4,6 +4,7 @@ import UIKit
 
 struct AnalyticsChart: View {
     let indicator: Indicator
+    let crossingConfiguration: TrendCrossingConfiguration?
     var usesCardBackground = true
     var showsLegend = true
     var showsValueLabels = true
@@ -33,6 +34,7 @@ struct AnalyticsChart: View {
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
         self.indicator = indicator
+        self.crossingConfiguration = Self.makeCrossingConfiguration(for: indicator)
         self.usesCardBackground = usesCardBackground
         self.showsLegend = showsLegend
         self.showsValueLabels = showsValueLabels

@@ -10,6 +10,7 @@ struct DashboardView: View {
     @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.corporate.rawValue
     @AppStorage("dashboardContentScale.v1") private var dashboardContentScale = 1.0
     @State private var collapsedSectionIDs: Set<DashboardSection.ID> = []
+    @State private var expandedExtendedSectionIDs: Set<DashboardExtendedSection.ID> = []
     @State private var isEditingLayout = false
     @State private var draggedIndicator: DashboardDraggedIndicator?
     @State private var navigationPath: [DashboardRoute] = []
@@ -18,7 +19,7 @@ struct DashboardView: View {
     @State private var hasFirstSectionHeaderPassedTop = false
     @State private var refreshAnimationGeneration = 0
     @State private var sectionAnimationGenerations: [DashboardSection.ID: Int] = [:]
-    @State private var errorNoticePresentationRequest = 0
+    @State private var isShowingSynchronizationDetails = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -141,7 +142,8 @@ struct DashboardView: View {
                         }
                     }
                     .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-                    .padding(.vertical, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 92)
                 }
                 .coordinateSpace(name: DashboardScrollCoordinateSpace.name)
                 .onPreferenceChange(DashboardSectionOffsetPreferenceKey.self) { offsets in
@@ -163,35 +165,27 @@ struct DashboardView: View {
                     indicatorIDToRestore = nil
                 }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
-                    DashboardOfflineNotice(
-                        date: dashboard.fetchedAt,
+            .overlay(alignment: .bottomTrailing) {
+                if let session = viewModel.synchronizationSession {
+                    DashboardSynchronizationIndicator(
+                        session: session,
                         isCached: viewModel.isShowingCachedData,
-                        errorMessage: viewModel.refreshErrorMessage,
-                        presentationRequest: errorNoticePresentationRequest
-                    )
-
-                    DashboardConnectionStatus(
-                        date: dashboard.fetchedAt,
-                        isCached: viewModel.isShowingCachedData,
-                        isRefreshing: viewModel.isRefreshing,
-                        hasError: viewModel.refreshErrorMessage != nil,
-                        onErrorTap: {
-                            errorNoticePresentationRequest &+= 1
-                        }
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 12)
-                    .background(.bar, in: Capsule())
-                    .overlay {
-                        Capsule()
-                            .strokeBorder(Color.secondary.opacity(0.12), lineWidth: 1)
+                        hasCacheError: viewModel.cacheErrorMessage != nil
+                    ) {
+                        isShowingSynchronizationDetails = true
                     }
-                    .shadow(color: .black.opacity(0.10), radius: 12, y: 5)
-                    .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-                    .padding(.vertical, 6)
+                    .padding(.trailing, horizontalSizeClass == .regular ? 20 : 16)
+                    .padding(.bottom, 8)
                 }
+            }
+            .sheet(isPresented: synchronizationDetailsBinding(forPad: false)) {
+                synchronizationDetails
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .popover(isPresented: synchronizationDetailsBinding(forPad: true), arrowEdge: .bottom) {
+                synchronizationDetails
+                    .frame(width: 430, height: 480)
             }
             .background(Color(.systemBackground).ignoresSafeArea())
         }
@@ -231,10 +225,18 @@ struct DashboardView: View {
         _ section: DashboardSection,
         isExpanded: Bool
     ) -> some View {
-        Button {
+        let style = DashboardSectionVisualStyle.style(for: section.title)
+        return Button {
             toggleSection(section.id)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
+                Image(systemName: style.symbol)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(style.tint)
+                    .frame(width: 46, height: 46)
+                    .background(style.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                    .accessibilityHidden(true)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(section.title)
                         .font(.title2.weight(.bold))
@@ -254,7 +256,14 @@ struct DashboardView: View {
                     .rotationEffect(.degrees(isExpanded ? 0 : -90))
                     .accessibilityHidden(true)
             }
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(style.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(style.tint.opacity(0.12), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.07), radius: 5, y: 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -390,21 +399,83 @@ struct DashboardView: View {
     @ViewBuilder
     private func extendedSectionControl(for section: DashboardSection) -> some View {
         if section.hasExtended {
-            switch viewModel.extendedState(for: section.id) {
-            case .loaded:
-                EmptyView()
-            case .loading:
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Загружаем \(section.title) 2 уровень")
-                        .font(.subheadline.weight(.semibold))
+            if let extended = section.extended {
+                extendedSectionGroup(extended, parent: section)
+            } else {
+                switch viewModel.extendedState(for: section.id) {
+                case .loaded, .idle:
+                    extendedSectionButton(section, errorMessage: nil)
+                case .loading:
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Загружаем \(section.title) · 2 уровень")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                case let .failed(message):
+                    extendedSectionButton(section, errorMessage: message)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            case .idle:
-                extendedSectionButton(section, errorMessage: nil)
-            case let .failed(message):
-                extendedSectionButton(section, errorMessage: message)
+            }
+        }
+    }
+
+    private func extendedSectionGroup(
+        _ extended: DashboardExtendedSection,
+        parent: DashboardSection
+    ) -> some View {
+        let isExpanded = expandedExtendedSectionIDs.contains(extended.id)
+        let layoutSection = DashboardSection(
+            id: extended.id,
+            title: extended.title,
+            indicators: extended.indicators,
+            fetchedAt: extended.fetchedAt
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    if isExpanded { expandedExtendedSectionIDs.remove(extended.id) }
+                    else { expandedExtendedSectionIDs.insert(extended.id) }
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "square.stack.3d.up.fill")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 38, height: 38)
+                        .background(.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 11))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(extended.title).font(.headline)
+                        Text(extendedStatusText(extended, parent: parent))
+                            .font(.caption)
+                            .foregroundStyle(viewModel.staleSectionIDs.contains(parent.id) ? .orange : .secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
+                .padding(14)
+                .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(extended.title)
+            .accessibilityValue(isExpanded ? "Развернуто" : "Свернуто")
+
+            if isExpanded {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(layoutRows(for: displayedIndicators(in: layoutSection))) { row in
+                        DashboardSlotRowLayout(
+                            slotCapacity: row.slotCapacity,
+                            spans: row.items.map(\.width.slotSpan),
+                            spacing: 16
+                        ) {
+                            ForEach(row.items) { item in
+                                dashboardCard(item.indicator, in: layoutSection)
+                            }
+                        }
+                    }
+                }
+                .padding(.leading, 12)
             }
         }
     }
@@ -425,12 +496,40 @@ struct DashboardView: View {
                     await viewModel.loadExtendedIndicators(for: section)
                 }
             } label: {
-                Label("\(section.title) 2 уровень", systemImage: "chart.bar.doc.horizontal")
+                Label("\(section.title) · 2 уровень", systemImage: "chart.bar.doc.horizontal")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .disabled(isEditingLayout)
         }
+    }
+
+    private func extendedStatusText(
+        _ extended: DashboardExtendedSection,
+        parent: DashboardSection
+    ) -> String {
+        let count = sectionCountText(extended.indicators.count)
+        guard let fetchedAt = extended.fetchedAt else { return "\(count) · сохранённые данные" }
+        let timestamp = fetchedAt.formatted(date: .numeric, time: .shortened)
+        return viewModel.staleSectionIDs.contains(parent.id)
+            ? "\(count) · сохранено \(timestamp)"
+            : "\(count) · обновлено \(timestamp)"
+    }
+
+    private func synchronizationDetailsBinding(forPad: Bool) -> Binding<Bool> {
+        Binding {
+            isShowingSynchronizationDetails && isPad == forPad
+        } set: { value in
+            if !value { isShowingSynchronizationDetails = false }
+        }
+    }
+
+    private var synchronizationDetails: some View {
+        DashboardSynchronizationDetailsView(
+            sessions: viewModel.synchronizationHistory,
+            networkError: viewModel.refreshErrorMessage,
+            cacheError: viewModel.cacheErrorMessage
+        )
     }
 
     private var chartPaletteScheme: ChartPaletteScheme {

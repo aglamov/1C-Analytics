@@ -4,18 +4,34 @@ import Foundation
 protocol AnalyticsProvider {
     func fetchDashboard() async throws -> Dashboard
     func fetchDashboard(
-        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+        onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard
     func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection
 }
 
 extension AnalyticsProvider {
     func fetchDashboard(
-        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+        onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        let dashboard = try await fetchDashboard()
-        dashboard.sections.forEach(onSectionReceived)
-        return dashboard
+        AnalyticsAPIContract.sections.forEach { onEvent(.started($0)) }
+        do {
+            let dashboard = try await fetchDashboard()
+            for contract in AnalyticsAPIContract.sections {
+                if let section = dashboard.sections.first(where: {
+                    AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(contract.displayName)
+                }) {
+                    onEvent(.succeeded(contract, section))
+                } else {
+                    onEvent(.failed(contract, AnalyticsError.invalidResponse.localizedDescription))
+                }
+            }
+            return dashboard
+        } catch {
+            AnalyticsAPIContract.sections.forEach {
+                onEvent(.failed($0, error.localizedDescription))
+            }
+            throw error
+        }
     }
 
     func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
@@ -51,7 +67,6 @@ enum AnalyticsError: LocalizedError, Equatable, Sendable {
 }
 
 enum AnalyticsAPIContract {
-    static let requestID = "test_analitycs_med"
     static let sections = [
         Section(queryValue: "Образование", displayName: "Образование"),
         Section(queryValue: "Финансы", displayName: "Финансы"),
@@ -61,9 +76,11 @@ enum AnalyticsAPIContract {
         Section(queryValue: "Кадры", displayName: "Кадры")
     ]
 
-    struct Section: Sendable {
+    struct Section: Identifiable, Hashable, Sendable {
         let queryValue: String
         let displayName: String
+
+        var id: String { queryValue }
     }
 
     static func order(of sectionTitle: String) -> Int {
@@ -86,4 +103,10 @@ enum AnalyticsAPIContract {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
     }
+}
+
+enum AnalyticsSectionFetchEvent: Sendable {
+    case started(AnalyticsAPIContract.Section)
+    case succeeded(AnalyticsAPIContract.Section, DashboardSection)
+    case failed(AnalyticsAPIContract.Section, String)
 }

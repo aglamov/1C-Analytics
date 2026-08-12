@@ -693,7 +693,7 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testAnalyticsRequestUsesFixedIDSectionAndSixtySecondTimeout() throws {
+    func testAnalyticsRequestUsesOnlySectionAndSixtySecondTimeout() throws {
         let configuration = AppConfiguration(
             analyticsBaseURL: try XCTUnwrap(
                 URL(string: "https://service.example/DGU_APP_Mobile_Client/analitycs/")
@@ -714,7 +714,7 @@ final class ReleaseReadinessTests: XCTestCase {
             URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
         )
 
-        XCTAssertEqual(queryItems.first { $0.name == "id" }?.value, "test_analitycs_med")
+        XCTAssertNil(queryItems.first { $0.name == "id" })
         XCTAssertEqual(queryItems.first { $0.name == "section" }?.value, "Приемная_кампания")
         XCTAssertEqual(request.timeoutInterval, 60)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
@@ -1939,6 +1939,154 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(dashboard.sections.first?.title, "Cached")
     }
 
+    func testDashboardSectionDecodesOldPayloadWithoutExtendedGroup() throws {
+        let data = Data(
+            #"{"id":"cached","title":"Cached","fetchedAt":null,"sections":[{"id":"science","title":"Наука","indicators":[],"fetchedAt":null,"hasExtended":true}]}"#.utf8
+        )
+
+        let dashboard = try JSONDecoder().decode(Dashboard.self, from: data)
+
+        XCTAssertNil(dashboard.sections.first?.extended)
+    }
+
+    func testDashboardRoundTripPreservesExtendedGroupSeparately() throws {
+        let child = DashboardExtendedSection(
+            id: "extended:science",
+            title: "Наука · 2 уровень",
+            indicators: [],
+            fetchedAt: Date(timeIntervalSince1970: 100)
+        )
+        let dashboard = Dashboard(
+            id: "cached",
+            title: "Cached",
+            fetchedAt: nil,
+            sections: [
+                DashboardSection(
+                    id: "science", title: "Наука", indicators: [],
+                    hasExtended: true, extended: child
+                )
+            ]
+        )
+
+        let decoded = try JSONDecoder().decode(Dashboard.self, from: JSONEncoder().encode(dashboard))
+
+        XCTAssertEqual(decoded.sections.first?.extended, child)
+    }
+
+    func testCrossingAndHorizontalRowValueFieldsDecode() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Наука","values":[{"name":"Динамика","type":"LineMark","showRowValues":false,"highlightCrossing":true,"highlightSeriesIndex":0,"referenceSeriesIndex":1,"values":[{"group":"2025","subgroup":[{"name":"Факт","value":5},{"name":"Норма","value":8}]}]}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(JSONDecoder().decode(AnalyticsAPIResponse.self, from: data).toDashboard().indicators.first)
+
+        XCTAssertEqual(indicator.showRowValues, false)
+        XCTAssertEqual(indicator.highlightCrossing, true)
+        XCTAssertEqual(indicator.highlightSeriesIndex, 0)
+        XCTAssertEqual(indicator.referenceSeriesIndex, 1)
+    }
+
+    func testCrossingHighlightUsesDisplayedCurveAndIgnoresIncompleteConfiguration() {
+        let rows = [
+            IndicatorRow(id: "fact-0", label: "2024", value: 8, series: "Факт", sortOrder: 0),
+            IndicatorRow(id: "norm-0", label: "2024", value: 4, series: "Норма", sortOrder: 0),
+            IndicatorRow(id: "fact-1", label: "2025", value: 2, series: "Факт", sortOrder: 1),
+            IndicatorRow(id: "norm-1", label: "2025", value: 4, series: "Норма", sortOrder: 1),
+            IndicatorRow(id: "fact-2", label: "2026", value: 8, series: "Факт", sortOrder: 2),
+            IndicatorRow(id: "norm-2", label: "2026", value: 4, series: "Норма", sortOrder: 2)
+        ]
+        let configured = Indicator(
+            id: "trend",
+            title: "Динамика",
+            value: nil,
+            unit: nil,
+            chartType: .line,
+            source: nil,
+            highlightCrossing: true,
+            highlightSeriesIndex: 0,
+            referenceSeriesIndex: 1,
+            rows: rows
+        )
+        let chart = AnalyticsChart(indicator: configured)
+
+        XCTAssertEqual(chart.crossingIntersectionPoints(smooth: true).count, 2)
+        XCTAssertTrue(chart.isCrossingHighlighted(rows[2]))
+        XCTAssertFalse(chart.isCrossingHighlighted(rows[3]))
+
+        let incomplete = Indicator(
+            id: "incomplete",
+            title: "Динамика",
+            value: nil,
+            unit: nil,
+            chartType: .line,
+            source: nil,
+            highlightCrossing: true,
+            highlightSeriesIndex: 0,
+            rows: rows
+        )
+        XCTAssertTrue(AnalyticsChart(indicator: incomplete).crossingHighlightSegments(smooth: false).isEmpty)
+    }
+
+    func testCrossingHighlightKeepsLargeSeriesRenderMarkCountBounded() {
+        let rows = (0..<400).flatMap { index in
+            [
+                IndicatorRow(
+                    id: "fact-\(index)",
+                    label: String(index),
+                    value: index.isMultiple(of: 2) ? 2 : 8,
+                    series: "Факт",
+                    sortOrder: index
+                ),
+                IndicatorRow(
+                    id: "norm-\(index)",
+                    label: String(index),
+                    value: 5,
+                    series: "Норма",
+                    sortOrder: index
+                )
+            ]
+        }
+        let indicator = Indicator(
+            id: "large-trend",
+            title: "Большая динамика",
+            value: nil,
+            unit: nil,
+            chartType: .splineLine,
+            source: nil,
+            highlightCrossing: true,
+            highlightSeriesIndex: 0,
+            referenceSeriesIndex: 1,
+            rows: rows
+        )
+        let chart = AnalyticsChart(indicator: indicator)
+        let pointCount = chart.crossingHighlightSegments(smooth: true)
+            .reduce(0) { $0 + $1.points.count }
+
+        XCTAssertLessThanOrEqual(pointCount, 1_600)
+        XCTAssertEqual(chart.crossingConfiguration?.highlightedRowIDs.count, 200)
+    }
+
+    func testDashboardSectionSystemSymbolsExist() {
+        let titles = AnalyticsAPIContract.sections.map(\.displayName)
+
+        for title in titles {
+            let symbol = DashboardSectionVisualStyle.style(for: title).symbol
+            XCTAssertNotNil(UIImage(systemName: symbol), "Missing SF Symbol: \(symbol)")
+        }
+    }
+
+    func testInvalidRadarAndDuplicateHierarchySiblingIDsAreRejected() {
+        let radar = Data(
+            #"{"sections":[{"name":"Наука","values":[{"name":"Radar","type":"RadarMark","values":[{"group":"A","value":1},{"group":"B","value":-1}]}]}]}"#.utf8
+        )
+        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: radar))
+
+        let hierarchy = Data(
+            #"{"sections":[{"name":"Наука","values":[{"name":"Tree","type":"ExpandableTableMark","barMode":"single","series":[{"key":"value","name":"Значение"}],"nodes":[{"id":"same","label":"A","values":{"value":1}},{"id":"same","label":"B","values":{"value":2}}]}]}]}"#.utf8
+        )
+        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: hierarchy))
+    }
+
     func testAuthenticationFailureReplacesCachedDashboardAndNotifiesRoot() async {
         var didRequireAuthentication = false
         let cached = Dashboard(id: "cached", title: "Cached", fetchedAt: .distantPast, indicators: [])
@@ -2077,10 +2225,10 @@ final class ReleaseReadinessTests: XCTestCase {
         await viewModel.load()
 
         XCTAssertEqual(viewModel.dashboard, dashboard)
-        XCTAssertTrue(viewModel.refreshErrorMessage?.contains("сохранить") == true)
+        XCTAssertTrue(viewModel.cacheErrorMessage?.contains("сохранить") == true)
     }
 
-    func testExtendedIndicatorsStayInMemoryAndRefreshWithDashboard() async throws {
+    func testExtendedIndicatorsAreCachedSeparatelyAndRefreshWithDashboard() async throws {
         let baseIndicator = Indicator(
             id: "финансы-base",
             title: "Основной",
@@ -2120,7 +2268,13 @@ final class ReleaseReadinessTests: XCTestCase {
             )
         )
         let cache = RecordingDashboardCache()
-        let viewModel = DashboardViewModel(provider: provider, cache: cache)
+        let historyDefaults = try XCTUnwrap(UserDefaults(suiteName: "sync-history-tests-\(UUID().uuidString)"))
+        let historyStore = DashboardSynchronizationHistoryStore(defaults: historyDefaults)
+        let viewModel = DashboardViewModel(
+            provider: provider,
+            cache: cache,
+            synchronizationHistoryStore: historyStore
+        )
 
         await viewModel.load()
         XCTAssertEqual(viewModel.dashboard?.indicators.map(\.id), [baseIndicator.id])
@@ -2132,7 +2286,14 @@ final class ReleaseReadinessTests: XCTestCase {
             [baseIndicator.id, extendedIndicator.id]
         )
         XCTAssertEqual(viewModel.extendedState(for: baseSection.id), .loaded)
-        XCTAssertTrue(cache.savedDashboards.allSatisfy { $0.indicators.map(\.id) == [baseIndicator.id] })
+        XCTAssertEqual(viewModel.dashboard?.sections.first?.indicators.map(\.id), [baseIndicator.id])
+        XCTAssertEqual(viewModel.dashboard?.sections.first?.extended?.indicators.map(\.id), [extendedIndicator.id])
+        XCTAssertTrue(cache.savedDashboards.contains { $0.sections.first?.extended?.indicators.map(\.id) == [extendedIndicator.id] })
+        XCTAssertEqual(viewModel.synchronizationHistory.count, 2)
+        XCTAssertEqual(viewModel.synchronizationHistory.first?.title, "Ручное обновление второго уровня")
+        XCTAssertEqual(viewModel.synchronizationHistory.first?.items.first?.charts.map(\.title), [extendedIndicator.title])
+        XCTAssertEqual(viewModel.synchronizationHistory.first?.items.first?.charts.first?.status, .succeeded)
+        XCTAssertEqual(historyStore.load().count, 2)
 
         await viewModel.refresh()
         XCTAssertEqual(provider.extendedRequestCount, 2)
@@ -2140,7 +2301,14 @@ final class ReleaseReadinessTests: XCTestCase {
             viewModel.dashboard?.indicators.map(\.id),
             [baseIndicator.id, extendedIndicator.id]
         )
-        XCTAssertTrue(cache.savedDashboards.allSatisfy { $0.indicators.map(\.id) == [baseIndicator.id] })
+        XCTAssertEqual(viewModel.dashboard?.sections.first?.indicators.map(\.id), [baseIndicator.id])
+        XCTAssertEqual(viewModel.dashboard?.sections.first?.extended?.indicators.map(\.id), [extendedIndicator.id])
+        XCTAssertEqual(viewModel.synchronizationHistory.count, 3)
+        XCTAssertEqual(viewModel.synchronizationHistory.first?.title, "Ручное обновление дашборда")
+        XCTAssertEqual(
+            viewModel.synchronizationHistory.first?.items.first(where: { $0.kind == .extended })?.charts.map(\.title),
+            [extendedIndicator.title]
+        )
     }
 }
 
@@ -2195,9 +2363,14 @@ private struct PartiallyFailingProvider: AnalyticsProvider {
     }
 
     func fetchDashboard(
-        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+        onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        onSectionReceived(section)
+        let contract = AnalyticsAPIContract.sections[0]
+        onEvent(.started(contract))
+        onEvent(.succeeded(contract, section))
+        let failed = AnalyticsAPIContract.sections[5]
+        onEvent(.started(failed))
+        onEvent(.failed(failed, "Ошибка"))
         throw AnalyticsError.partialFailure(sections: ["Кадры"])
     }
 }
@@ -2232,10 +2405,17 @@ private final class PausingProgressiveProvider: AnalyticsProvider {
     }
 
     func fetchDashboard(
-        onSectionReceived: @escaping @MainActor @Sendable (DashboardSection) -> Void
+        onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        onSectionReceived(firstSection)
+        let first = AnalyticsAPIContract.sections[0]
+        onEvent(.started(first))
+        onEvent(.succeeded(first, firstSection))
         await withCheckedContinuation { continuation = $0 }
+        if let second = AnalyticsAPIContract.section(matching: "Финансы"),
+           let section = finalDashboard.sections.first(where: { $0.title == "Финансы" }) {
+            onEvent(.started(second))
+            onEvent(.succeeded(second, section))
+        }
         return finalDashboard
     }
 

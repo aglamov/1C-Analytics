@@ -46,14 +46,23 @@ extension AnalyticsChart {
         AxisMarks { value in
             AxisValueLabel {
                 if let label = value.as(String.self) {
-                    Text(wrappedAxisLabel(label))
-                        .font(histogramYAxisFont)
-                        .foregroundStyle(Color.secondary)
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.78)
-                        .allowsTightening(true)
-                        .frame(maxWidth: histogramYAxisLabelMaximumWidth, alignment: .trailing)
+                    HStack(spacing: 4) {
+                        Text(wrappedAxisLabel(label))
+                            .multilineTextAlignment(.trailing)
+                        if indicator.showsRowValues,
+                           let group = indicator.rowGroups.first(where: { $0.label == label }) {
+                            Text(indicator.formattedNumber(group.totalValue))
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    .font(histogramYAxisFont)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
+                    .frame(maxWidth: histogramYAxisLabelMaximumWidth, alignment: .trailing)
                 }
             }
         }
@@ -75,7 +84,7 @@ extension AnalyticsChart {
     }
 
     var histogramYAxisLabelMaximumWidth: CGFloat {
-        44
+        indicator.showsRowValues ? 104 : 60
     }
 
     var trendYAxisLabelMaximumWidth: CGFloat {

@@ -1,5 +1,295 @@
 import SwiftUI
 
+struct DashboardSynchronizationIndicator: View {
+    let session: DashboardSynchronizationSession
+    let isCached: Bool
+    let hasCacheError: Bool
+    let action: () -> Void
+    @State private var showsCompletionPill = true
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if session.phase == .running || showsCompletionPill {
+                    HStack(spacing: 9) {
+                        statusIcon
+                        Text("Обновлено \(session.completedCount) из \(session.totalCount)")
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 48)
+                } else {
+                    statusIcon
+                        .font(.headline.weight(.bold))
+                        .frame(width: 48, height: 48)
+                }
+            }
+            .foregroundStyle(.primary)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay { Capsule().strokeBorder(.secondary.opacity(0.15), lineWidth: 1) }
+            .shadow(color: .black.opacity(0.14), radius: 12, y: 5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityHint("Показать подробности синхронизации")
+        .task(id: session.id) {
+            showsCompletionPill = true
+        }
+        .task(id: session.phase) {
+            guard session.phase == .completed else {
+                showsCompletionPill = true
+                return
+            }
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { showsCompletionPill = false }
+        }
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        if session.phase == .running {
+            ProgressView().controlSize(.small).accessibilityHidden(true)
+        } else if hasCacheError || session.items.contains(where: { $0.status == .failed }) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+        } else if isCached || session.hasFailures {
+            Image(systemName: "icloud.slash.fill").foregroundStyle(.orange)
+        } else {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        }
+    }
+
+    private var accessibilityLabel: String {
+        let phase = session.phase == .running ? "Обновление выполняется" : "Обновление завершено"
+        return "\(phase). Обновлено \(session.completedCount) из \(session.totalCount)"
+    }
+}
+
+struct DashboardSynchronizationDetailsView: View {
+    let sessions: [DashboardSynchronizationSession]
+    let networkError: String?
+    let cacheError: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if networkError != nil || cacheError != nil {
+                    Section("Ошибки текущей сессии") {
+                        if let networkError {
+                            Label(networkError, systemImage: "network.slash")
+                                .foregroundStyle(.orange)
+                        }
+                        if let cacheError {
+                            Label(cacheError, systemImage: "externaldrive.badge.exclamationmark")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                if sessions.isEmpty {
+                    ContentUnavailableView(
+                        "Журнал пока пуст",
+                        systemImage: "clock.arrow.circlepath",
+                        description: Text("Здесь появятся результаты обновления разделов и графиков.")
+                    )
+                } else {
+                    ForEach(sessions) { session in
+                        Section {
+                            ForEach(session.items) { item in
+                                DashboardSynchronizationItemRow(item: item)
+                            }
+                        } header: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(session.title)
+                                Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.caption2)
+                                    .textCase(nil)
+                            }
+                        } footer: {
+                            Text(sessionSummary(session))
+                                .textCase(nil)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Журнал синхронизации")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func sessionSummary(_ session: DashboardSynchronizationSession) -> String {
+        let progress = "Завершено \(session.completedCount) из \(session.totalCount)"
+        guard let completedAt = session.completedAt else { return progress }
+        return "\(progress) · \(completedAt.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
+private struct DashboardSynchronizationItemRow: View {
+    let item: DashboardSynchronizationSession.Item
+    @State private var isExpanded: Bool
+
+    init(item: DashboardSynchronizationSession.Item) {
+        self.item = item
+        _isExpanded = State(initialValue: item.kind == .extended)
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            if item.charts.isEmpty {
+                Text(item.status == .failed ? "Список графиков не был получен" : "В разделе нет графиков")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(item.charts) { chart in
+                    chartRow(chart)
+                }
+            }
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                statusImage(item.status)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title).font(.subheadline.weight(.semibold))
+                    Text(itemStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let error = item.errorMessage {
+                        Text(error).font(.caption).foregroundStyle(.red)
+                    }
+                }
+            }
+        }
+        .accessibilityHint(item.charts.isEmpty ? "" : "Показать состояние всех графиков раздела")
+    }
+
+    private var itemStatusText: String {
+        var components = [statusTitle(item.status)]
+        if !item.charts.isEmpty {
+            components.append(graphCountText(item.charts.count))
+        }
+        if let timestamp = item.timestamp {
+            components.append(DashboardSynchronizationTextPolicy.timestamp(for: timestamp))
+        }
+        return components.joined(separator: " · ")
+    }
+
+    private func chartRow(_ chart: DashboardSynchronizationSession.Item.Chart) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            statusImage(chart.status, compact: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(chart.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text(chartMetadata(chart))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let source = chart.source, !source.isEmpty {
+                    Text("Источник: \(source)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let error = chart.errorMessage {
+                    Text(error).font(.caption2).foregroundStyle(.red)
+                }
+            }
+        }
+        .padding(.leading, 4)
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func chartMetadata(_ chart: DashboardSynchronizationSession.Item.Chart) -> String {
+        var components = [statusTitle(chart.status), chart.type]
+        if chart.valueCount > 0 {
+            components.append(valueCountText(chart.valueCount))
+        }
+        return components.joined(separator: " · ")
+    }
+
+    private func statusImage(
+        _ status: DashboardSynchronizationSession.Item.Status,
+        compact: Bool = false
+    ) -> some View {
+        Image(systemName: statusSymbol(status))
+            .font(compact ? .caption : .body)
+            .foregroundStyle(statusColor(status))
+            .frame(width: compact ? 18 : 22)
+            .accessibilityHidden(true)
+    }
+
+    private func statusTitle(_ status: DashboardSynchronizationSession.Item.Status) -> String {
+        switch status {
+        case .pending: "Ожидание"
+        case .updating: "Обновляется"
+        case .succeeded: "Обновлён"
+        case .cached: "Из базы"
+        case .failed: "Ошибка"
+        }
+    }
+
+    private func statusSymbol(_ status: DashboardSynchronizationSession.Item.Status) -> String {
+        switch status {
+        case .pending: "clock"
+        case .updating: "arrow.triangle.2.circlepath"
+        case .succeeded: "checkmark.circle.fill"
+        case .cached: "externaldrive.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func statusColor(_ status: DashboardSynchronizationSession.Item.Status) -> Color {
+        switch status {
+        case .pending: .secondary
+        case .updating: .blue
+        case .succeeded: .green
+        case .cached: .orange
+        case .failed: .red
+        }
+    }
+
+    private func graphCountText(_ count: Int) -> String {
+        "\(count) \(russianPlural(count, one: "график", few: "графика", many: "графиков"))"
+    }
+
+    private func valueCountText(_ count: Int) -> String {
+        "\(count) \(russianPlural(count, one: "значение", few: "значения", many: "значений"))"
+    }
+
+    private func russianPlural(_ value: Int, one: String, few: String, many: String) -> String {
+        let remainder100 = value % 100
+        if 11...14 ~= remainder100 { return many }
+        switch value % 10 {
+        case 1: return one
+        case 2...4: return few
+        default: return many
+        }
+    }
+}
+
+struct DashboardSectionVisualStyle {
+    let symbol: String
+    let tint: Color
+
+    static func style(for title: String) -> Self {
+        switch AnalyticsAPIContract.normalize(title) {
+        case AnalyticsAPIContract.normalize("Образование"):
+            Self(symbol: "graduationcap.fill", tint: .cyan)
+        case AnalyticsAPIContract.normalize("Финансы"):
+            Self(symbol: "rublesign", tint: .mint)
+        case AnalyticsAPIContract.normalize("Наука"):
+            Self(symbol: "flask.fill", tint: .orange)
+        case AnalyticsAPIContract.normalize("Приемная кампания"):
+            Self(symbol: "person.crop.circle.badge.checkmark", tint: .purple)
+        case AnalyticsAPIContract.normalize("Международная деятельность"):
+            Self(symbol: "globe.europe.africa.fill", tint: .pink)
+        case AnalyticsAPIContract.normalize("Кадры"):
+            Self(symbol: "person.text.rectangle.fill", tint: .blue)
+        default:
+            Self(symbol: "square.grid.2x2.fill", tint: .gray)
+        }
+    }
+}
+
 struct DashboardOfflineNotice: View {
     let date: Date?
     var isCached = false
