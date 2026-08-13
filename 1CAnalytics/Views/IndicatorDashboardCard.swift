@@ -57,9 +57,10 @@ struct IndicatorDashboardCard: View {
         case .gauge:
             GaugeIndicatorView(
                 indicator: indicator,
-                animationTrigger: animationTrigger
+                animationTrigger: animationTrigger,
+                maximumDialWidth: 200
             )
-                .frame(height: chartHeight)
+            .frame(maxWidth: .infinity)
         case .geoMap:
             GeoMapIndicatorView(indicator: indicator)
                 .frame(maxWidth: .infinity)

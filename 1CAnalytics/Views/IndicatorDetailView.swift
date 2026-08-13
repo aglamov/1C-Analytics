@@ -151,7 +151,7 @@ struct IndicatorDetailView: View {
                     .frame(maxWidth: .infinity, minHeight: 80 * contentScale)
             } else if indicator.chartType == .gauge {
                 GaugeIndicatorView(indicator: indicator)
-                    .frame(maxWidth: .infinity, minHeight: 260 * contentScale)
+                    .frame(maxWidth: .infinity)
             } else {
                 let chart = AnalyticsChart(
                     indicator: indicator,

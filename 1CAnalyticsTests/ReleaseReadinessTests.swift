@@ -101,6 +101,32 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(rows, [[1], [2], [3]])
     }
 
+    func testBulkSectionActionScrollsOnlyWhenCollapsing() {
+        let sectionIDs = ["education", "finance", "science"]
+
+        XCTAssertEqual(
+            DashboardBulkSectionActionPolicy.action(
+                sectionIDs: sectionIDs,
+                collapsedSectionIDs: []
+            ),
+            .collapseAndScrollToTop
+        )
+        XCTAssertEqual(
+            DashboardBulkSectionActionPolicy.action(
+                sectionIDs: sectionIDs,
+                collapsedSectionIDs: Set(sectionIDs)
+            ),
+            .expandPreservingPosition
+        )
+        XCTAssertEqual(
+            DashboardBulkSectionActionPolicy.action(
+                sectionIDs: sectionIDs,
+                collapsedSectionIDs: ["education"]
+            ),
+            .collapseAndScrollToTop
+        )
+    }
+
     func testErrorNoticeCanBePresentedAgainForTheSameMessage() {
         let initialPresentation = DashboardOfflineNoticeTaskID(
             errorMessage: "Не удалось обновить данные",

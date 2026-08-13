@@ -107,6 +107,7 @@ struct LinearProgressIndicatorView: View {
 struct GaugeIndicatorView: View {
     let indicator: Indicator
     var animationTrigger = ""
+    var maximumDialWidth: CGFloat = 260
     @State private var displayedProgress = 0.0
     @State private var hasAppeared = false
     @State private var isVisible = false
@@ -115,9 +116,60 @@ struct GaugeIndicatorView: View {
     @Environment(\.dashboardContentScale) private var contentScale
 
     var body: some View {
+        VStack(spacing: 6 * contentScale) {
+            gaugeDial
+                .aspectRatio(1.1, contentMode: .fit)
+                .frame(maxWidth: maximumDialWidth * contentScale)
+
+            if indicator.showsValueLabels,
+               let value = indicator.value,
+               let valueMax = indicator.valueMax {
+                HStack(alignment: .top, spacing: 8 * contentScale) {
+                    gaugeValue(
+                        title: "Сейчас",
+                        value: indicator.rows.first?.valueLabel ?? indicator.formattedNumber(value),
+                        alignment: .leading,
+                        frameAlignment: .leading,
+                        textAlignment: .leading
+                    )
+
+                    gaugeValue(
+                        title: "Цель",
+                        value: indicator.formattedNumber(valueMax),
+                        alignment: .trailing,
+                        frameAlignment: .trailing,
+                        textAlignment: .trailing
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8 * contentScale)
+        .onAppear {
+            isVisible = true
+            animateIfNeeded()
+        }
+        .onDisappear {
+            isVisible = false
+        }
+        .onChange(of: animationTrigger) { _, _ in
+            prepareReplayAnimation()
+        }
+        .onChange(of: accessibilityReduceMotion) { _, reduceMotion in
+            if reduceMotion {
+                showFinalStateWithoutAnimation()
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(indicator.title)
+        .accessibilityValue(accessibilityValue)
+    }
+
+    private var gaugeDial: some View {
         GeometryReader { proxy in
-            let size = min(proxy.size.width, proxy.size.height)
-            let lineWidth = max(14, size * 0.09)
+            let size = proxy.size.width
+            let lineWidth = max(14 * contentScale, size * 0.09)
+            let dialDiameter = max(size - lineWidth, 0)
 
             ZStack {
                 Circle()
@@ -149,14 +201,14 @@ struct GaugeIndicatorView: View {
                             width: 2 * contentScale,
                             height: (tick.isMultiple(of: 5) ? 9 : 5) * contentScale
                         )
-                        .offset(y: -(size * 0.38))
+                        .offset(y: -(dialDiameter * 0.38))
                         .rotationEffect(.degrees(-135 + Double(tick) * 27))
                 }
 
                 Capsule()
                     .fill(indicator.valueColor)
-                    .frame(width: 4 * contentScale, height: size * 0.29)
-                    .offset(y: -(size * 0.145))
+                    .frame(width: 4 * contentScale, height: dialDiameter * 0.29)
+                    .offset(y: -(dialDiameter * 0.145))
                     .rotationEffect(.degrees(-135 + 270 * displayedProgress))
 
                 Circle()
@@ -168,62 +220,20 @@ struct GaugeIndicatorView: View {
                             .frame(width: 5 * contentScale, height: 5 * contentScale)
                     }
 
-                VStack(spacing: 7 * contentScale) {
-                    Spacer()
-
-                    Text(displayedProgress.formatted(.percent.precision(.fractionLength(0))))
-                        .font(.system(.title2, design: .rounded).weight(.bold))
-                        .foregroundStyle(indicator.valueColor)
-                        .monospacedDigit()
-                        .contentTransition(.numericText(value: displayedProgress))
-
-                    if indicator.showsValueLabels,
-                       let value = indicator.value,
-                       let valueMax = indicator.valueMax {
-                        HStack(alignment: .top, spacing: 4 * contentScale) {
-                            gaugeValue(
-                                title: "Сейчас",
-                                value: indicator.rows.first?.valueLabel ?? indicator.formattedNumber(value),
-                                alignment: .leading,
-                                frameAlignment: .leading,
-                                textAlignment: .leading
-                            )
-
-                            gaugeValue(
-                                title: "Цель",
-                                value: indicator.formattedNumber(valueMax),
-                                alignment: .trailing,
-                                frameAlignment: .trailing,
-                                textAlignment: .trailing
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, max(6 * contentScale, size * 0.04))
-                .padding(.bottom, max(2, size * 0.015))
+                Text(displayedProgress.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(indicator.valueColor)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(value: displayedProgress))
+                    .offset(y: dialDiameter * 0.25)
             }
-            .frame(width: size, height: size)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: dialDiameter, height: dialDiameter)
+            .position(
+                x: size / 2,
+                y: lineWidth / 2 + dialDiameter / 2
+            )
         }
-        .padding(.horizontal, 8 * contentScale)
-        .onAppear {
-            isVisible = true
-            animateIfNeeded()
-        }
-        .onDisappear {
-            isVisible = false
-        }
-        .onChange(of: animationTrigger) { _, _ in
-            prepareReplayAnimation()
-        }
-        .onChange(of: accessibilityReduceMotion) { _, reduceMotion in
-            if reduceMotion {
-                showFinalStateWithoutAnimation()
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(indicator.title)
-        .accessibilityValue(accessibilityValue)
+        .clipped()
     }
 
     private var progress: Double {
@@ -305,9 +315,10 @@ struct GaugeIndicatorView: View {
             Text(value)
                 .font(.caption.monospacedDigit().weight(.semibold))
                 .foregroundStyle(.primary)
-                .lineLimit(nil)
+                .lineLimit(1)
+                .minimumScaleFactor(0.45)
+                .allowsTightening(true)
                 .multilineTextAlignment(textAlignment)
-                .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: frameAlignment)
