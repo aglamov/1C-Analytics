@@ -66,7 +66,7 @@ struct DashboardSynchronizationIndicator: View {
 }
 
 struct DashboardSynchronizationDetailsView: View {
-    let sessions: [DashboardSynchronizationSession]
+    let session: DashboardSynchronizationSession
     let networkError: String?
     let cacheError: String?
 
@@ -86,38 +86,28 @@ struct DashboardSynchronizationDetailsView: View {
                     }
                 }
 
-                if sessions.isEmpty {
-                    ContentUnavailableView(
-                        "Журнал пока пуст",
-                        systemImage: "clock.arrow.circlepath",
-                        description: Text("Здесь появятся результаты обновления разделов и графиков.")
-                    )
-                } else {
-                    ForEach(sessions) { session in
-                        Section {
-                            ForEach(session.items) { item in
-                                DashboardSynchronizationItemRow(item: item)
-                            }
-                        } header: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(session.title)
-                                Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption2)
-                                    .textCase(nil)
-                            }
-                        } footer: {
-                            Text(sessionSummary(session))
-                                .textCase(nil)
-                        }
+                Section {
+                    ForEach(session.items) { item in
+                        DashboardSynchronizationItemRow(item: item)
                     }
+                } header: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(session.title)
+                        Text(session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2)
+                            .textCase(nil)
+                    }
+                } footer: {
+                    Text(sessionSummary)
+                        .textCase(nil)
                 }
             }
-            .navigationTitle("Журнал синхронизации")
+            .navigationTitle("Текущий сеанс обновления")
             .navigationBarTitleDisplayMode(.inline)
         }
     }
 
-    private func sessionSummary(_ session: DashboardSynchronizationSession) -> String {
+    private var sessionSummary: String {
         let progress = "Завершено \(session.completedCount) из \(session.totalCount)"
         guard let completedAt = session.completedAt else { return progress }
         return "\(progress) · \(completedAt.formatted(date: .omitted, time: .shortened))"

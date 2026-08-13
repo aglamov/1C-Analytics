@@ -56,6 +56,13 @@ struct DashboardIndicatorLayoutRow: Identifiable {
     var id: String {
         items.map(\.id).joined(separator: "|")
     }
+
+    func spans(expandingSingleItemToFill shouldExpand: Bool) -> [Int] {
+        if shouldExpand, items.count == 1 {
+            return [slotCapacity]
+        }
+        return items.map(\.width.slotSpan)
+    }
 }
 
 enum DashboardGridLayoutPolicy {

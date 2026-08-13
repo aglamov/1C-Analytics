@@ -51,45 +51,11 @@ struct DashboardSynchronizationSession: Identifiable, Codable, Equatable, Sendab
     var hasFailures: Bool { items.contains { $0.status == .failed || $0.status == .cached } }
 }
 
-@MainActor
-final class DashboardSynchronizationHistoryStore {
-    private let defaults: UserDefaults
-    private let key = "dashboard.synchronization-history.v1"
+enum DashboardSynchronizationStoragePolicy {
+    static let legacyHistoryKey = "dashboard.synchronization-history.v1"
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-    }
-
-    func load() -> [DashboardSynchronizationSession] {
-        guard let data = defaults.data(forKey: key),
-              let sessions = try? JSONDecoder().decode([DashboardSynchronizationSession].self, from: data) else {
-            return []
-        }
-        return sessions.prefix(12).map(Self.completedAfterInterruptedLaunch)
-    }
-
-    func save(_ sessions: [DashboardSynchronizationSession]) {
-        guard let data = try? JSONEncoder().encode(Array(sessions.prefix(12))) else { return }
-        defaults.set(data, forKey: key)
-    }
-
-    private static func completedAfterInterruptedLaunch(
-        _ stored: DashboardSynchronizationSession
-    ) -> DashboardSynchronizationSession {
-        guard stored.phase == .running else { return stored }
-        var session = stored
-        for index in session.items.indices
-        where session.items[index].status == .pending || session.items[index].status == .updating {
-            session.items[index].status = .failed
-            session.items[index].errorMessage = "Обновление прервано при закрытии приложения"
-            for chartIndex in session.items[index].charts.indices {
-                session.items[index].charts[chartIndex].status = .failed
-                session.items[index].charts[chartIndex].errorMessage = session.items[index].errorMessage
-            }
-        }
-        session.phase = .completed
-        session.completedAt = session.completedAt ?? Date()
-        return session
+    static func discardLegacyHistory(from defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: legacyHistoryKey)
     }
 }
 
@@ -117,12 +83,10 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var staleSectionIDs: Set<DashboardSection.ID> = []
     @Published private(set) var extendedSectionStates: [DashboardSection.ID: ExtendedSectionLoadState] = [:]
     @Published private(set) var synchronizationSession: DashboardSynchronizationSession?
-    @Published private(set) var synchronizationHistory: [DashboardSynchronizationSession] = []
     @Published var selectedIndicatorID: Indicator.ID?
 
     private let provider: any AnalyticsProvider
     private let cache: any DashboardCaching
-    private let synchronizationHistoryStore: DashboardSynchronizationHistoryStore
     private let onAuthenticationRequired: () -> Void
     private var dashboardStorage: Dashboard?
     private var standardStaleSectionIDs: Set<DashboardSection.ID> = []
@@ -137,7 +101,7 @@ final class DashboardViewModel: ObservableObject {
         self.init(
             provider: provider,
             cache: cache,
-            synchronizationHistoryStore: DashboardSynchronizationHistoryStore(),
+            legacyHistoryDefaults: .standard,
             onAuthenticationRequired: onAuthenticationRequired
         )
     }
@@ -145,15 +109,13 @@ final class DashboardViewModel: ObservableObject {
     init(
         provider: any AnalyticsProvider,
         cache: any DashboardCaching,
-        synchronizationHistoryStore: DashboardSynchronizationHistoryStore,
+        legacyHistoryDefaults: UserDefaults,
         onAuthenticationRequired: @escaping () -> Void = {}
     ) {
         self.provider = provider
         self.cache = cache
-        self.synchronizationHistoryStore = synchronizationHistoryStore
         self.onAuthenticationRequired = onAuthenticationRequired
-        synchronizationHistory = synchronizationHistoryStore.load()
-        synchronizationSession = synchronizationHistory.first
+        DashboardSynchronizationStoragePolicy.discardLegacyHistory(from: legacyHistoryDefaults)
     }
 
     var dashboard: Dashboard? { dashboardStorage }
@@ -441,13 +403,6 @@ final class DashboardViewModel: ObservableObject {
 
     private func publishSession(_ session: DashboardSynchronizationSession) {
         synchronizationSession = session
-        if let index = synchronizationHistory.firstIndex(where: { $0.id == session.id }) {
-            synchronizationHistory[index] = session
-        } else {
-            synchronizationHistory.insert(session, at: 0)
-            synchronizationHistory = Array(synchronizationHistory.prefix(12))
-        }
-        synchronizationHistoryStore.save(synchronizationHistory)
     }
 
     private func chartItems(

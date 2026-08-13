@@ -127,6 +127,45 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testDashboardSectionGraphCountUsesRussianPluralRules() {
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(1), "1 график")
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(2), "2 графика")
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(4), "4 графика")
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(5), "5 графиков")
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(11), "11 графиков")
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(21), "21 график")
+    }
+
+    func testIPadSingleChartRowExpandsToFullAvailableWidth() {
+        let indicator = Indicator(
+            id: "single",
+            title: "Один график",
+            value: 1,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let row = DashboardIndicatorLayoutRow(
+            items: [DashboardIndicatorLayoutItem(indicator: indicator, width: .full)],
+            slotCapacity: 4
+        )
+
+        XCTAssertEqual(row.spans(expandingSingleItemToFill: true), [4])
+        XCTAssertEqual(row.spans(expandingSingleItemToFill: false), [2])
+    }
+
+    func testLegacySynchronizationHistoryIsDiscarded() throws {
+        let defaults = try XCTUnwrap(
+            UserDefaults(suiteName: "sync-history-cleanup-tests-\(UUID().uuidString)")
+        )
+        defaults.set(Data("old-history".utf8), forKey: DashboardSynchronizationStoragePolicy.legacyHistoryKey)
+
+        DashboardSynchronizationStoragePolicy.discardLegacyHistory(from: defaults)
+
+        XCTAssertNil(defaults.object(forKey: DashboardSynchronizationStoragePolicy.legacyHistoryKey))
+    }
+
     func testErrorNoticeCanBePresentedAgainForTheSameMessage() {
         let initialPresentation = DashboardOfflineNoticeTaskID(
             errorMessage: "Не удалось обновить данные",
@@ -2295,12 +2334,13 @@ final class ReleaseReadinessTests: XCTestCase {
         )
         let cache = RecordingDashboardCache()
         let historyDefaults = try XCTUnwrap(UserDefaults(suiteName: "sync-history-tests-\(UUID().uuidString)"))
-        let historyStore = DashboardSynchronizationHistoryStore(defaults: historyDefaults)
+        historyDefaults.set(Data("legacy".utf8), forKey: DashboardSynchronizationStoragePolicy.legacyHistoryKey)
         let viewModel = DashboardViewModel(
             provider: provider,
             cache: cache,
-            synchronizationHistoryStore: historyStore
+            legacyHistoryDefaults: historyDefaults
         )
+        XCTAssertNil(historyDefaults.object(forKey: DashboardSynchronizationStoragePolicy.legacyHistoryKey))
 
         await viewModel.load()
         XCTAssertEqual(viewModel.dashboard?.indicators.map(\.id), [baseIndicator.id])
@@ -2315,11 +2355,10 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(viewModel.dashboard?.sections.first?.indicators.map(\.id), [baseIndicator.id])
         XCTAssertEqual(viewModel.dashboard?.sections.first?.extended?.indicators.map(\.id), [extendedIndicator.id])
         XCTAssertTrue(cache.savedDashboards.contains { $0.sections.first?.extended?.indicators.map(\.id) == [extendedIndicator.id] })
-        XCTAssertEqual(viewModel.synchronizationHistory.count, 2)
-        XCTAssertEqual(viewModel.synchronizationHistory.first?.title, "Ручное обновление второго уровня")
-        XCTAssertEqual(viewModel.synchronizationHistory.first?.items.first?.charts.map(\.title), [extendedIndicator.title])
-        XCTAssertEqual(viewModel.synchronizationHistory.first?.items.first?.charts.first?.status, .succeeded)
-        XCTAssertEqual(historyStore.load().count, 2)
+        XCTAssertEqual(viewModel.synchronizationSession?.title, "Ручное обновление второго уровня")
+        XCTAssertEqual(viewModel.synchronizationSession?.items.first?.charts.map(\.title), [extendedIndicator.title])
+        XCTAssertEqual(viewModel.synchronizationSession?.items.first?.charts.first?.status, .succeeded)
+        XCTAssertNil(historyDefaults.object(forKey: DashboardSynchronizationStoragePolicy.legacyHistoryKey))
 
         await viewModel.refresh()
         XCTAssertEqual(provider.extendedRequestCount, 2)
@@ -2329,12 +2368,12 @@ final class ReleaseReadinessTests: XCTestCase {
         )
         XCTAssertEqual(viewModel.dashboard?.sections.first?.indicators.map(\.id), [baseIndicator.id])
         XCTAssertEqual(viewModel.dashboard?.sections.first?.extended?.indicators.map(\.id), [extendedIndicator.id])
-        XCTAssertEqual(viewModel.synchronizationHistory.count, 3)
-        XCTAssertEqual(viewModel.synchronizationHistory.first?.title, "Ручное обновление дашборда")
+        XCTAssertEqual(viewModel.synchronizationSession?.title, "Ручное обновление дашборда")
         XCTAssertEqual(
-            viewModel.synchronizationHistory.first?.items.first(where: { $0.kind == .extended })?.charts.map(\.title),
+            viewModel.synchronizationSession?.items.first(where: { $0.kind == .extended })?.charts.map(\.title),
             [extendedIndicator.title]
         )
+        XCTAssertNil(historyDefaults.object(forKey: DashboardSynchronizationStoragePolicy.legacyHistoryKey))
     }
 }
 

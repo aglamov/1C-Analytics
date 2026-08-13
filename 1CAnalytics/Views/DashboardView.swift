@@ -18,6 +18,23 @@ enum DashboardBulkSectionActionPolicy {
     }
 }
 
+enum DashboardSectionTextPolicy {
+    static func graphCountText(_ count: Int) -> String {
+        let remainder100 = count % 100
+        let noun: String
+        if 11...14 ~= remainder100 {
+            noun = "графиков"
+        } else {
+            switch count % 10 {
+            case 1: noun = "график"
+            case 2...4: noun = "графика"
+            default: noun = "графиков"
+            }
+        }
+        return "\(count) \(noun)"
+    }
+}
+
 struct DashboardView: View {
     private static let feedTopAnchor = "dashboard-feed-top"
 
@@ -70,6 +87,27 @@ struct DashboardView: View {
                             Image(systemName: "gearshape")
                         }
                         .accessibilityLabel("Настройки")
+                    }
+
+                    ToolbarItem(placement: .principal) {
+                        if let section = navigationSection {
+                            let style = DashboardSectionVisualStyle.style(for: section.title)
+                            HStack(spacing: 7) {
+                                Image(systemName: style.symbol)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(style.tint)
+                                    .frame(width: 24, height: 24)
+                                    .background(
+                                        style.tint.opacity(0.12),
+                                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    )
+
+                                Text(section.title)
+                                    .font(.headline)
+                                    .lineLimit(1)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
                     }
 
                     ToolbarItemGroup(placement: .topBarTrailing) {
@@ -170,10 +208,7 @@ struct DashboardView: View {
                 }
                 .coordinateSpace(name: DashboardScrollCoordinateSpace.name)
                 .onPreferenceChange(DashboardSectionOffsetPreferenceKey.self) { offsets in
-                    Task { @MainActor in
-                        await Task.yield()
-                        updateCurrentSection(using: offsets, in: dashboard)
-                    }
+                    updateCurrentSection(using: offsets, in: dashboard)
                 }
                 .onChange(of: indicatorIDToRestore) { _, indicatorID in
                     guard let indicatorID else {
@@ -233,7 +268,7 @@ struct DashboardView: View {
                     ForEach(layoutRows(for: displayedIndicators(in: section))) { row in
                         DashboardSlotRowLayout(
                             slotCapacity: row.slotCapacity,
-                            spans: row.items.map(\.width.slotSpan),
+                            spans: row.spans(expandingSingleItemToFill: isRegularPadLayout),
                             spacing: 16
                         ) {
                             ForEach(row.items) { item in
@@ -245,7 +280,7 @@ struct DashboardView: View {
 
                     extendedSectionControl(for: section)
                 }
-                .padding(.top, 12)
+                .padding(.top, 2)
                 .transition(.opacity)
             }
         } header: {
@@ -261,38 +296,15 @@ struct DashboardView: View {
         return Button {
             toggleSection(section.id)
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: style.symbol)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(style.tint)
-                    .frame(width: 36, height: 36)
-                    .background(style.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(section.title)
-                        .font(.headline)
-
-                    sectionStatusLabel(section)
-                }
-
-                Spacer(minLength: 12)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .accessibilityHidden(true)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .frame(minHeight: 58)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Color(.secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            sectionHeaderLabel(
+                title: section.title,
+                subtitle: DashboardSectionTextPolicy.graphCountText(section.indicators.count),
+                symbol: style.symbol,
+                tint: style.tint,
+                isExpanded: isExpanded,
+                isLoading: false,
+                isStale: viewModel.staleSectionIDs.contains(section.id)
             )
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background {
@@ -310,6 +322,78 @@ struct DashboardView: View {
         .accessibilityLabel(section.title)
         .accessibilityValue(isExpanded ? "Развернуто" : "Свернуто")
         .accessibilityAddTraits(.isHeader)
+    }
+
+    private func sectionHeaderLabel(
+        title: String,
+        subtitle: String,
+        symbol: String,
+        tint: Color,
+        isExpanded: Bool,
+        isLoading: Bool,
+        isStale: Bool
+    ) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 42, height: 42)
+                .background(
+                    tint.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title2.weight(.bold))
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 4) {
+                    if isStale {
+                        Image(systemName: "externaldrive.badge.exclamationmark")
+                            .accessibilityHidden(true)
+                    }
+                    Text(subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(isStale ? Color.orange : Color.secondary)
+            }
+
+            Spacer(minLength: 12)
+
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "chevron.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, isExpanded ? 8 : 12)
+        .frame(minHeight: isExpanded ? 58 : 66)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(isExpanded ? 0 : 0.11))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(tint.opacity(isExpanded ? 0 : 0.12), lineWidth: 1)
+        }
+        .shadow(
+            color: Color.black.opacity(isExpanded ? 0 : 0.07),
+            radius: isExpanded ? 0 : 6,
+            x: 0,
+            y: isExpanded ? 0 : 3
+        )
+        .contentShape(Rectangle())
+        .animation(.easeInOut(duration: 0.22), value: isExpanded)
     }
 
     private func dashboardCard(
@@ -427,86 +511,49 @@ struct DashboardView: View {
     @ViewBuilder
     private func extendedSectionControl(for section: DashboardSection) -> some View {
         if section.hasExtended {
-            if let extended = section.extended {
-                extendedSectionGroup(extended, parent: section)
-            } else {
-                switch viewModel.extendedState(for: section.id) {
-                case .loaded, .idle:
-                    extendedSectionButton(section, errorMessage: nil)
-                case .loading:
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Загружаем \(section.title) · 2 уровень")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .frame(minHeight: 52)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        Color(.secondarySystemGroupedBackground),
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    )
-                    .padding(.horizontal, 12)
-                case let .failed(message):
-                    extendedSectionButton(section, errorMessage: message)
-                }
-            }
+            extendedSectionGroup(parent: section)
         }
     }
 
     private func extendedSectionGroup(
-        _ extended: DashboardExtendedSection,
         parent: DashboardSection
     ) -> some View {
-        let isExpanded = expandedExtendedSectionIDs.contains(extended.id)
-        let layoutSection = DashboardSection(
-            id: extended.id,
-            title: extended.title,
-            indicators: extended.indicators,
-            fetchedAt: extended.fetchedAt
-        )
+        let extendedID = extendedSectionID(for: parent)
+        let extended = parent.extended
+        let state = viewModel.extendedState(for: parent.id)
+        let isExpanded = expandedExtendedSectionIDs.contains(extendedID)
+        let isLoading = state == .loading
+
         return VStack(alignment: .leading, spacing: 12) {
             Button {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    if isExpanded { expandedExtendedSectionIDs.remove(extended.id) }
-                    else { expandedExtendedSectionIDs.insert(extended.id) }
-                }
+                toggleExtendedSection(for: parent)
             } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "square.stack.3d.up.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline.weight(.semibold))
-                        .frame(width: 32, height: 32)
-                        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(extended.title).font(.headline)
-                        extendedStatusLabel(extended, parent: parent)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(minHeight: 52)
-                .background(
-                    Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                extendedSectionHeaderLabel(
+                    title: "\(parent.title) · 2 уровень",
+                    subtitle: extendedSectionSubtitle(parent: parent, state: state),
+                    isExpanded: isExpanded,
+                    isLoading: isLoading,
+                    isStale: viewModel.staleSectionIDs.contains(parent.id)
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(extended.title)
-            .accessibilityValue(isExpanded ? "Развернуто" : "Свернуто")
+            .disabled(isEditingLayout || isLoading)
+            .accessibilityLabel("\(parent.title) · 2 уровень")
+            .accessibilityValue(isLoading ? "Загружается" : (isExpanded ? "Развернуто" : "Свернуто"))
+            .accessibilityAddTraits(.isHeader)
 
-            if isExpanded {
+            if isExpanded, let extended {
+                let layoutSection = DashboardSection(
+                    id: extended.id,
+                    title: extended.title,
+                    indicators: extended.indicators,
+                    fetchedAt: extended.fetchedAt
+                )
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(layoutRows(for: displayedIndicators(in: layoutSection))) { row in
                         DashboardSlotRowLayout(
                             slotCapacity: row.slotCapacity,
-                            spans: row.items.map(\.width.slotSpan),
+                            spans: row.spans(expandingSingleItemToFill: isRegularPadLayout),
                             spacing: 16
                         ) {
                             ForEach(row.items) { item in
@@ -515,81 +562,108 @@ struct DashboardView: View {
                         }
                     }
                 }
-                .padding(.leading, 12)
             }
         }
-        .padding(.horizontal, 12)
     }
 
-    private func extendedSectionButton(
-        _ section: DashboardSection,
-        errorMessage: String?
+    private func extendedSectionHeaderLabel(
+        title: String,
+        subtitle: String,
+        isExpanded: Bool,
+        isLoading: Bool,
+        isStale: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 4) {
+                    if isStale {
+                        Image(systemName: "externaldrive.badge.exclamationmark")
+                            .accessibilityHidden(true)
+                    }
+                    Text(subtitle)
+                }
+                .font(.caption)
+                .foregroundStyle(isStale ? Color.orange : Color.secondary)
             }
 
-            Button {
-                Task {
-                    await viewModel.loadExtendedIndicators(for: section)
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "square.stack.3d.up.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 32, height: 32)
-                        .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    Text("\(section.title) · 2 уровень")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Image(systemName: "arrow.down.circle")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(minHeight: 52)
-                .frame(maxWidth: .infinity)
-                .background(
-                    Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isEditingLayout)
-        }
-        .padding(.horizontal, 12)
-    }
+            Spacer(minLength: 12)
 
-    private func extendedStatusText(
-        _ extended: DashboardExtendedSection,
-        parent: DashboardSection
-    ) -> String {
-        let count = sectionCountText(extended.indicators.count)
-        guard let fetchedAt = extended.fetchedAt else { return "\(count) · сохранённые данные" }
-        let timestamp = fetchedAt.formatted(date: .numeric, time: .shortened)
-        return viewModel.staleSectionIDs.contains(parent.id)
-            ? "\(count) · сохранено \(timestamp)"
-            : "\(count) · обновлено \(timestamp)"
-    }
-
-    private func extendedStatusLabel(
-        _ extended: DashboardExtendedSection,
-        parent: DashboardSection
-    ) -> some View {
-        let isStale = viewModel.staleSectionIDs.contains(parent.id)
-        return HStack(spacing: 4) {
-            if isStale {
-                Image(systemName: "externaldrive.badge.exclamationmark")
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 0 : -90))
                     .accessibilityHidden(true)
             }
-            Text(extendedStatusText(extended, parent: parent))
         }
-        .font(.caption)
-        .foregroundStyle(isStale ? Color.orange : Color.secondary)
+        .padding(.vertical, 6)
+        .frame(minHeight: 48)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func extendedSectionID(for section: DashboardSection) -> DashboardExtendedSection.ID {
+        section.extended?.id ?? "extended:\(section.id)"
+    }
+
+    private func extendedSectionSubtitle(
+        parent: DashboardSection,
+        state: DashboardViewModel.ExtendedSectionLoadState
+    ) -> String {
+        switch state {
+        case .loading:
+            return "Загрузка графиков…"
+        case .failed:
+            return "Ошибка загрузки · нажмите, чтобы повторить"
+        case .idle, .loaded:
+            guard let count = parent.extended?.indicators.count else {
+                return "Загрузить графики"
+            }
+            return DashboardSectionTextPolicy.graphCountText(count)
+        }
+    }
+
+    private func toggleExtendedSection(for section: DashboardSection) {
+        let extendedID = extendedSectionID(for: section)
+        if expandedExtendedSectionIDs.contains(extendedID) {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                _ = expandedExtendedSectionIDs.remove(extendedID)
+            }
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.22)) {
+            _ = expandedExtendedSectionIDs.insert(extendedID)
+            sectionAnimationGenerations[extendedID, default: 0] &+= 1
+        }
+
+        let state = viewModel.extendedState(for: section.id)
+        let shouldReload: Bool
+        if case .failed = state {
+            shouldReload = true
+        } else {
+            shouldReload = false
+        }
+        guard section.extended == nil || shouldReload else {
+            return
+        }
+
+        Task {
+            await viewModel.loadExtendedIndicators(for: section)
+            if case .failed = viewModel.extendedState(for: section.id) {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    _ = expandedExtendedSectionIDs.remove(extendedID)
+                }
+            }
+        }
     }
 
     private func synchronizationDetailsBinding(forPad: Bool) -> Binding<Bool> {
@@ -600,12 +674,21 @@ struct DashboardView: View {
         }
     }
 
+    @ViewBuilder
     private var synchronizationDetails: some View {
-        DashboardSynchronizationDetailsView(
-            sessions: viewModel.synchronizationHistory,
-            networkError: viewModel.refreshErrorMessage,
-            cacheError: viewModel.cacheErrorMessage
-        )
+        if let session = viewModel.synchronizationSession {
+            DashboardSynchronizationDetailsView(
+                session: session,
+                networkError: viewModel.refreshErrorMessage,
+                cacheError: viewModel.cacheErrorMessage
+            )
+        } else {
+            ContentUnavailableView(
+                "Нет текущего сеанса",
+                systemImage: "arrow.triangle.2.circlepath",
+                description: Text("Запустите обновление, чтобы увидеть его состояние.")
+            )
+        }
     }
 
     private var chartPaletteScheme: ChartPaletteScheme {
@@ -617,18 +700,16 @@ struct DashboardView: View {
     }
 
     private var navigationTitle: String {
-        guard let dashboard = viewModel.dashboard else {
-            return "1С Аналитика"
-        }
+        navigationSection?.title ?? "1С Аналитика"
+    }
 
-        let sectionID = currentSectionID ?? dashboard.sections.first?.id
-        if sectionID == dashboard.sections.first?.id,
-           !hasFirstSectionHeaderPassedTop {
-            return "1С Аналитика"
+    private var navigationSection: DashboardSection? {
+        guard hasFirstSectionHeaderPassedTop,
+              let dashboard = viewModel.dashboard,
+              let sectionID = currentSectionID ?? dashboard.sections.first?.id else {
+            return nil
         }
-
-        return dashboard.sections.first(where: { $0.id == sectionID })?.title
-            ?? dashboard.title
+        return dashboard.sections.first(where: { $0.id == sectionID })
     }
 
     private func toggleSection(_ sectionID: DashboardSection.ID) {
@@ -638,6 +719,9 @@ struct DashboardView: View {
                 collapsedSectionIDs.remove(sectionID)
             } else {
                 collapsedSectionIDs.insert(sectionID)
+                if let section = viewModel.dashboard?.sections.first(where: { $0.id == sectionID }) {
+                    expandedExtendedSectionIDs.remove(extendedSectionID(for: section))
+                }
             }
         }
     }
@@ -645,33 +729,6 @@ struct DashboardView: View {
     private func allSectionsAreCollapsed(in dashboard: Dashboard) -> Bool {
         !dashboard.sections.isEmpty
             && dashboard.sections.allSatisfy { collapsedSectionIDs.contains($0.id) }
-    }
-
-    private func sectionStatusText(_ section: DashboardSection) -> String {
-        let count = sectionCountText(section.indicators.count)
-        guard let fetchedAt = section.fetchedAt else {
-            return viewModel.staleSectionIDs.contains(section.id)
-                ? "\(count) · сохранённые данные"
-                : count
-        }
-
-        let timestamp = fetchedAt.formatted(date: .numeric, time: .shortened)
-        return viewModel.staleSectionIDs.contains(section.id)
-            ? "\(count) · сохранено \(timestamp)"
-            : "\(count) · обновлено \(timestamp)"
-    }
-
-    private func sectionStatusLabel(_ section: DashboardSection) -> some View {
-        let isStale = viewModel.staleSectionIDs.contains(section.id)
-        return HStack(spacing: 4) {
-            if isStale {
-                Image(systemName: "externaldrive.badge.exclamationmark")
-                    .accessibilityHidden(true)
-            }
-            Text(sectionStatusText(section))
-        }
-        .font(.caption)
-        .foregroundStyle(isStale ? Color.orange : Color.secondary)
     }
 
     private func toggleAllSections(in dashboard: Dashboard) {
@@ -688,6 +745,7 @@ struct DashboardView: View {
                 collapsedSectionIDs.removeAll()
             case .collapseAndScrollToTop:
                 collapsedSectionIDs = Set(dashboard.sections.map(\.id))
+                expandedExtendedSectionIDs.removeAll()
             }
         }
         if action == .collapseAndScrollToTop {
@@ -747,22 +805,6 @@ struct DashboardView: View {
         if currentSectionID != newSectionID {
             currentSectionID = newSectionID
         }
-    }
-
-    private func sectionCountText(_ count: Int) -> String {
-        let lastTwoDigits = count % 100
-        let lastDigit = count % 10
-        let noun: String
-
-        if lastDigit == 1, lastTwoDigits != 11 {
-            noun = "показатель"
-        } else if (2...4).contains(lastDigit), !(12...14).contains(lastTwoDigits) {
-            noun = "показателя"
-        } else {
-            noun = "показателей"
-        }
-
-        return "\(count) \(noun)"
     }
 
     private func displayedIndicators(in section: DashboardSection) -> [Indicator] {
