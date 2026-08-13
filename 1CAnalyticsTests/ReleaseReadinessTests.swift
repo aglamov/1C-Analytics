@@ -4,6 +4,57 @@ import UIKit
 
 @MainActor
 final class ReleaseReadinessTests: XCTestCase {
+    func testSignOutClearsDashboardBeforeCredentials() {
+        let events = SignOutEventRecorder()
+        let credentialsStore = StubAuthenticationCredentialsStore(events: events)
+        let dashboardCache = SignOutDashboardCache(events: events)
+        let viewModel = AuthenticationViewModel(
+            credentialsStore: credentialsStore,
+            dashboardCache: dashboardCache
+        )
+
+        viewModel.signOut()
+
+        XCTAssertEqual(events.values, [.dashboardCleared, .credentialsCleared])
+        XCTAssertEqual(viewModel.state, .signedOut)
+    }
+
+    func testSignOutStillClearsCredentialsWhenDashboardCleanupFails() {
+        let events = SignOutEventRecorder()
+        let credentialsStore = StubAuthenticationCredentialsStore(events: events)
+        let dashboardCache = SignOutDashboardCache(events: events, shouldFail: true)
+        let viewModel = AuthenticationViewModel(
+            credentialsStore: credentialsStore,
+            dashboardCache: dashboardCache
+        )
+
+        viewModel.signOut()
+
+        XCTAssertEqual(events.values, [.dashboardCleared, .credentialsCleared])
+        guard case let .failed(message) = viewModel.state else {
+            return XCTFail("Ожидалась ошибка очистки локальных данных")
+        }
+        XCTAssertEqual(message, DashboardCacheError.unavailable("test").localizedDescription)
+    }
+
+    func testDashboardCacheClearRemovesCurrentUsersStoredDashboard() throws {
+        let credentialsStore = StubAuthenticationCredentialsStore(events: SignOutEventRecorder())
+        let cache = try DashboardCache(inMemory: true, credentialsStore: credentialsStore)
+        let dashboard = Dashboard(
+            id: "dashboard",
+            title: "Дашборд",
+            fetchedAt: Date(),
+            indicators: []
+        )
+
+        try cache.save(dashboard)
+        XCTAssertEqual(try cache.loadDashboard()?.id, dashboard.id)
+
+        try cache.clearDashboard()
+
+        XCTAssertNil(try cache.loadDashboard())
+    }
+
     func testSelectedPaletteOverridesServerGraphColor() {
         let row = IndicatorRow(
             id: "row",
@@ -134,6 +185,47 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(5), "5 графиков")
         XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(11), "11 графиков")
         XCTAssertEqual(DashboardSectionTextPolicy.graphCountText(21), "21 график")
+    }
+
+    func testDashboardSectionGraphCountIncludesLoadedExtendedCharts() {
+        let primary = Indicator(
+            id: "primary",
+            title: "Основной",
+            value: 1,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let extended = Indicator(
+            id: "extended",
+            title: "Второй уровень",
+            value: 2,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let unloadedSection = DashboardSection(
+            id: "section",
+            title: "Раздел",
+            indicators: [primary],
+            hasExtended: true
+        )
+        let loadedSection = DashboardSection(
+            id: "section",
+            title: "Раздел",
+            indicators: [primary],
+            hasExtended: true,
+            extended: DashboardExtendedSection(
+                id: "extended:section",
+                title: "Раздел · 2 уровень",
+                indicators: [extended]
+            )
+        )
+
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCount(in: unloadedSection), 1)
+        XCTAssertEqual(DashboardSectionTextPolicy.graphCount(in: loadedSection), 2)
     }
 
     func testIPadSingleChartRowExpandsToFullAvailableWidth() {
@@ -2420,6 +2512,58 @@ private final class SucceedingThenFailingProvider: AnalyticsProvider {
 }
 
 @MainActor
+private final class SignOutEventRecorder {
+    enum Event: Equatable {
+        case dashboardCleared
+        case credentialsCleared
+    }
+
+    private(set) var values: [Event] = []
+
+    func append(_ event: Event) {
+        values.append(event)
+    }
+}
+
+@MainActor
+private final class StubAuthenticationCredentialsStore: AuthenticationCredentialsStoring {
+    private let events: SignOutEventRecorder
+
+    init(events: SignOutEventRecorder) {
+        self.events = events
+    }
+
+    func load() throws -> AuthenticationCredentials? {
+        AuthenticationCredentials(token: "token", username: "user")
+    }
+
+    func clear() throws {
+        events.append(.credentialsCleared)
+    }
+}
+
+@MainActor
+private final class SignOutDashboardCache: DashboardCaching {
+    private let events: SignOutEventRecorder
+    private let shouldFail: Bool
+
+    init(events: SignOutEventRecorder, shouldFail: Bool = false) {
+        self.events = events
+        self.shouldFail = shouldFail
+    }
+
+    func loadDashboard() throws -> Dashboard? { nil }
+    func save(_ dashboard: Dashboard) throws {}
+
+    func clearDashboard() throws {
+        events.append(.dashboardCleared)
+        if shouldFail {
+            throw DashboardCacheError.unavailable("test")
+        }
+    }
+}
+
+@MainActor
 private struct PartiallyFailingProvider: AnalyticsProvider {
     let section: DashboardSection
 
@@ -2450,6 +2594,7 @@ private final class StubDashboardCache: DashboardCaching {
 
     func loadDashboard() throws -> Dashboard? { dashboard }
     func save(_ dashboard: Dashboard) throws {}
+    func clearDashboard() throws {}
 }
 
 @MainActor
@@ -2529,6 +2674,8 @@ private final class RecordingDashboardCache: DashboardCaching {
     func save(_ dashboard: Dashboard) throws {
         savedDashboards.append(dashboard)
     }
+
+    func clearDashboard() throws {}
 }
 
 @MainActor
@@ -2538,4 +2685,6 @@ private struct FailingWriteDashboardCache: DashboardCaching {
     func save(_ dashboard: Dashboard) throws {
         throw DashboardCacheError.unavailable("test")
     }
+
+    func clearDashboard() throws {}
 }

@@ -28,7 +28,13 @@ protocol AuthenticationRequestAuthorizing {
 }
 
 @MainActor
-final class AuthenticationCredentialsStore: AuthenticationRequestAuthorizing {
+protocol AuthenticationCredentialsStoring: AnyObject {
+    func load() throws -> AuthenticationCredentials?
+    func clear() throws
+}
+
+@MainActor
+final class AuthenticationCredentialsStore: AuthenticationRequestAuthorizing, AuthenticationCredentialsStoring {
     static let shared = AuthenticationCredentialsStore()
 
     private let service = "com.aglamov.OneCAnalytics.authentication"

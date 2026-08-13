@@ -12,14 +12,17 @@ final class AuthenticationViewModel: ObservableObject {
     @Published private(set) var state: State
 
     private let authenticationService: RUDNAuthenticationService
-    private let credentialsStore: AuthenticationCredentialsStore
+    private let credentialsStore: any AuthenticationCredentialsStoring
+    private let dashboardCache: any DashboardCaching
 
     init(
         authenticationService: RUDNAuthenticationService = RUDNAuthenticationService(),
-        credentialsStore: AuthenticationCredentialsStore = .shared
+        credentialsStore: any AuthenticationCredentialsStoring = AuthenticationCredentialsStore.shared,
+        dashboardCache: any DashboardCaching = DashboardCacheFactory.makeCache()
     ) {
         self.authenticationService = authenticationService
         self.credentialsStore = credentialsStore
+        self.dashboardCache = dashboardCache
         self.state = (try? credentialsStore.load()) != nil ? .signedIn : .signedOut
     }
 
@@ -37,11 +40,24 @@ final class AuthenticationViewModel: ObservableObject {
     }
 
     func signOut() {
+        var signOutError: Error?
+
+        do {
+            try dashboardCache.clearDashboard()
+        } catch {
+            signOutError = error
+        }
+
         do {
             try credentialsStore.clear()
-            state = .signedOut
         } catch {
-            state = .failed(error.localizedDescription)
+            signOutError = signOutError ?? error
+        }
+
+        if let signOutError {
+            state = .failed(signOutError.localizedDescription)
+        } else {
+            state = .signedOut
         }
     }
 

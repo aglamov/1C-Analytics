@@ -18,18 +18,19 @@ final class DashboardCacheRecord {
 protocol DashboardCaching {
     func loadDashboard() throws -> Dashboard?
     func save(_ dashboard: Dashboard) throws
+    func clearDashboard() throws
 }
 
 @MainActor
 final class DashboardCache: DashboardCaching {
     private let modelContainer: ModelContainer
-    private let credentialsStore: AuthenticationCredentialsStore
+    private let credentialsStore: any AuthenticationCredentialsStoring
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
     init(
         inMemory: Bool = false,
-        credentialsStore: AuthenticationCredentialsStore = .shared
+        credentialsStore: any AuthenticationCredentialsStoring = AuthenticationCredentialsStore.shared
     ) throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
         self.modelContainer = try ModelContainer(
@@ -82,6 +83,20 @@ final class DashboardCache: DashboardCaching {
         try modelContainer.mainContext.save()
     }
 
+    func clearDashboard() throws {
+        guard let identifier = try currentRecordIdentifier else {
+            return
+        }
+        let descriptor = FetchDescriptor<DashboardCacheRecord>(
+            predicate: #Predicate { $0.identifier == identifier }
+        )
+
+        for record in try modelContainer.mainContext.fetch(descriptor) {
+            modelContainer.mainContext.delete(record)
+        }
+        try modelContainer.mainContext.save()
+    }
+
     private var currentRecordIdentifier: String? {
         get throws {
             try credentialsStore.load()?.username
@@ -95,6 +110,7 @@ final class DashboardCache: DashboardCaching {
 final class EmptyDashboardCache: DashboardCaching {
     func loadDashboard() throws -> Dashboard? { nil }
     func save(_ dashboard: Dashboard) throws {}
+    func clearDashboard() throws {}
 }
 
 enum DashboardCacheFactory {
@@ -132,6 +148,10 @@ private final class UnavailableDashboardCache: DashboardCaching {
     }
 
     func save(_ dashboard: Dashboard) throws {
+        throw error
+    }
+
+    func clearDashboard() throws {
         throw error
     }
 }

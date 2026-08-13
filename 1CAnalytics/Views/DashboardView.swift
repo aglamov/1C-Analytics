@@ -19,6 +19,10 @@ enum DashboardBulkSectionActionPolicy {
 }
 
 enum DashboardSectionTextPolicy {
+    static func graphCount(in section: DashboardSection) -> Int {
+        section.indicators.count + (section.extended?.indicators.count ?? 0)
+    }
+
     static func graphCountText(_ count: Int) -> String {
         let remainder100 = count % 100
         let noun: String
@@ -298,7 +302,9 @@ struct DashboardView: View {
         } label: {
             sectionHeaderLabel(
                 title: section.title,
-                subtitle: DashboardSectionTextPolicy.graphCountText(section.indicators.count),
+                subtitle: DashboardSectionTextPolicy.graphCountText(
+                    DashboardSectionTextPolicy.graphCount(in: section)
+                ),
                 symbol: style.symbol,
                 tint: style.tint,
                 isExpanded: isExpanded,
