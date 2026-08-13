@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-protocol AnalyticsProvider {
+protocol AnalyticsProvider: Sendable {
     func fetchDashboard() async throws -> Dashboard
     func fetchDashboard(
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void

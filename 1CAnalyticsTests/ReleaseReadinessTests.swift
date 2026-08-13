@@ -2363,12 +2363,46 @@ final class ReleaseReadinessTests: XCTestCase {
         }
 
         XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование"])
+        XCTAssertEqual(viewModel.state, .loading)
         XCTAssertTrue(viewModel.isRefreshing)
 
         provider.finish()
         await loadTask.value
 
         XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование", "Финансы"])
+        XCTAssertFalse(viewModel.isRefreshing)
+    }
+
+    func testCachedExtendedSectionsRefreshInParallel() async {
+        let cachedSections = AnalyticsAPIContract.sections.prefix(2).map { contract in
+            DashboardSection(
+                id: contract.id,
+                title: contract.displayName,
+                indicators: [],
+                hasExtended: true,
+                extended: DashboardExtendedSection(
+                    id: "extended:\(contract.id)",
+                    title: "\(contract.displayName) · 2 уровень",
+                    indicators: []
+                )
+            )
+        }
+        let cached = Dashboard(
+            id: "cached",
+            title: "Аналитика",
+            fetchedAt: .distantPast,
+            sections: cachedSections
+        )
+        let provider = ParallelExtendedDashboardProvider(dashboard: cached)
+        let viewModel = DashboardViewModel(
+            provider: provider,
+            cache: StubDashboardCache(dashboard: cached)
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(provider.extendedRequestCount, 2)
+        XCTAssertEqual(provider.maximumConcurrentExtendedRequests, 2)
         XCTAssertFalse(viewModel.isRefreshing)
     }
 
@@ -2662,6 +2696,39 @@ private final class ExtendedDashboardProvider: AnalyticsProvider {
     func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
         extendedRequestCount += 1
         return extendedSection
+    }
+}
+
+@MainActor
+private final class ParallelExtendedDashboardProvider: AnalyticsProvider {
+    let dashboard: Dashboard
+    private(set) var extendedRequestCount = 0
+    private(set) var maximumConcurrentExtendedRequests = 0
+    private var activeExtendedRequests = 0
+
+    init(dashboard: Dashboard) {
+        self.dashboard = dashboard
+    }
+
+    func fetchDashboard() async throws -> Dashboard {
+        dashboard
+    }
+
+    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+        extendedRequestCount += 1
+        activeExtendedRequests += 1
+        maximumConcurrentExtendedRequests = max(
+            maximumConcurrentExtendedRequests,
+            activeExtendedRequests
+        )
+        defer { activeExtendedRequests -= 1 }
+        try await Task.sleep(for: .milliseconds(50))
+
+        return DashboardSection(
+            id: section.id,
+            title: section.displayName,
+            indicators: []
+        )
     }
 }
 

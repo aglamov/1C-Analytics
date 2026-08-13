@@ -178,8 +178,7 @@ struct DashboardView: View {
     private var content: some View {
         switch viewModel.state {
         case .idle, .loading:
-            ProgressView("Загружаем аналитику")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            initialLoadingContent
         case let .failed(message):
             ContentUnavailableView {
                 Label("Не удалось загрузить данные", systemImage: "wifi.exclamationmark")
@@ -260,6 +259,31 @@ struct DashboardView: View {
             }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
         }
+    }
+
+    private var initialLoadingContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(AnalyticsAPIContract.sections) { section in
+                    let style = DashboardSectionVisualStyle.style(for: section.displayName)
+                    sectionHeaderLabel(
+                        title: section.displayName,
+                        subtitle: "Загрузка графиков…",
+                        symbol: style.symbol,
+                        tint: style.tint,
+                        isExpanded: false,
+                        isLoading: true,
+                        isStale: false
+                    )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(section.displayName), загрузка графиков")
+                }
+            }
+            .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
+        }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
     }
 
     private func dashboardSection(_ section: DashboardSection) -> some View {

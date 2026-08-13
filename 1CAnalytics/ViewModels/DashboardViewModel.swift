@@ -93,6 +93,22 @@ final class DashboardViewModel: ObservableObject {
     private var extendedStaleSectionIDs: Set<DashboardSection.ID> = []
     private var isStandardShowingCachedData = false
 
+    private struct ExtendedRefreshOutcome: Sendable {
+        enum Failure: Sendable {
+            case cancelled
+            case message(String)
+        }
+
+        let sectionID: DashboardSection.ID
+        let response: DashboardSection?
+        let failure: Failure?
+    }
+
+    private struct ExtendedRefreshError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
     convenience init(
         provider: any AnalyticsProvider,
         cache: any DashboardCaching = DashboardCacheFactory.makeCache(),
@@ -202,6 +218,8 @@ final class DashboardViewModel: ObservableObject {
             completeSession()
         }
 
+        async let extendedRefresh: Void = refreshSavedExtendedSections(cachedExtended.map(\.id))
+
         do {
             let fresh = try await provider.fetchDashboard { event in
                 self.handle(event)
@@ -229,7 +247,10 @@ final class DashboardViewModel: ObservableObject {
             }
         }
 
-        await refreshSavedExtendedSections(cachedExtended.map(\.id))
+        await extendedRefresh
+        if case .loading = state, let dashboardStorage {
+            state = .loaded(dashboardStorage)
+        }
         updateFreshnessState()
     }
 
@@ -289,7 +310,8 @@ final class DashboardViewModel: ObservableObject {
                 sections: sections
             ),
             cached: !standardStaleSectionIDs.isEmpty,
-            stale: standardStaleSectionIDs
+            stale: standardStaleSectionIDs,
+            publishState: state != .loading
         )
     }
 
@@ -311,31 +333,66 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func refreshSavedExtendedSections(_ sectionIDs: [DashboardSection.ID]) async {
-        for sectionID in sectionIDs {
-            guard let section = dashboardStorage?.sections.first(where: { $0.id == sectionID }) else { continue }
+        let requests = sectionIDs.compactMap { sectionID -> (DashboardSection.ID, AnalyticsAPIContract.Section)? in
+            guard let section = dashboardStorage?.sections.first(where: { $0.id == sectionID }) else {
+                return nil
+            }
             guard section.hasExtended,
                   let contract = AnalyticsAPIContract.section(matching: section.title) else {
                 updateSessionItem(id: extendedTaskID(sectionID), status: .succeeded, timestamp: Date(), indicators: [])
-                continue
+                return nil
             }
             updateSessionItem(id: extendedTaskID(sectionID), status: .updating)
             extendedSectionStates[sectionID] = .loading
-            do {
-                let response = try await provider.fetchExtendedSection(for: contract)
-                storeExtendedResponse(response, in: section)
-                extendedSectionStates[sectionID] = .loaded
-                extendedStaleSectionIDs.remove(sectionID)
-                updateSessionItem(
-                    id: extendedTaskID(sectionID),
-                    status: .succeeded,
-                    timestamp: response.fetchedAt ?? Date(),
-                    indicators: response.indicators
-                )
-                saveCurrentDashboard()
-            } catch is CancellationError {
-                return
-            } catch {
-                failExtended(section, error: error)
+            return (sectionID, contract)
+        }
+
+        await withTaskGroup(of: ExtendedRefreshOutcome.self) { group in
+            for (sectionID, contract) in requests {
+                group.addTask { [provider] in
+                    do {
+                        let response = try await provider.fetchExtendedSection(for: contract)
+                        return ExtendedRefreshOutcome(
+                            sectionID: sectionID,
+                            response: response,
+                            failure: nil
+                        )
+                    } catch is CancellationError {
+                        return ExtendedRefreshOutcome(
+                            sectionID: sectionID,
+                            response: nil,
+                            failure: .cancelled
+                        )
+                    } catch {
+                        return ExtendedRefreshOutcome(
+                            sectionID: sectionID,
+                            response: nil,
+                            failure: .message(error.localizedDescription)
+                        )
+                    }
+                }
+            }
+
+            for await outcome in group {
+                guard let section = dashboardStorage?.sections.first(where: { $0.id == outcome.sectionID }) else {
+                    continue
+                }
+                if let response = outcome.response {
+                    storeExtendedResponse(response, in: section)
+                    extendedSectionStates[outcome.sectionID] = .loaded
+                    extendedStaleSectionIDs.remove(outcome.sectionID)
+                    updateSessionItem(
+                        id: extendedTaskID(outcome.sectionID),
+                        status: .succeeded,
+                        timestamp: response.fetchedAt ?? Date(),
+                        indicators: response.indicators
+                    )
+                    saveCurrentDashboard()
+                } else if case .cancelled = outcome.failure {
+                    extendedSectionStates[outcome.sectionID] = section.extended == nil ? .idle : .loaded
+                } else if case let .message(message) = outcome.failure {
+                    failExtended(section, error: ExtendedRefreshError(message: message))
+                }
             }
         }
     }
@@ -375,11 +432,18 @@ final class DashboardViewModel: ObservableObject {
         updateFreshnessState()
     }
 
-    private func showDashboard(_ dashboard: Dashboard, cached: Bool, stale: Set<DashboardSection.ID>) {
+    private func showDashboard(
+        _ dashboard: Dashboard,
+        cached: Bool,
+        stale: Set<DashboardSection.ID>,
+        publishState: Bool = true
+    ) {
         dashboardStorage = dashboard
         isStandardShowingCachedData = cached
         standardStaleSectionIDs = stale
-        state = .loaded(dashboard)
+        if publishState {
+            state = .loaded(dashboard)
+        }
         if !dashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
             selectedIndicatorID = dashboard.indicators.first?.id
         }
