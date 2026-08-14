@@ -1,5 +1,16 @@
 import SwiftUI
 
+enum DashboardSynchronizationItemPresentationPolicy {
+    static func isInitiallyExpanded(
+        for kind: DashboardSynchronizationSession.Item.Kind
+    ) -> Bool {
+        switch kind {
+        case .standard, .extended:
+            false
+        }
+    }
+}
+
 struct DashboardSynchronizationIndicator: View {
     let session: DashboardSynchronizationSession
     let isCached: Bool
@@ -120,7 +131,11 @@ private struct DashboardSynchronizationItemRow: View {
 
     init(item: DashboardSynchronizationSession.Item) {
         self.item = item
-        _isExpanded = State(initialValue: item.kind == .extended)
+        _isExpanded = State(
+            initialValue: DashboardSynchronizationItemPresentationPolicy.isInitiallyExpanded(
+                for: item.kind
+            )
+        )
     }
 
     var body: some View {

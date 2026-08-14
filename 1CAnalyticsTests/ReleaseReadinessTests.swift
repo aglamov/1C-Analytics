@@ -4,6 +4,28 @@ import UIKit
 
 @MainActor
 final class ReleaseReadinessTests: XCTestCase {
+    func testFailedExtendedReloadKeepsCachedContentExpanded() {
+        XCTAssertFalse(
+            DashboardExtendedSectionPresentationPolicy.shouldCollapseAfterFailedLoad(
+                hasCachedContent: true
+            )
+        )
+        XCTAssertTrue(
+            DashboardExtendedSectionPresentationPolicy.shouldCollapseAfterFailedLoad(
+                hasCachedContent: false
+            )
+        )
+    }
+
+    func testSynchronizationProtocolStartsCollapsedForGroupsAndSubgroups() {
+        XCTAssertFalse(
+            DashboardSynchronizationItemPresentationPolicy.isInitiallyExpanded(for: .standard)
+        )
+        XCTAssertFalse(
+            DashboardSynchronizationItemPresentationPolicy.isInitiallyExpanded(for: .extended)
+        )
+    }
+
     func testSignOutClearsDashboardBeforeCredentials() {
         let events = SignOutEventRecorder()
         let credentialsStore = StubAuthenticationCredentialsStore(events: events)

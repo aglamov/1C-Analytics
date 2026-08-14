@@ -39,6 +39,12 @@ enum DashboardSectionTextPolicy {
     }
 }
 
+enum DashboardExtendedSectionPresentationPolicy {
+    static func shouldCollapseAfterFailedLoad(hasCachedContent: Bool) -> Bool {
+        !hasCachedContent
+    }
+}
+
 struct DashboardView: View {
     private static let feedTopAnchor = "dashboard-feed-top"
 
@@ -688,7 +694,13 @@ struct DashboardView: View {
 
         Task {
             await viewModel.loadExtendedIndicators(for: section)
-            if case .failed = viewModel.extendedState(for: section.id) {
+            let hasCachedContent = viewModel.dashboard?.sections
+                .first(where: { $0.id == section.id })?
+                .extended != nil
+            if case .failed = viewModel.extendedState(for: section.id),
+               DashboardExtendedSectionPresentationPolicy.shouldCollapseAfterFailedLoad(
+                   hasCachedContent: hasCachedContent
+               ) {
                 withAnimation(.easeInOut(duration: 0.22)) {
                     _ = expandedExtendedSectionIDs.remove(extendedID)
                 }
