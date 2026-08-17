@@ -9,7 +9,6 @@ struct AnalyticsChart: View {
     var showsLegend = true
     var showsValueLabels = true
     var animatesOnAppear = true
-    var showsLineAreaFill = false
     var animationTrigger = ""
     var externalSelection: Binding<IndicatorRow.ID?>?
     @State var internalSelectedRowID: IndicatorRow.ID?
@@ -29,7 +28,6 @@ struct AnalyticsChart: View {
         showsLegend: Bool = true,
         showsValueLabels: Bool = true,
         animatesOnAppear: Bool = true,
-        showsLineAreaFill: Bool = false,
         animationTrigger: String = "",
         selectedRowID: Binding<IndicatorRow.ID?>? = nil
     ) {
@@ -39,7 +37,6 @@ struct AnalyticsChart: View {
         self.showsLegend = showsLegend
         self.showsValueLabels = showsValueLabels
         self.animatesOnAppear = animatesOnAppear
-        self.showsLineAreaFill = showsLineAreaFill
         self.animationTrigger = animationTrigger
         self.externalSelection = selectedRowID
     }

@@ -69,6 +69,7 @@ struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
     let fetchedAt: Date?
     let hasExtended: Bool
     let extended: DashboardExtendedSection?
+    let indicatorDecodeFailureCount: Int?
 
     init(
         id: String,
@@ -76,7 +77,8 @@ struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
         indicators: [Indicator],
         fetchedAt: Date? = nil,
         hasExtended: Bool = false,
-        extended: DashboardExtendedSection? = nil
+        extended: DashboardExtendedSection? = nil,
+        indicatorDecodeFailureCount: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -84,6 +86,11 @@ struct DashboardSection: Identifiable, Codable, Equatable, Sendable {
         self.fetchedAt = fetchedAt
         self.hasExtended = hasExtended
         self.extended = extended
+        self.indicatorDecodeFailureCount = indicatorDecodeFailureCount
+    }
+
+    var hasIndicatorDecodeFailures: Bool {
+        (indicatorDecodeFailureCount ?? 0) > 0
     }
 }
 
@@ -430,48 +437,49 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
         let container = try decoder.singleValueContainer()
         let value = (try? container.decode(String.self)) ?? ""
 
-        switch value {
+        self = Self.backendType(for: value) ?? .bar
+    }
+
+    static func backendType(for value: String) -> Self? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines) {
         case Self.oneValue.rawValue:
-            self = .oneValue
+            return .oneValue
         case Self.linearProgress.rawValue:
-            self = .linearProgress
+            return .linearProgress
         case "Gauge", "GaugeIndicator", "Speedometer", "CircularProgressIndicator":
-            self = .gauge
+            return .gauge
         case Self.compactBar.rawValue:
-            self = .compactBar
+            return .compactBar
         case Self.bar.rawValue:
-            self = .bar
+            return .bar
         case Self.donut.rawValue:
-            self = .donut
+            return .donut
         case "PercentDonut", "DonutPercent", "SectorMarkPercent":
-            self = .percentDonut
+            return .percentDonut
         case "LineMark", "LineChart", "Line":
-            self = .line
+            return .line
         case "AreaMark", "AreaChart", "Area":
-            self = .area
+            return .area
         case "SplineLineMark", "SmoothLineMark", "SplineLine", "SmoothLine":
-            self = .splineLine
+            return .splineLine
         case "SplineAreaMark", "LayeredAreaMark", "SmoothAreaMark", "SplineArea":
-            self = .splineArea
+            return .splineArea
         case "ForecastLineMark", "ForecastLine", "PredictionLineMark":
-            self = .forecastLine
+            return .forecastLine
         case "RadarMark", "RadarChart", "SpiderMark", "SpiderChart", "Spider", "WebChart":
-            self = .radar
+            return .radar
         case "ExpandableTableMark":
-            self = .expandableHierarchy
+            return .expandableHierarchy
         case Self.stackedBar.rawValue:
-            self = .stackedBar
+            return .stackedBar
         case Self.horizontalBar.rawValue:
-            self = .horizontalBar
+            return .horizontalBar
         case "GeoMap", "WorldMap", "Map", "GeoChoropleth":
-            self = .geoMap
+            return .geoMap
         case "PlanFactProgress":
-            self = .horizontalBar
+            return .horizontalBar
         default:
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unsupported chart type: \(value)"
-            )
+            return nil
         }
     }
 

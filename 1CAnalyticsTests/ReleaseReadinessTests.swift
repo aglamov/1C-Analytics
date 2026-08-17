@@ -924,6 +924,24 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testFalseBackendResultRequiresAuthenticationDespiteSuccessfulHTTPStatus() {
+        let data = Data(#"{"result":false}"#.utf8)
+
+        XCTAssertThrowsError(try APIAnalyticsProvider.validatePayloadAuthentication(data)) { error in
+            guard case AnalyticsError.authenticationRequired = error else {
+                return XCTFail("Expected authenticationRequired, got \(error)")
+            }
+        }
+    }
+
+    func testAnalyticsPayloadIsNotRejectedAsAuthenticationResponse() {
+        let data = Data(
+            #"{"sections":[{"name":"Образование","values":[]}]}"#.utf8
+        )
+
+        XCTAssertNoThrow(try APIAnalyticsProvider.validatePayloadAuthentication(data))
+    }
+
     func testAnalyticsRequestUsesOnlySectionAndSixtySecondTimeout() throws {
         let configuration = AppConfiguration(
             analyticsBaseURL: try XCTUnwrap(
@@ -947,8 +965,10 @@ final class ReleaseReadinessTests: XCTestCase {
 
         XCTAssertNil(queryItems.first { $0.name == "id" })
         XCTAssertEqual(queryItems.first { $0.name == "section" }?.value, "Приемная_кампания")
+        XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
         XCTAssertEqual(request.timeoutInterval, 60)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Cache-Control"), "no-cache")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Test-Authorization"), "attached")
 
         let extendedRequest = try provider.makeRequest(
@@ -962,6 +982,8 @@ final class ReleaseReadinessTests: XCTestCase {
             extendedItems.first { $0.name == "section" }?.value,
             "Приемная_кампания_Расширенный"
         )
+        XCTAssertEqual(extendedRequest.cachePolicy, .reloadIgnoringLocalCacheData)
+        XCTAssertEqual(extendedRequest.value(forHTTPHeaderField: "Cache-Control"), "no-cache")
     }
 
     func testExtendedContractAndPlanFactProgressUseContractDefaults() throws {
@@ -1197,12 +1219,20 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(single.displayedTotal(for: node), 10)
     }
 
-    func testExpandableHierarchyRequiresBarMode() {
+    func testExpandableHierarchyWithoutBarModeUsesSafeDefault() throws {
         let data = Data(
             #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"ExpandableTableMark","series":[],"nodes":[]}]}]}"#.utf8
         )
 
-        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
+        let section = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .sections
+                .first
+        )
+        XCTAssertEqual(section.indicators.first?.chartType, .expandableHierarchy)
+        XCTAssertEqual(section.indicators.first?.hierarchy?.barMode, .grouped)
+        XCTAssertNil(section.indicatorDecodeFailureCount)
     }
 
     func testResponseMappingUsesFetchTimeAndCalculatesSubgroupSummary() throws {
@@ -2112,20 +2142,37 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(indicators[3].id.hasSuffix("-3"))
     }
 
-    func testUnknownChartTypeIsRejectedInsteadOfSilentlyRenderingAsBar() {
+    func testUnknownChartTypeUsesSafePresentationAndReplacesCachedShape() throws {
         let data = Data(
-            #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"UnknownChart","values":[]}]}]}"#.utf8
+            #"{"sections":[{"name":"Test","values":[{"name":"Valid","type":"OneValue","value":7},{"name":"Broken","type":"UnknownChart","values":[]}]}]}"#.utf8
         )
 
-        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
+        let section = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .sections
+                .first
+        )
+
+        XCTAssertEqual(section.indicators.map(\.title), ["Valid", "Broken"])
+        XCTAssertEqual(section.indicators.map(\.chartType), [.oneValue, .bar])
+        XCTAssertNil(section.indicatorDecodeFailureCount)
     }
 
-    func testMalformedNumericValueIsRejectedInsteadOfBecomingZero() {
+    func testMalformedOptionalNumericValueDoesNotRejectItsChart() throws {
         let data = Data(
-            #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"BarMark","values":[{"group":"A","value":"not-a-number"}]}]}]}"#.utf8
+            #"{"sections":[{"name":"Test","values":[{"name":"Valid","type":"OneValue","value":7},{"name":"Broken","type":"BarMark","values":[{"group":"A","value":"not-a-number"}]}]}]}"#.utf8
         )
 
-        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data))
+        let section = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .sections
+                .first
+        )
+
+        XCTAssertEqual(section.indicators.map(\.title), ["Valid", "Broken"])
+        XCTAssertNil(section.indicatorDecodeFailureCount)
     }
 
     func testMalformedFlexibleArrayIsRejectedInsteadOfBecomingEmpty() {
@@ -2306,16 +2353,32 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testInvalidRadarAndDuplicateHierarchySiblingIDsAreRejected() {
+    func testInvalidRadarFallsBackAndDuplicateHierarchyIDsAreMadeUnique() throws {
         let radar = Data(
             #"{"sections":[{"name":"Наука","values":[{"name":"Radar","type":"RadarMark","values":[{"group":"A","value":1},{"group":"B","value":-1}]}]}]}"#.utf8
         )
-        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: radar))
+        let radarSection = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: radar)
+                .toDashboard()
+                .sections
+                .first
+        )
+        XCTAssertEqual(radarSection.indicators.first?.chartType, .bar)
+        XCTAssertNil(radarSection.indicatorDecodeFailureCount)
 
         let hierarchy = Data(
             #"{"sections":[{"name":"Наука","values":[{"name":"Tree","type":"ExpandableTableMark","barMode":"single","series":[{"key":"value","name":"Значение"}],"nodes":[{"id":"same","label":"A","values":{"value":1}},{"id":"same","label":"B","values":{"value":2}}]}]}]}"#.utf8
         )
-        XCTAssertThrowsError(try JSONDecoder().decode(AnalyticsAPIResponse.self, from: hierarchy))
+        let hierarchySection = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: hierarchy)
+                .toDashboard()
+                .sections
+                .first
+        )
+        let tree = try XCTUnwrap(hierarchySection.indicators.first)
+        XCTAssertEqual(tree.chartType, .expandableHierarchy)
+        XCTAssertEqual(tree.hierarchy?.nodes.map(\.id), ["node/same", "node/same#2"])
+        XCTAssertNil(hierarchySection.indicatorDecodeFailureCount)
     }
 
     func testAuthenticationFailureReplacesCachedDashboardAndNotifiesRoot() async {
@@ -2403,6 +2466,136 @@ final class ReleaseReadinessTests: XCTestCase {
             viewModel.refreshErrorMessage,
             "Не удалось обновить разделы: Кадры. Уже полученные данные сохранены."
         )
+    }
+
+    func testPartiallyDecodedSectionUpdatesValidChartsAndKeepsCachedInvalidChart() async {
+        let cachedValid = Indicator(
+            id: "science-valid",
+            title: "Valid",
+            value: 1,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let cachedInvalid = Indicator(
+            id: "science-changed",
+            title: "Changed contract",
+            value: 2,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let freshValid = Indicator(
+            id: cachedValid.id,
+            title: cachedValid.title,
+            value: 10,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let cached = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: .distantPast,
+            sections: [
+                DashboardSection(
+                    id: "science",
+                    title: "Наука",
+                    indicators: [cachedValid, cachedInvalid]
+                )
+            ]
+        )
+        let fresh = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: Date(),
+            sections: [
+                DashboardSection(
+                    id: "science",
+                    title: "Наука",
+                    indicators: [freshValid],
+                    indicatorDecodeFailureCount: 1
+                )
+            ]
+        )
+        let viewModel = DashboardViewModel(
+            provider: StaticDashboardProvider(dashboard: fresh),
+            cache: StubDashboardCache(dashboard: cached)
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.dashboard?.indicators.map(\.id), [freshValid.id, cachedInvalid.id])
+        XCTAssertEqual(viewModel.dashboard?.indicators.first?.value, freshValid.value)
+        XCTAssertTrue(viewModel.isShowingCachedData)
+        XCTAssertTrue(viewModel.refreshErrorMessage?.contains("1 график") == true)
+    }
+
+    func testFreshChartWithChangedTypeReplacesCachedChart() async {
+        let chartID = "science-changing-chart"
+        let cachedChart = Indicator(
+            id: chartID,
+            title: "Changing chart",
+            value: 2,
+            unit: nil,
+            chartType: .oneValue,
+            source: nil,
+            rows: []
+        )
+        let freshChart = Indicator(
+            id: chartID,
+            title: "Changing chart",
+            value: 10,
+            unit: nil,
+            chartType: .bar,
+            source: nil,
+            rows: [
+                IndicatorRow(
+                    id: "fresh-row",
+                    label: "Fresh",
+                    value: 10,
+                    series: nil,
+                    sortOrder: 0
+                )
+            ]
+        )
+        let cached = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: .distantPast,
+            sections: [
+                DashboardSection(
+                    id: "science",
+                    title: "Наука",
+                    indicators: [cachedChart]
+                )
+            ]
+        )
+        let fresh = Dashboard(
+            id: "analytics",
+            title: "Аналитика",
+            fetchedAt: Date(),
+            sections: [
+                DashboardSection(
+                    id: "science",
+                    title: "Наука",
+                    indicators: [freshChart]
+                )
+            ]
+        )
+        let viewModel = DashboardViewModel(
+            provider: StaticDashboardProvider(dashboard: fresh),
+            cache: StubDashboardCache(dashboard: cached)
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.dashboard?.indicators, [freshChart])
+        XCTAssertFalse(viewModel.isShowingCachedData)
+        XCTAssertNil(viewModel.refreshErrorMessage)
     }
 
     func testProgressiveLoadingPublishesSectionBeforeRequestCompletes() async {

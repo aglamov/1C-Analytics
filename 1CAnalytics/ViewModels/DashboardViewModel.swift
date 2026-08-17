@@ -185,17 +185,7 @@ final class DashboardViewModel: ObservableObject {
 
         do {
             let response = try await provider.fetchExtendedSection(for: contract)
-            storeExtendedResponse(response, in: section)
-            extendedSectionStates[section.id] = .loaded
-            extendedStaleSectionIDs.remove(section.id)
-            updateSessionItem(
-                id: extendedTaskID(section.id),
-                status: .succeeded,
-                timestamp: response.fetchedAt ?? Date(),
-                indicators: response.indicators
-            )
-            updateFreshnessState()
-            saveCurrentDashboard()
+            finishExtendedResponse(response, in: section)
         } catch AnalyticsError.authenticationRequired {
             failExtended(section, error: AnalyticsError.authenticationRequired)
             if dashboard == nil { state = .failed(AnalyticsError.authenticationRequired.localizedDescription) }
@@ -225,7 +215,7 @@ final class DashboardViewModel: ObservableObject {
                 self.handle(event)
             }
             mergeFinalDashboard(fresh)
-            refreshErrorMessage = nil
+            refreshErrorMessage = partialResponseMessage(for: fresh.sections)
         } catch AnalyticsError.authenticationRequired {
             refreshErrorMessage = AnalyticsError.authenticationRequired.localizedDescription
             state = .failed(AnalyticsError.authenticationRequired.localizedDescription)
@@ -260,12 +250,19 @@ final class DashboardViewModel: ObservableObject {
             updateSessionItem(id: standardTaskID(contract), status: .updating)
         case let .succeeded(contract, section):
             mergeSection(section)
-            standardStaleSectionIDs.remove(section.id)
+            let isPartial = section.hasIndicatorDecodeFailures
+            if isPartial {
+                standardStaleSectionIDs.insert(section.id)
+            } else {
+                standardStaleSectionIDs.remove(section.id)
+            }
             updateSessionItem(
                 id: standardTaskID(contract),
-                status: .succeeded,
+                status: isPartial ? .cached : .succeeded,
                 timestamp: section.fetchedAt ?? Date(),
-                indicators: section.indicators
+                error: isPartial ? partialSectionMessage(for: section) : nil,
+                indicators: dashboardStorage?.sections.first(where: { $0.id == section.id })?.indicators
+                    ?? section.indicators
             )
             saveCurrentDashboard()
         case let .failed(contract, message):
@@ -295,10 +292,18 @@ final class DashboardViewModel: ObservableObject {
             $0.id == newSection.id || AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(newSection.title)
         }
         let oldExtended = matchingIndex.flatMap { sections[$0].extended }
+        let oldIndicators = matchingIndex.map { sections[$0].indicators } ?? []
         let merged = DashboardSection(
-            id: newSection.id, title: newSection.title, indicators: newSection.indicators,
+            id: newSection.id,
+            title: newSection.title,
+            indicators: mergedIndicators(
+                fresh: newSection.indicators,
+                cached: oldIndicators,
+                preservesMissing: newSection.hasIndicatorDecodeFailures
+            ),
             fetchedAt: newSection.fetchedAt ?? Date(), hasExtended: newSection.hasExtended,
-            extended: newSection.hasExtended ? oldExtended : nil
+            extended: newSection.hasExtended ? oldExtended : nil,
+            indicatorDecodeFailureCount: newSection.indicatorDecodeFailureCount
         )
         if let matchingIndex { sections[matchingIndex] = merged } else { sections.append(merged) }
         sections.sort { AnalyticsAPIContract.order(of: $0.title) < AnalyticsAPIContract.order(of: $1.title) }
@@ -322,13 +327,26 @@ final class DashboardViewModel: ObservableObject {
                 $0.id == section.id || AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(section.title)
             }
             return DashboardSection(
-                id: section.id, title: section.title, indicators: section.indicators,
+                id: section.id,
+                title: section.title,
+                indicators: mergedIndicators(
+                    fresh: section.indicators,
+                    cached: old?.indicators ?? [],
+                    preservesMissing: section.hasIndicatorDecodeFailures
+                ),
                 fetchedAt: section.fetchedAt, hasExtended: section.hasExtended,
-                extended: section.hasExtended ? old?.extended : nil
+                extended: section.hasExtended ? old?.extended : nil,
+                indicatorDecodeFailureCount: section.indicatorDecodeFailureCount
             )
         }
-        standardStaleSectionIDs.removeAll()
-        showDashboard(Dashboard(id: fresh.id, title: fresh.title, fetchedAt: fresh.fetchedAt, sections: sections), cached: false, stale: [])
+        standardStaleSectionIDs = Set(
+            sections.filter(\.hasIndicatorDecodeFailures).map(\.id)
+        )
+        showDashboard(
+            Dashboard(id: fresh.id, title: fresh.title, fetchedAt: fresh.fetchedAt, sections: sections),
+            cached: !standardStaleSectionIDs.isEmpty,
+            stale: standardStaleSectionIDs
+        )
         saveCurrentDashboard()
     }
 
@@ -378,16 +396,7 @@ final class DashboardViewModel: ObservableObject {
                     continue
                 }
                 if let response = outcome.response {
-                    storeExtendedResponse(response, in: section)
-                    extendedSectionStates[outcome.sectionID] = .loaded
-                    extendedStaleSectionIDs.remove(outcome.sectionID)
-                    updateSessionItem(
-                        id: extendedTaskID(outcome.sectionID),
-                        status: .succeeded,
-                        timestamp: response.fetchedAt ?? Date(),
-                        indicators: response.indicators
-                    )
-                    saveCurrentDashboard()
+                    finishExtendedResponse(response, in: section)
                 } else if case .cancelled = outcome.failure {
                     extendedSectionStates[outcome.sectionID] = section.extended == nil ? .idle : .loaded
                 } else if case let .message(message) = outcome.failure {
@@ -403,17 +412,85 @@ final class DashboardViewModel: ObservableObject {
         let child = DashboardExtendedSection(
             id: extendedTaskID(parent.id),
             title: "\(parent.title) · 2 уровень",
-            indicators: response.indicators,
+            indicators: mergedIndicators(
+                fresh: response.indicators,
+                cached: dashboard.sections[index].extended?.indicators ?? [],
+                preservesMissing: response.hasIndicatorDecodeFailures
+            ),
             fetchedAt: response.fetchedAt ?? Date()
         )
         var sections = dashboard.sections
         let current = sections[index]
         sections[index] = DashboardSection(
             id: current.id, title: current.title, indicators: current.indicators,
-            fetchedAt: current.fetchedAt, hasExtended: current.hasExtended, extended: child
+            fetchedAt: current.fetchedAt,
+            hasExtended: current.hasExtended,
+            extended: child,
+            indicatorDecodeFailureCount: current.indicatorDecodeFailureCount
         )
         dashboard = Dashboard(id: dashboard.id, title: dashboard.title, fetchedAt: dashboard.fetchedAt, sections: sections)
         showDashboard(dashboard, cached: isStandardShowingCachedData, stale: standardStaleSectionIDs)
+    }
+
+    private func finishExtendedResponse(_ response: DashboardSection, in section: DashboardSection) {
+        storeExtendedResponse(response, in: section)
+        let isPartial = response.hasIndicatorDecodeFailures
+        if isPartial {
+            extendedSectionStates[section.id] = .failed(partialSectionMessage(for: response))
+            extendedStaleSectionIDs.insert(section.id)
+            refreshErrorMessage = "Второй уровень раздела «\(section.title)» обновлён частично. \(partialSectionMessage(for: response))"
+        } else {
+            extendedSectionStates[section.id] = .loaded
+            extendedStaleSectionIDs.remove(section.id)
+        }
+        updateSessionItem(
+            id: extendedTaskID(section.id),
+            status: isPartial ? .cached : .succeeded,
+            timestamp: response.fetchedAt ?? Date(),
+            error: isPartial ? partialSectionMessage(for: response) : nil,
+            indicators: dashboardStorage?.sections.first(where: { $0.id == section.id })?.extended?.indicators
+                ?? response.indicators
+        )
+        updateFreshnessState()
+        saveCurrentDashboard()
+    }
+
+    private func mergedIndicators(
+        fresh: [Indicator],
+        cached: [Indicator],
+        preservesMissing: Bool
+    ) -> [Indicator] {
+        guard preservesMissing else {
+            return fresh
+        }
+        let freshIDs = Set(fresh.map(\.id))
+        let freshTitles = Set(fresh.map { AnalyticsAPIContract.normalize($0.title) })
+        let retained = cached.filter {
+            !freshIDs.contains($0.id)
+                && !freshTitles.contains(AnalyticsAPIContract.normalize($0.title))
+        }
+        return fresh + retained
+    }
+
+    private func partialSectionMessage(for section: DashboardSection) -> String {
+        let count = section.indicatorDecodeFailureCount ?? 0
+        return "Не удалось обработать \(count) \(Self.graphWord(for: count)) из-за изменившегося контракта. Остальные данные обновлены."
+    }
+
+    private func partialResponseMessage(for sections: [DashboardSection]) -> String? {
+        let count = sections.reduce(0) { $0 + ($1.indicatorDecodeFailureCount ?? 0) }
+        guard count > 0 else { return nil }
+        return "Не удалось обработать \(count) \(Self.graphWord(for: count)) из-за изменившегося контракта. Остальные данные обновлены."
+    }
+
+    private static func graphWord(for count: Int) -> String {
+        let remainder100 = count % 100
+        if 11...14 ~= remainder100 { return "графиков" }
+        return switch count % 10 {
+        case 1: "график"
+        case 2...4: "графика"
+        default: "графиков"
+        }
     }
 
     private func failExtended(_ section: DashboardSection, error: Error) {

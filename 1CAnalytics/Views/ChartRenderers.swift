@@ -187,19 +187,6 @@ extension AnalyticsChart {
             ValidChartGeometry(size: geometry.size) {
                 Chart {
                     ForEach(indicator.orderedRows) { row in
-                        if showsLineAreaFill {
-                            AreaMark(
-                                x: .value("Группа", trendXValue(for: row)),
-                                yStart: .value("Основание", 0),
-                                yEnd: .value("Значение", animatedValue(for: row)),
-                                series: .value("Серия", row.series ?? indicator.title)
-                            )
-                            .interpolationMethod(smooth ? .catmullRom : .monotone)
-                            .foregroundStyle(areaGradient(for: row))
-                            .alignsMarkStylesWithPlotArea(false)
-                            .opacity(opacity(for: row))
-                        }
-
                         LineMark(
                             x: .value("Группа", trendXValue(for: row)),
                             y: .value("Значение", animatedValue(for: row)),
@@ -229,7 +216,7 @@ extension AnalyticsChart {
                 }
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
                 .chartXScale(domain: trendXDomain, range: .plotDimension(startPadding: 0, endPadding: 5))
-                .chartYScale(domain: trendValueLabelDomain(includesZero: showsLineAreaFill))
+                .chartYScale(domain: trendValueLabelDomain(includesZero: false))
                 .chartYAxis { valueAxis }
                 .chartXAxis { responsiveTrendAxis(availableWidth: contentWidth) }
                 .chartOverlay { proxy in trendChartOverlay(proxy: proxy) }

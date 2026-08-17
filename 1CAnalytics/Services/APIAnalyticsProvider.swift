@@ -98,6 +98,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
 
         let (data, response) = try await urlSession.data(for: request)
         try Self.validate(response)
+        try Self.validatePayloadAuthentication(data)
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -132,10 +133,14 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             throw AnalyticsError.invalidResponse
         }
 
-        var request = URLRequest(url: url)
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 60
+        )
         request.httpMethod = "GET"
-        request.timeoutInterval = 60
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
         if let apiKey = configuration.analyticsAPIKey {
             request.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
@@ -154,6 +159,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         do {
             let (data, response) = try await session.data(for: request)
             try validate(response)
+            try validatePayloadAuthentication(data)
 
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -235,6 +241,17 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         }
     }
 
+    nonisolated static func validatePayloadAuthentication(_ data: Data) throws {
+        guard let response = try? JSONDecoder().decode(AnalyticsBackendResult.self, from: data),
+              response.result == false else {
+            return
+        }
+
+        // The 1C endpoint reports an expired or rejected session as HTTP 200
+        // with {"result":false}, rather than returning 401/403.
+        throw AnalyticsError.authenticationRequired
+    }
+
     private nonisolated static func makeDashboard(sections: [DashboardSection]) -> Dashboard {
         Dashboard(
             id: "analytics",
@@ -243,6 +260,10 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             sections: sections
         )
     }
+}
+
+private struct AnalyticsBackendResult: Decodable {
+    let result: Bool?
 }
 
 private struct SectionFetchOutcome: Sendable {
@@ -349,6 +370,7 @@ struct AnalyticsAPISection: Decodable, Sendable {
     let name: String
     let values: [AnalyticsAPIIndicator]
     let hasExtended: Bool
+    let indicatorDecodeFailureCount: Int
 
     private enum CodingKeys: String, CodingKey {
         case name
@@ -359,7 +381,12 @@ struct AnalyticsAPISection: Decodable, Sendable {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decodeFlexibleString(forKey: .name) ?? ""
-        values = try container.decodeFlexibleArray(AnalyticsAPIIndicator.self, forKey: .values)
+        let decodedIndicators = try container.decodeLossyFlexibleObjectArray(
+            AnalyticsAPIIndicator.self,
+            forKey: .values
+        )
+        values = decodedIndicators.values
+        indicatorDecodeFailureCount = decodedIndicators.failureCount
         hasExtended = try container.decodeFlexibleBool(forKey: .hasExtended) ?? false
     }
 
@@ -391,7 +418,10 @@ struct AnalyticsAPISection: Decodable, Sendable {
             title: title,
             indicators: indicators,
             fetchedAt: fetchedAt,
-            hasExtended: hasExtended
+            hasExtended: hasExtended,
+            indicatorDecodeFailureCount: indicatorDecodeFailureCount == 0
+                ? nil
+                : indicatorDecodeFailureCount
         )
     }
 }
@@ -426,6 +456,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let referenceSeriesIndex: Int?
     let isExplicitPlanFactProgress: Bool
     let hierarchy: ExpandableHierarchy?
+    let hasUnsupportedChartType: Bool
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -487,33 +518,28 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         id = try container.decodeFlexibleString(forKey: .id)
         identifier = try container.decodeFlexibleString(forKey: .identifier)
         name = try container.decodeFlexibleString(forKey: .name) ?? ""
-        values = try container.decodeFlexibleArray(AnalyticsAPIValue.self, forKey: .values)
-        type = try container.decodeIfPresent(ChartType.self, forKey: .type) ?? .bar
-        isExplicitPlanFactProgress = try container.decodeFlexibleString(forKey: .type)
-            == "PlanFactProgress"
+        values = (try? container.decodeFlexibleArray(AnalyticsAPIValue.self, forKey: .values)) ?? []
+        let rawType = try? container.decodeFlexibleString(forKey: .type)
+        type = rawType.flatMap(ChartType.backendType(for:)) ?? .bar
+        hasUnsupportedChartType = rawType.map { ChartType.backendType(for: $0) == nil } ?? false
+        isExplicitPlanFactProgress = rawType == "PlanFactProgress"
 
         if type == .expandableHierarchy {
             let rawBarMode = try container.decodeFlexibleString(forKey: .barMode)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
-            guard let rawBarMode,
-                  let barMode = ExpandableHierarchyBarMode(rawValue: rawBarMode) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .barMode,
-                    in: container,
-                    debugDescription: "ExpandableTableMark requires barMode: stacked, grouped, or single"
-                )
-            }
+            let barMode = rawBarMode.flatMap(ExpandableHierarchyBarMode.init(rawValue:))
+                ?? .grouped
 
-            let hierarchySeries = try container.decodeFlexibleArray(
+            let hierarchySeries = (try? container.decodeFlexibleArray(
                 AnalyticsAPIHierarchySeries.self,
                 forKey: .series
-            )
-            let hierarchyNodes = try container.decodeFlexibleArray(
+            )) ?? []
+            let hierarchyNodes = (try? container.decodeFlexibleArray(
                 AnalyticsAPIHierarchyNode.self,
                 forKey: .nodes
-            )
-            hierarchy = try AnalyticsAPIHierarchy(
+            )) ?? []
+            hierarchy = AnalyticsAPIHierarchy(
                 barMode: barMode,
                 series: hierarchySeries,
                 nodes: hierarchyNodes,
@@ -577,19 +603,6 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             .map(Int.init)
         referenceSeriesIndex = try container.decodeFlexibleDouble(forKey: .referenceSeriesIndex)
             .map(Int.init)
-
-        if type == .radar {
-            guard values.count >= 3, !values.contains(where: { value in
-                if let scalar = value.value, scalar < 0 { return true }
-                return value.subgroup?.contains(where: { ($0.value ?? 0) < 0 }) == true
-            }) else {
-                throw DecodingError.dataCorruptedError(
-                    forKey: .values,
-                    in: container,
-                    debugDescription: "RadarMark requires at least three axes and non-negative values"
-                )
-            }
-        }
 
         let rawWidth = try container.decodeFlexibleDouble(forKey: .widthPercent)
             ?? container.decodeFlexibleDouble(forKey: .width)
@@ -699,6 +712,18 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     }
 
     private var resolvedChartType: ChartType {
+        if hasUnsupportedChartType {
+            return value != nil && values.isEmpty ? .oneValue : .bar
+        }
+
+        if type == .radar,
+           values.count < 3 || values.contains(where: { value in
+               if let scalar = value.value, scalar < 0 { return true }
+               return value.subgroup?.contains(where: { ($0.value ?? 0) < 0 }) == true
+           }) {
+            return .bar
+        }
+
         if type == .radar || type == .expandableHierarchy {
             return type
         }
@@ -749,7 +774,7 @@ private struct AnalyticsAPIHierarchy: Sendable {
     let nodes: [AnalyticsAPIHierarchyNode]
     let totalSeries: String?
 
-    func toDomainModel() throws -> ExpandableHierarchy {
+    func toDomainModel() -> ExpandableHierarchy {
         var seriesKeys = Set<String>()
         let uniqueSeries = series.compactMap { apiSeries -> ExpandableHierarchySeries? in
             let model = apiSeries.domainModel
@@ -762,7 +787,7 @@ private struct AnalyticsAPIHierarchy: Sendable {
         return ExpandableHierarchy(
             barMode: barMode,
             series: uniqueSeries,
-            nodes: try Self.domainNodes(nodes, parentPath: "node"),
+            nodes: Self.domainNodes(nodes, parentPath: "node"),
             totalSeries: totalSeries
         )
     }
@@ -770,25 +795,22 @@ private struct AnalyticsAPIHierarchy: Sendable {
     private static func domainNodes(
         _ nodes: [AnalyticsAPIHierarchyNode],
         parentPath: String
-    ) throws -> [ExpandableHierarchyNode] {
-        var explicitSiblingIDs = Set<String>()
+    ) -> [ExpandableHierarchyNode] {
+        var siblingIDCounts = [String: Int]()
 
-        return try nodes.enumerated().map { index, node in
+        return nodes.enumerated().map { index, node in
             let explicitID = node.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !explicitID.isEmpty, !explicitSiblingIDs.insert(explicitID).inserted {
-                throw DecodingError.dataCorrupted(.init(
-                    codingPath: [],
-                    debugDescription: "ExpandableTableMark contains duplicate sibling id: \(explicitID)"
-                ))
-            }
-            let nodeID = explicitID.isEmpty ? String(index + 1) : explicitID
+            let baseNodeID = explicitID.isEmpty ? String(index + 1) : explicitID
+            let occurrence = siblingIDCounts[baseNodeID, default: 0]
+            siblingIDCounts[baseNodeID] = occurrence + 1
+            let nodeID = occurrence == 0 ? baseNodeID : "\(baseNodeID)#\(occurrence + 1)"
             let path = "\(parentPath)/\(nodeID)"
 
             return ExpandableHierarchyNode(
                 id: path,
                 label: node.label,
                 values: node.values.mapValues(\.domainModel),
-                children: try domainNodes(node.children, parentPath: path)
+                children: domainNodes(node.children, parentPath: path)
             )
         }
     }
@@ -1175,7 +1197,61 @@ private func normalizedLineStyle(_ rawValue: String?, dashed: Bool?) -> ChartLin
     }
 }
 
+private struct ArbitraryCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = String(intValue)
+        self.intValue = intValue
+    }
+}
+
+private struct FailableDecodableObject<Value: Decodable & Sendable>: Decodable, Sendable {
+    let value: Value?
+
+    init(from decoder: any Decoder) throws {
+        // Contract entities are JSON objects. Keep structural corruption fatal,
+        // but isolate contract errors inside an individual object.
+        _ = try decoder.container(keyedBy: ArbitraryCodingKey.self)
+        value = try? Value(from: decoder)
+    }
+}
+
 private extension KeyedDecodingContainer {
+    func decodeLossyFlexibleObjectArray<T: Decodable & Sendable>(
+        _ type: T.Type,
+        forKey key: Key
+    ) throws -> (values: [T], failureCount: Int) {
+        guard contains(key), try !decodeNil(forKey: key) else {
+            return ([], 0)
+        }
+
+        if let elements = try? decode([FailableDecodableObject<T>].self, forKey: key) {
+            return (
+                elements.compactMap(\.value),
+                elements.lazy.filter { $0.value == nil }.count
+            )
+        }
+
+        if let element = try? decode(FailableDecodableObject<T>.self, forKey: key) {
+            return (element.value.map { [$0] } ?? [], element.value == nil ? 1 : 0)
+        }
+
+        throw DecodingError.typeMismatch(
+            [T].self,
+            DecodingError.Context(
+                codingPath: codingPath + [key],
+                debugDescription: "Expected an object or an array of objects"
+            )
+        )
+    }
+
     func decodeFlexibleArray<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> [T] {
         guard contains(key), try !decodeNil(forKey: key) else {
             return []
@@ -1208,13 +1284,7 @@ private extension KeyedDecodingContainer {
         if let value = try? decode(Bool.self, forKey: key) {
             return value ? "true" : "false"
         }
-        throw DecodingError.typeMismatch(
-            String.self,
-            DecodingError.Context(
-                codingPath: codingPath + [key],
-                debugDescription: "Expected a string, number, or boolean"
-            )
-        )
+        return nil
     }
 
     func decodeFlexibleDouble(forKey key: Key) throws -> Double? {
@@ -1224,15 +1294,7 @@ private extension KeyedDecodingContainer {
         if let value = try? decode(Double.self, forKey: key) {
             return value
         }
-        guard let text = try? decode(String.self, forKey: key) else {
-            throw DecodingError.typeMismatch(
-                Double.self,
-                DecodingError.Context(
-                    codingPath: codingPath + [key],
-                    debugDescription: "Expected a number or numeric string"
-                )
-            )
-        }
+        guard let text = try? decode(String.self, forKey: key) else { return nil }
 
         let normalized = text
             .replacingOccurrences(of: " ", with: "")
@@ -1240,13 +1302,7 @@ private extension KeyedDecodingContainer {
             .replacingOccurrences(of: "\u{202f}", with: "")
             .replacingOccurrences(of: "%", with: "")
             .replacingOccurrences(of: ",", with: ".")
-        guard let value = Double(normalized), value.isFinite else {
-            throw DecodingError.dataCorruptedError(
-                forKey: key,
-                in: self,
-                debugDescription: "Invalid numeric value: \(text)"
-            )
-        }
+        guard let value = Double(normalized), value.isFinite else { return nil }
         return value
     }
 
@@ -1260,26 +1316,14 @@ private extension KeyedDecodingContainer {
         if let value = try? decode(Int.self, forKey: key) {
             return value != 0
         }
-        guard let value = try? decode(String.self, forKey: key) else {
-            throw DecodingError.typeMismatch(
-                Bool.self,
-                DecodingError.Context(
-                    codingPath: codingPath + [key],
-                    debugDescription: "Expected a boolean, integer, or boolean string"
-                )
-            )
-        }
+        guard let value = try? decode(String.self, forKey: key) else { return nil }
         switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "true", "1", "yes":
             return true
         case "false", "0", "no":
             return false
         default:
-            throw DecodingError.dataCorruptedError(
-                forKey: key,
-                in: self,
-                debugDescription: "Invalid boolean value: \(value)"
-            )
+            return nil
         }
     }
 }

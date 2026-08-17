@@ -172,45 +172,6 @@ extension ContractPlanFactPeriod {
     }
 }
 
-struct CompactBarValues: View {
-    let indicator: Indicator
-    @Environment(\.chartPaletteScheme) private var chartPaletteScheme
-    @Environment(\.dashboardContentScale) private var contentScale
-
-    var body: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 132 * contentScale), spacing: 10 * contentScale)],
-            alignment: .leading,
-            spacing: 10 * contentScale
-        ) {
-            ForEach(indicator.orderedRows) { row in
-                HStack(spacing: 8 * contentScale) {
-                    Circle()
-                        .fill(indicator.chartColor(for: row, scheme: chartPaletteScheme))
-                        .frame(width: 8 * contentScale, height: 8 * contentScale)
-
-                    Text(row.label)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .subtleTextShadow()
-
-                    Spacer(minLength: 4)
-
-                    Text(row.valueLabel ?? indicator.formattedNumber(row.value))
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .subtleTextShadow()
-                }
-                .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
-}
-
 struct OneValueDashboardContent: View {
     let indicator: Indicator
     var reservesDetailButtonSpace = false

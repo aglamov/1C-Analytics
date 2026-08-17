@@ -70,21 +70,15 @@ struct IndicatorDashboardCard: View {
             ExpandableHierarchyChartView(indicator: indicator, showsExpandedHierarchy: false)
                 .frame(minHeight: chartHeight, alignment: .top)
         case .compactBar:
-            VStack(alignment: .leading, spacing: 12) {
-                AnalyticsChart(
-                    indicator: indicator,
-                    usesCardBackground: false,
-                    showsLegend: true,
-                    animatesOnAppear: true,
-                    animationTrigger: animationTrigger
-                )
-                    .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 2)
-
-                if !indicator.prefersHorizontalGroupedBars, indicator.showsValueLabels {
-                    CompactBarValues(indicator: indicator)
-                }
-            }
+            AnalyticsChart(
+                indicator: indicator,
+                usesCardBackground: false,
+                showsLegend: true,
+                animatesOnAppear: true,
+                animationTrigger: animationTrigger
+            )
+                .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
+                .padding(.top, 2)
         case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
              .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             AnalyticsChart(
@@ -92,7 +86,6 @@ struct IndicatorDashboardCard: View {
                 usesCardBackground: false,
                 showsLegend: true,
                 animatesOnAppear: true,
-                showsLineAreaFill: true,
                 animationTrigger: animationTrigger
             )
                 .frame(minHeight: chartHeight, maxHeight: .infinity, alignment: .top)
