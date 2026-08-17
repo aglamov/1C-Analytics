@@ -111,6 +111,58 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testDetailPercentagesAlwaysUseThreeFractionDigits() {
+        let locale = Locale(identifier: "en_US_POSIX")
+
+        XCTAssertEqual(
+            DetailPresentationPolicy.shareText(
+                for: 1,
+                denominator: 8,
+                fractionDigits: 3,
+                locale: locale
+            ),
+            "12.500%"
+        )
+        XCTAssertEqual(
+            DetailPresentationPolicy.shareText(
+                for: 0,
+                denominator: nil,
+                fractionDigits: 3,
+                locale: locale
+            ),
+            "0.000%"
+        )
+    }
+
+    func testGeoMapExcludesAntarcticaFromRenderedGeometry() {
+        XCTAssertFalse(
+            GeoMapPresentationPolicy.shouldIncludeCountry(
+                nameRU: "Антарктида",
+                admin: "Antarctica",
+                isoA3: "ATA"
+            )
+        )
+        XCTAssertTrue(
+            GeoMapPresentationPolicy.shouldIncludeCountry(
+                nameRU: "Китай",
+                admin: "China",
+                isoA3: "CHN"
+            )
+        )
+    }
+
+    func testGeoMapSelectionMatchesAPICountryAliasToISOCode() {
+        let row = IndicatorRow(
+            id: "china",
+            label: "КИТАЙ",
+            value: 1_757,
+            series: nil,
+            sortOrder: 0
+        )
+
+        XCTAssertTrue(GeoMapPresentationPolicy.countryKeys(for: row).contains("CHN"))
+    }
+
     func testIPadDashboardAlwaysPlacesIndicatorsTwoPerRow() {
         let rows = DashboardGridLayoutPolicy.rows(for: [1, 2, 3, 4, 5], isPad: true)
 

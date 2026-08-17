@@ -25,6 +25,20 @@ enum DetailPresentationPolicy {
             }
     }
 
+    static func shareText(
+        for value: Double,
+        denominator: Double?,
+        fractionDigits: Int = 0,
+        locale: Locale = .current
+    ) -> String {
+        let share = denominator.map { $0 > 0 ? value / $0 : 0 } ?? 0
+        return share.formatted(
+            .percent
+                .precision(.fractionLength(fractionDigits))
+                .locale(locale)
+        )
+    }
+
     static func seriesTitle(_ title: String, aggregateValue: Double?) -> String {
         guard let aggregateValue,
               aggregateValue.isFinite,

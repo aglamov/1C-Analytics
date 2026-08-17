@@ -4,12 +4,13 @@ import SwiftUI
 struct GeoMapIndicatorView: View {
     let indicator: Indicator
     private let valuesByCountryKey: [String: Double]
+    private let selectedCountryKeys: Set<String>
     private let maximumValue: Double
     private let minimumValue: Double
     @State private var geometry = GeoMapGeometry.empty
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
-    init(indicator: Indicator) {
+    init(indicator: Indicator, selectedRowID: IndicatorRow.ID? = nil) {
         self.indicator = indicator
         self.maximumValue = indicator.rows.map(\.value).max() ?? 1
         self.minimumValue = indicator.rows.map(\.value).filter { $0 > 0 }.min() ?? 0
@@ -21,6 +22,9 @@ struct GeoMapIndicatorView: View {
                 values[isoCode] = row.value
             }
         }
+        self.selectedCountryKeys = GeoMapPresentationPolicy.countryKeys(
+            for: indicator.rows.first { $0.id == selectedRowID }
+        )
     }
 
     var body: some View {
@@ -33,8 +37,11 @@ struct GeoMapIndicatorView: View {
                     context.fill(path, with: .color(fillColor(for: shape)))
                     context.stroke(
                         path,
-                        with: .color(Color.secondary.opacity(0.38)),
-                        style: StrokeStyle(lineWidth: 0.55, lineJoin: .round)
+                        with: .color(strokeColor(for: shape)),
+                        style: StrokeStyle(
+                            lineWidth: isSelected(shape) ? 2.2 : 0.55,
+                            lineJoin: .round
+                        )
                     )
                 }
             }
@@ -64,7 +71,23 @@ struct GeoMapIndicatorView: View {
         }
 
         let intensity = sqrt(max(value, 0) / max(maximumValue, 1))
-        return paletteColor.opacity(0.20 + 0.76 * intensity)
+        let opacity = 0.20 + 0.76 * intensity
+
+        if isSelected(shape) {
+            return paletteColor.opacity(1)
+        }
+
+        return paletteColor.opacity(selectedCountryKeys.isEmpty ? opacity : opacity * 0.42)
+    }
+
+    private func strokeColor(for shape: GeoCountryShape) -> Color {
+        isSelected(shape)
+            ? Color.primary.opacity(0.92)
+            : Color.secondary.opacity(selectedCountryKeys.isEmpty ? 0.38 : 0.22)
+    }
+
+    private func isSelected(_ shape: GeoCountryShape) -> Bool {
+        !selectedCountryKeys.isDisjoint(with: shape.lookupKeys)
     }
 
     private func mapPath(for shape: GeoCountryShape, in rect: CGRect, bounds: CGRect) -> Path {
@@ -190,6 +213,14 @@ private actor GeoMapWorldGeometry {
             let properties = feature.properties.flatMap {
                 try? JSONDecoder().decode(GeoCountryProperties.self, from: $0)
             }
+            guard GeoMapPresentationPolicy.shouldIncludeCountry(
+                nameRU: properties?.nameRU,
+                admin: properties?.admin,
+                isoA3: properties?.isoA3
+            ) else {
+                continue
+            }
+
             let lookupKeys = [
                 properties?.nameRU?.geoCountryKey,
                 properties?.admin?.geoCountryKey,
@@ -266,7 +297,36 @@ private struct GeoCountryProperties: Decodable {
     }
 }
 
+enum GeoMapPresentationPolicy {
+    static func shouldIncludeCountry(
+        nameRU: String?,
+        admin: String?,
+        isoA3: String?
+    ) -> Bool {
+        let keys = [nameRU, admin, isoA3]
+            .compactMap(\.self)
+            .map(\.geoCountryKey)
+
+        return GeoCountryAliases.antarcticaKeys.isDisjoint(with: keys)
+    }
+
+    static func countryKeys(for row: IndicatorRow?) -> Set<String> {
+        guard let row else {
+            return []
+        }
+
+        let key = row.label.geoCountryKey
+        return Set([key, GeoCountryAliases.isoCodeByAPIName[key]].compactMap(\.self))
+    }
+}
+
 private enum GeoCountryAliases {
+    static let antarcticaKeys: Set<String> = [
+        "Антарктида".geoCountryKey,
+        "Antarctica".geoCountryKey,
+        "ATA".geoCountryKey
+    ]
+
     static let isoCodeByAPIName: [String: String] = [
         "АБХАЗИЯ".geoCountryKey: "ABH",
         "БАХРЕЙН".geoCountryKey: "BHR",

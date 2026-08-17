@@ -140,7 +140,10 @@ struct IndicatorDetailView: View {
     private func chartSection(fillsAvailableHeight: Bool, aspectRatio: CGFloat = 1.0) -> some View {
         Group {
             if indicator.chartType == .geoMap {
-                GeoMapIndicatorView(indicator: indicator)
+                GeoMapIndicatorView(
+                    indicator: indicator,
+                    selectedRowID: selectedRowID
+                )
                     .frame(maxWidth: .infinity, alignment: .top)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             } else if indicator.chartType == .oneValue {
@@ -270,7 +273,7 @@ struct IndicatorDetailView: View {
             indicator: indicator,
             selectedRowID: selectedRowID,
             animatesOnAppear: indicator.chartType != .geoMap,
-            selectionEnabled: indicator.chartType != .geoMap,
+            selectionEnabled: true,
             onSelect: selectRow
         )
     }

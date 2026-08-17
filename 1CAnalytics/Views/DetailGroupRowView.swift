@@ -74,11 +74,11 @@ struct DetailGroupRowView: View {
     }
 
     private func shareText(for value: Double, denominator: Double?) -> String {
-        guard let denominator, denominator > 0 else {
-            return "0%"
-        }
-
-        return (value / denominator).formatted(.percent.precision(.fractionLength(0)))
+        DetailPresentationPolicy.shareText(
+            for: value,
+            denominator: denominator,
+            fractionDigits: indicator.chartType == .geoMap ? 3 : 0
+        )
     }
 
     private func progress(for value: Double) -> Double {
@@ -236,4 +236,3 @@ struct DetailGroupRowView: View {
         indicator.chartColor(for: row, scheme: chartPaletteScheme)
     }
 }
-
