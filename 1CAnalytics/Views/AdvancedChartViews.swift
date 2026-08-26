@@ -461,6 +461,7 @@ struct TileChartView: View {
                     tile(item, size: frame.size)
                         .frame(width: frame.width, height: frame.height)
                         .offset(x: frame.minX, y: frame.minY)
+                        .zIndex(isItemSelected(item) ? 20 : 0)
                 }
             }
         }
@@ -474,7 +475,7 @@ struct TileChartView: View {
             contentScale: contentScale,
             showValueLabels: indicator.showsValueLabels
         )
-        let isSelected = item.sourceRowIDs.contains(activeSelectedRowID ?? "")
+        let isSelected = isItemSelected(item)
         let isDimmed = activeSelectedRowID != nil && !isSelected
 
         return Button {
@@ -491,12 +492,14 @@ struct TileChartView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 3 * contentScale) {
-                    if visibility.showsTitle {
+                    if visibility.showsTitle || isSelected {
                         Text(item.title)
-                            .font(.caption.weight(.bold))
+                            .font((isSelected ? Font.caption2 : Font.caption).weight(.bold))
                             .foregroundStyle(.white)
-                            .lineLimit(size.height >= 54 * contentScale ? 2 : 1)
-                            .minimumScaleFactor(0.58)
+                            .lineLimit(isSelected ? nil : (size.height >= 54 * contentScale ? 2 : 1))
+                            .minimumScaleFactor(isSelected ? 0.68 : 0.58)
+                            .allowsTightening(true)
+                            .layoutPriority(isSelected ? 1 : 0)
                     }
 
                     if visibility.showsValue {
@@ -520,7 +523,13 @@ struct TileChartView: View {
         }
         .buttonStyle(.plain)
         .opacity(isDimmed ? 0.34 : 1)
-        .scaleEffect(isSelected ? 0.97 : 1)
+        .scaleEffect(isSelected ? 1.055 : 1)
+        .zIndex(isSelected ? 20 : 0)
+        .shadow(
+            color: .black.opacity(isSelected ? 0.24 : 0),
+            radius: isSelected ? 8 * contentScale : 0,
+            y: isSelected ? 4 * contentScale : 0
+        )
         .animation(.spring(response: 0.30, dampingFraction: 0.78), value: activeSelectedRowID)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.title)
@@ -528,7 +537,11 @@ struct TileChartView: View {
             "\(formattedValue(item.value)), "
                 + item.percentage.formatted(.percent.precision(.fractionLength(1)))
         )
-        .accessibilityHint("Выбрать плитку")
+        .accessibilityHint(
+            isSelected
+                ? "Свернуть плитку"
+                : "Увеличить плитку и показать полное название"
+        )
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -548,6 +561,11 @@ struct TileChartView: View {
 
     private var items: [TileChartItem] {
         TilePresentationPolicy.items(for: indicator, appliesLimit: appliesCardLimit)
+    }
+
+    private func isItemSelected(_ item: TileChartItem) -> Bool {
+        guard let activeSelectedRowID else { return false }
+        return item.sourceRowIDs.contains(activeSelectedRowID)
     }
 
     private func select(_ item: TileChartItem) {

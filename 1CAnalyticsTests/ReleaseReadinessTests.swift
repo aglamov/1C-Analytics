@@ -1437,6 +1437,7 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertFalse(indicator.showsAggregateValue)
+        XCTAssertFalse(indicator.showsHorizontalCategoryTotals)
         XCTAssertNil(indicator.showValueLabels)
         XCTAssertTrue(indicator.showsValueLabels)
         XCTAssertTrue(
@@ -1447,6 +1448,24 @@ final class ReleaseReadinessTests: XCTestCase {
                 defaultLabelsEnabled: indicator.showsValueLabels
             )
         )
+    }
+
+    func testDonutKeepsTotalAndSectorValueLabelFlagsIndependent() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Наука","values":[{"name":"Финансирование","type":"SectorMarkInnerRadius","showTotal":false,"values":[{"group":"2024","value":4000},{"group":"2025","value":6600},{"group":"2026","value":3714}]}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertEqual(indicator.chartType, .donut)
+        XCTAssertFalse(indicator.showsAggregateValue)
+        XCTAssertNil(indicator.showValueLabels)
+        XCTAssertTrue(indicator.showsValueLabels)
     }
 
     func testSingleLegendItemIsHiddenUnlessContractExplicitlyEnablesIt() {

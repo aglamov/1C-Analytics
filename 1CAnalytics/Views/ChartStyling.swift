@@ -49,7 +49,7 @@ extension AnalyticsChart {
                     HStack(spacing: 4) {
                         Text(wrappedAxisLabel(label))
                             .multilineTextAlignment(.trailing)
-                        if indicator.showsRowValues,
+                        if indicator.showsHorizontalCategoryTotals,
                            let group = indicator.rowGroups.first(where: { $0.label == label }) {
                             Text(indicator.formattedNumber(group.totalValue))
                                 .fontWeight(.semibold)
@@ -84,7 +84,7 @@ extension AnalyticsChart {
     }
 
     var histogramYAxisLabelMaximumWidth: CGFloat {
-        indicator.showsRowValues ? 104 : 60
+        indicator.showsHorizontalCategoryTotals ? 104 : 60
     }
 
     var trendYAxisLabelMaximumWidth: CGFloat {

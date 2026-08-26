@@ -170,8 +170,6 @@ extension AnalyticsChart {
                     donutTapOverlay(proxy: proxy)
                 }
 
-                donutCenterSummary(showsPercentages: showsPercentages)
-
                 donutExternalLabels(
                     showsPercentages: showsPercentages,
                     size: geometry.size

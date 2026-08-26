@@ -131,29 +131,6 @@ extension AnalyticsChart {
             .transition(.identity)
     }
 
-    func donutCenterSummary(showsPercentages: Bool) -> some View {
-        let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
-        let valueText = showsPercentages ? "100%" : indicator.formattedNumber(total)
-
-        return VStack(spacing: 3) {
-            Text(valueText)
-                .font(.title3.monospacedDigit().weight(.bold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.64)
-
-            Text("Итого")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: 94)
-        .padding(8)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
     func donutExternalLabels(
         showsPercentages: Bool,
         size: CGSize

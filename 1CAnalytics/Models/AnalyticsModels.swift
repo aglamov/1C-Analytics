@@ -752,6 +752,10 @@ extension Indicator {
         showRowValues ?? true
     }
 
+    var showsHorizontalCategoryTotals: Bool {
+        showsAggregateValue && showsRowValues
+    }
+
     var showsYAxisLabels: Bool {
         showYAxisLabels ?? false
     }
