@@ -111,7 +111,9 @@ extension AnalyticsChart {
                         }
                     }
 
-                    if isLastRowInGroup(row), let group = rowGroup(for: row) {
+                    if indicator.showsAggregateValue,
+                       isLastRowInGroup(row),
+                       let group = rowGroup(for: row) {
                         PointMark(
                             x: .value("Группа", group.label),
                             y: .value("Итого", group.totalValue)

@@ -52,7 +52,7 @@ struct DashboardView: View {
     @StateObject private var layoutStore = DashboardLayoutStore()
     let onSignOut: () -> Void
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.corporate.rawValue
+    @AppStorage("chartPaletteScheme") private var chartPaletteSchemeRawValue = ChartPaletteScheme.standard.rawValue
     @AppStorage("dashboardContentScale.v1") private var dashboardContentScale = 1.0
     @State private var collapsedSectionIDs: Set<DashboardSection.ID> = []
     @State private var expandedExtendedSectionIDs: Set<DashboardExtendedSection.ID> = []
@@ -565,7 +565,7 @@ struct DashboardView: View {
                 toggleExtendedSection(for: parent)
             } label: {
                 extendedSectionHeaderLabel(
-                    title: "\(parent.title) · 2 уровень",
+                    title: "\(parent.title) 2 уровень",
                     subtitle: extendedSectionSubtitle(parent: parent, state: state),
                     isExpanded: isExpanded,
                     isLoading: isLoading,
@@ -574,7 +574,7 @@ struct DashboardView: View {
             }
             .buttonStyle(.plain)
             .disabled(isEditingLayout || isLoading)
-            .accessibilityLabel("\(parent.title) · 2 уровень")
+            .accessibilityLabel("\(parent.title) 2 уровень")
             .accessibilityValue(isLoading ? "Загружается" : (isExpanded ? "Развернуто" : "Свернуто"))
             .accessibilityAddTraits(.isHeader)
 
@@ -734,7 +734,7 @@ struct DashboardView: View {
     }
 
     private var chartPaletteScheme: ChartPaletteScheme {
-        ChartPaletteScheme(rawValue: chartPaletteSchemeRawValue) ?? .corporate
+        ChartPaletteScheme(rawValue: chartPaletteSchemeRawValue) ?? .standard
     }
 
     private var normalizedContentScale: Double {

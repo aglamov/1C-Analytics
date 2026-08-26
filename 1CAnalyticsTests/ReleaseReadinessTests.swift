@@ -99,6 +99,7 @@ final class ReleaseReadinessTests: XCTestCase {
 
         let corporateColor = UIColor(indicator.chartColor(for: row, scheme: .corporate))
         let playfulColor = UIColor(indicator.chartColor(for: row, scheme: .playful))
+        let standardColor = UIColor(indicator.chartColor(for: row, scheme: .standard))
 
         XCTAssertNotEqual(corporateColor, playfulColor)
         XCTAssertEqual(
@@ -109,9 +110,10 @@ final class ReleaseReadinessTests: XCTestCase {
             playfulColor,
             UIColor(ChartPalette.colors(for: .playful)[0])
         )
+        XCTAssertEqual(standardColor, UIColor(red: 1, green: 0, blue: 0, alpha: 1))
     }
 
-    func testDetailPercentagesAlwaysUseThreeFractionDigits() {
+    func testDetailPercentagesUseAtMostThreeFractionDigits() {
         let locale = Locale(identifier: "en_US_POSIX")
 
         XCTAssertEqual(
@@ -121,7 +123,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 fractionDigits: 3,
                 locale: locale
             ),
-            "12.500%"
+            "12.5%"
         )
         XCTAssertEqual(
             DetailPresentationPolicy.shareText(
@@ -130,7 +132,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 fractionDigits: 3,
                 locale: locale
             ),
-            "0.000%"
+            "0%"
         )
     }
 
@@ -1219,7 +1221,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(single.displayedTotal(for: node), 10)
     }
 
-    func testExpandableHierarchyWithoutBarModeUsesSafeDefault() throws {
+    func testExpandableHierarchyWithoutBarModeUsesSafeStackedFallback() throws {
         let data = Data(
             #"{"sections":[{"name":"Test","values":[{"name":"Broken","type":"ExpandableTableMark","series":[],"nodes":[]}]}]}"#.utf8
         )
@@ -1231,7 +1233,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 .first
         )
         XCTAssertEqual(section.indicators.first?.chartType, .expandableHierarchy)
-        XCTAssertEqual(section.indicators.first?.hierarchy?.barMode, .grouped)
+        XCTAssertEqual(section.indicators.first?.hierarchy?.barMode, .stacked)
         XCTAssertNil(section.indicatorDecodeFailureCount)
     }
 
@@ -1307,9 +1309,9 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testContractPlanFactBuildsCurrentThenPreviousYearPresentation() throws {
+    func testExplicitContractPlanFactBuildsCurrentThenPreviousYearPresentation() throws {
         let data = Data(
-            #"{"sections":[{"name":"Финансы","values":[{"name":"План-Факт (контракт), тыс. руб","values":[{"group":"БАК","subgroup":[{"name":"Прошлый год","values":[{"name":"План","value":412755},{"name":"Опл.","value":893538}]},{"name":"Текущий год","subgroup":[{"name":"Опл.","value":400192},{"name":"План","value":483360}]}]}],"type":"BarMark"}]}]}"#.utf8
+            #"{"sections":[{"name":"Финансы","values":[{"name":"План-Факт (контракт), тыс. руб","values":[{"group":"БАК","subgroup":[{"name":"Прошлый год","values":[{"name":"План","value":412755},{"name":"Опл.","value":893538}]},{"name":"Текущий год","subgroup":[{"name":"Опл.","value":400192},{"name":"План","value":483360}]}]}],"type":"PlanFactProgress"}]}]}"#.utf8
         )
 
         let indicator = try XCTUnwrap(
@@ -1320,9 +1322,9 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertTrue(indicator.usesContractPlanFactPresentation)
-        XCTAssertEqual(indicator.isExplicitPlanFactProgress, false)
+        XCTAssertEqual(indicator.isExplicitPlanFactProgress, true)
         XCTAssertFalse(indicator.showsAggregateValueInHeader)
-        XCTAssertTrue(indicator.showsPlanFactPresentationLegend)
+        XCTAssertFalse(indicator.showsPlanFactPresentationLegend)
         XCTAssertEqual(indicator.contractPlanFactCategories.map(\.label), ["БАК"])
         XCTAssertEqual(
             indicator.contractPlanFactCategories[0].periods.map(\.period),
@@ -1353,7 +1355,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(indicator.contractPlanFactCategories[0].maximumValue, 893_538)
     }
 
-    func testEnrollmentByCitizenshipOverridesStaleServerTypeWithHorizontalBar() throws {
+    func testEnrollmentByCitizenshipKeepsServerStackingType() throws {
         let data = Data(
             #"{"sections":[{"name":"Образование","values":[{"name":"Всего обучающихся РФ и ИГ","values":[{"group":"БАК","subgroup":[{"name":"РФ","value":18347},{"name":"ИГ","value":3604}]},{"group":"СПЕЦ","subgroup":[{"name":"РФ","value":5120},{"name":"ИГ","value":920}]},{"group":"МАГ","subgroup":[{"name":"РФ","value":3480},{"name":"ИГ","value":740}]},{"group":"АСП","subgroup":[{"name":"РФ","value":995},{"name":"ИГ","value":115}]}],"type":"BarMarkStacking"}]}]}"#.utf8
         )
@@ -1365,10 +1367,10 @@ final class ReleaseReadinessTests: XCTestCase {
                 .first
         )
 
-        XCTAssertEqual(indicator.chartType, .horizontalBar)
+        XCTAssertEqual(indicator.chartType, .stackedBar)
         XCTAssertNil(indicator.unit)
-        XCTAssertFalse(indicator.usesStackedCompositionPresentation)
-        XCTAssertTrue(indicator.usesCitizenshipCompositionPresentation)
+        XCTAssertTrue(indicator.usesStackedCompositionPresentation)
+        XCTAssertFalse(indicator.usesCitizenshipCompositionPresentation)
         XCTAssertEqual(
             indicator.barDataShape,
             .multipleValuesPerGroup(series: ["РФ", "ИГ"])
@@ -1422,6 +1424,74 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
+    func testStackedPlanFactKeepsTotalAndValueLabelFlagsIndependent() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Финансы","values":[{"name":"Структура доходов (План/Факт)","type":"BarMarkStacking","showTotal":false,"values":[{"group":"2026","subgroup":[{"name":"План","value":70},{"name":"Факт","value":30}]}]}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertFalse(indicator.showsAggregateValue)
+        XCTAssertNil(indicator.showValueLabels)
+        XCTAssertTrue(indicator.showsValueLabels)
+        XCTAssertTrue(
+            ChartValueLabelPolicy.isVisible(
+                rowMatchesSelection: false,
+                hasSelection: false,
+                contractPreference: indicator.showValueLabels,
+                defaultLabelsEnabled: indicator.showsValueLabels
+            )
+        )
+    }
+
+    func testSingleLegendItemIsHiddenUnlessContractExplicitlyEnablesIt() {
+        func indicator(showLegend: Bool?, series: [String]) -> Indicator {
+            Indicator(
+                id: "single-legend",
+                title: "Доходы",
+                value: nil,
+                unit: nil,
+                chartType: .bar,
+                source: nil,
+                showLegend: showLegend,
+                rows: series.enumerated().map { index, name in
+                    IndicatorRow(
+                        id: "row-\(index)",
+                        label: "202\(index + 5)",
+                        value: Double(index + 1),
+                        series: name,
+                        sortOrder: index
+                    )
+                }
+            )
+        }
+
+        let implicitSingle = AnalyticsChart(
+            indicator: indicator(showLegend: nil, series: ["Факт", "Факт"])
+        )
+        XCTAssertFalse(implicitSingle.displaysLegend)
+
+        let explicitSingle = AnalyticsChart(
+            indicator: indicator(showLegend: true, series: ["Факт", "Факт"])
+        )
+        XCTAssertTrue(explicitSingle.displaysLegend)
+
+        let explicitHidden = AnalyticsChart(
+            indicator: indicator(showLegend: false, series: ["План", "Факт"])
+        )
+        XCTAssertFalse(explicitHidden.displaysLegend)
+
+        let implicitMultiple = AnalyticsChart(
+            indicator: indicator(showLegend: nil, series: ["План", "Факт"])
+        )
+        XCTAssertTrue(implicitMultiple.displaysLegend)
+    }
+
     func testPlanFactBarsUseVerticalPresentation() {
         let rows = [
             IndicatorRow(
@@ -1465,8 +1535,25 @@ final class ReleaseReadinessTests: XCTestCase {
                 rows: rows
             )
 
-            XCTAssertFalse(indicator.prefersHorizontalGroupedBars, chartType.rawValue)
+            XCTAssertEqual(indicator.chartType.barOrientation, .vertical, chartType.rawValue)
         }
+    }
+
+    func testBarContractTypeAloneDeterminesOrientation() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Test","values":[{"name":"Всего обучающихся РФ и ИГ","type":"BarMark","values":[{"group":"2024","value":1000000},{"group":"2025","value":900000}]},{"name":"Всего обучающихся РФ и ИГ","type":"BarMarkHorizon","values":[{"group":"2024","value":1000000},{"group":"2025","value":900000}]},{"name":"Всего обучающихся РФ и ИГ","type":"BarMarkStacking","values":[{"group":"2024","subgroup":[{"name":"РФ","value":800000},{"name":"ИГ","value":200000}]}]}]}]}"#.utf8
+        )
+
+        let indicators = try JSONDecoder()
+            .decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+
+        XCTAssertEqual(indicators.map(\.chartType), [.bar, .horizontalBar, .stackedBar])
+        XCTAssertEqual(
+            indicators.map { $0.chartType.barOrientation },
+            [.vertical, .horizontal, .horizontal]
+        )
     }
 
     func testPresentationRulesKeepMixedPersonnelUnitsSeparate() {
@@ -1534,7 +1621,8 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertTrue(zeroIndicator.hasOnlyZeroValues)
-        XCTAssertTrue(temporalIndicator.prefersTrendPresentation)
+        XCTAssertEqual(temporalIndicator.chartType, .bar)
+        XCTAssertEqual(temporalIndicator.chartType.barOrientation, .vertical)
     }
 
     func testTitleDoesNotProvideImplicitUnitWhenServerOmitsIt() {
@@ -1656,7 +1744,12 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testRegularBarsKeepPlanFactSubgroupsFromAnEmptyGroup() throws {
-        for chartType in ["BarMark", "BarMarkHorizon", "OneValue"] {
+        let chartTypes: [(backend: String, expected: ChartType)] = [
+            ("BarMark", .bar),
+            ("BarMarkHorizon", .horizontalBar),
+            ("OneValue", .oneValue)
+        ]
+        for contract in chartTypes {
             let data = Data(
                 """
                 {
@@ -1672,7 +1765,7 @@ final class ReleaseReadinessTests: XCTestCase {
                           {"name": "Факт", "value": 13450484, "colorGraph": "#66B547"}
                         ]
                       }],
-                      "type": "\(chartType)"
+                      "type": "\(contract.backend)"
                     }]
                   }]
                 }
@@ -1690,7 +1783,7 @@ final class ReleaseReadinessTests: XCTestCase {
             XCTAssertEqual(indicator.rows.map(\.series), ["План", "Факт"])
             XCTAssertEqual(indicator.rows.map(\.value), [23_901_704, 13_450_484])
             XCTAssertEqual(indicator.rowGroups.map(\.label), ["Контракт"])
-            XCTAssertEqual(indicator.chartType, .horizontalBar)
+            XCTAssertEqual(indicator.chartType, contract.expected)
             XCTAssertEqual(indicator.value, 37_352_188)
             XCTAssertTrue(indicator.showsAggregateValue)
         }
@@ -2353,7 +2446,7 @@ final class ReleaseReadinessTests: XCTestCase {
         }
     }
 
-    func testInvalidRadarFallsBackAndDuplicateHierarchyIDsAreMadeUnique() throws {
+    func testInvalidRadarStaysRadarAndDuplicateHierarchyIDsAreMadeUnique() throws {
         let radar = Data(
             #"{"sections":[{"name":"Наука","values":[{"name":"Radar","type":"RadarMark","values":[{"group":"A","value":1},{"group":"B","value":-1}]}]}]}"#.utf8
         )
@@ -2363,7 +2456,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 .sections
                 .first
         )
-        XCTAssertEqual(radarSection.indicators.first?.chartType, .bar)
+        XCTAssertEqual(radarSection.indicators.first?.chartType, .radar)
         XCTAssertNil(radarSection.indicatorDecodeFailureCount)
 
         let hierarchy = Data(
@@ -2379,6 +2472,216 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(tree.chartType, .expandableHierarchy)
         XCTAssertEqual(tree.hierarchy?.nodes.map(\.id), ["node/same", "node/same#2"])
         XCTAssertNil(hierarchySection.indicatorDecodeFailureCount)
+    }
+
+    func testExpandableHierarchyRecoversMissingLabelsValuesAndNullMetrics() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Test","values":[{"name":"Tree","type":"ExpandableTableMark","series":[{"key":"value","name":"Значение"}],"nodes":[{"id":"first","values":{"value":null}},{"children":[]}]}]}]}"#.utf8
+        )
+
+        let section = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .sections
+                .first
+        )
+        let indicator = try XCTUnwrap(section.indicators.first)
+
+        XCTAssertNil(section.indicatorDecodeFailureCount)
+        XCTAssertEqual(indicator.hierarchy?.barMode, .stacked)
+        XCTAssertEqual(indicator.hierarchy?.nodes.map(\.label), ["first", "Узел"])
+        XCTAssertEqual(indicator.hierarchy?.nodes.first?.values["value"]?.value, 0)
+        XCTAssertEqual(indicator.hierarchy?.nodes.last?.values, [:])
+    }
+
+    func testUpdatedChartContractAliasesAndOptionsDecode() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Контракт","values":[{"name":"Плитка","type":"Treemap","show_percentages_in_details":false,"max_groups":7,"maxTiles":3,"tileLayout":"grid","colorGraph":"0x123456","values":[{"group":"A","value":10}]},{"name":"План-факт","type":"PlanFactByPeriod","useOverviewStyle":true,"showGrid":false,"overviewTitle":"Исполнение","overviewSubtitle":"За период","values":[{"group":"БАК","subgroup":[{"group":"Текущий год","subgroup":[{"name":"План","value":100},{"name":"Факт","value":75}]}]}]},{"name":"Иерархия","type":"ExpandableTableMark","barMode":"single","overviewType":"tile","maxItems":4,"series":[{"key":"value","name":"Значение"}],"nodes":[{"label":"Без явного id","values":{"value":5}}]}]}]}"#.utf8
+        )
+
+        let indicators = try JSONDecoder()
+            .decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+
+        XCTAssertEqual(indicators.count, 3)
+        XCTAssertEqual(indicators[0].chartType, .tile)
+        XCTAssertFalse(indicators[0].showsPercentagesInDetails)
+        XCTAssertEqual(indicators[0].maxGroups, 7)
+        XCTAssertEqual(indicators[0].resolvedMaximumTiles, 3)
+        XCTAssertEqual(indicators[0].resolvedTileLayout, .grid)
+        XCTAssertFalse(indicators[0].showsLegend)
+        XCTAssertEqual(indicators[0].colorGraph, "0x123456")
+
+        XCTAssertEqual(indicators[1].chartType, .horizontalBar)
+        XCTAssertTrue(indicators[1].usesContractPlanFactPresentation)
+        XCTAssertEqual(indicators[1].useOverviewStyle, true)
+        XCTAssertEqual(indicators[1].showGrid, false)
+        XCTAssertEqual(indicators[1].overviewTitle, "Исполнение")
+        XCTAssertEqual(indicators[1].overviewSubtitle, "За период")
+
+        XCTAssertEqual(indicators[2].chartType, .expandableHierarchy)
+        XCTAssertEqual(indicators[2].resolvedExpandableOverviewType, .tile)
+        XCTAssertEqual(indicators[2].maxGroups, 4)
+        XCTAssertEqual(indicators[2].hierarchy?.nodes.first?.label, "Без явного id")
+        XCTAssertFalse(indicators[2].showsLegend)
+    }
+
+    func testCardGroupLimitAggregatesRemainderAndTilePercentagesSumExactly() {
+        let indicator = Indicator(
+            id: "limited",
+            title: "Ограничение",
+            value: nil,
+            unit: nil,
+            chartType: .bar,
+            source: nil,
+            useCompactNumbers: true,
+            maxGroups: 2,
+            rows: [
+                IndicatorRow(id: "a", label: "A", value: 10, series: nil, sortOrder: 0),
+                IndicatorRow(id: "b", label: "B", value: 20, series: nil, sortOrder: 1),
+                IndicatorRow(id: "c", label: "C", value: 30, series: nil, sortOrder: 2),
+                IndicatorRow(id: "d", label: "D", value: 40, series: nil, sortOrder: 3)
+            ]
+        )
+
+        let card = indicator.cardPresentationIndicator
+        XCTAssertEqual(card.rowGroups.map(\.label), ["A", "B", "Прочие"])
+        XCTAssertEqual(card.rowGroups.last?.rows.first?.value, 70)
+        XCTAssertEqual(indicator.formattedNumber(1_000.0), "1K")
+
+        let percentages = TilePercentagePolicy.percentages(for: [1, 1, 1])
+        XCTAssertEqual(percentages.reduce(0, +), 1, accuracy: 0.000_001)
+        XCTAssertEqual(percentages, [0.334, 0.333, 0.333])
+    }
+
+    func testTileLimitIncludesRemainderAndKeepsOriginalCategories() {
+        let indicator = Indicator(
+            id: "tile-limit",
+            title: "Плитка",
+            value: nil,
+            unit: nil,
+            chartType: .tile,
+            source: nil,
+            maxTiles: 3,
+            rows: [
+                IndicatorRow(id: "a", label: "A", value: 100, series: nil, sortOrder: 0),
+                IndicatorRow(id: "b", label: "B", value: 80, series: nil, sortOrder: 1),
+                IndicatorRow(id: "c", label: "C", value: 60, series: nil, sortOrder: 2),
+                IndicatorRow(id: "d", label: "D", value: 40, series: nil, sortOrder: 3),
+                IndicatorRow(id: "e", label: "E", value: 20, series: nil, sortOrder: 4),
+                IndicatorRow(id: "zero", label: "Zero", value: 0, series: nil, sortOrder: 5),
+                IndicatorRow(id: "negative", label: "Negative", value: -10, series: nil, sortOrder: 6)
+            ]
+        )
+
+        let cardItems = TilePresentationPolicy.items(for: indicator, appliesLimit: true)
+        XCTAssertEqual(cardItems.map(\.title), ["A", "B", "Прочее"])
+        XCTAssertEqual(cardItems.count, 3)
+        XCTAssertEqual(cardItems.last?.value, 120)
+        XCTAssertEqual(cardItems.last?.sourceRowIDs, Set(["c", "d", "e"]))
+        XCTAssertTrue(cardItems.last?.isRemainder == true)
+
+        let fullItems = TilePresentationPolicy.items(for: indicator, appliesLimit: false)
+        XCTAssertEqual(fullItems.map(\.title), ["A", "B", "C", "D", "E"])
+        XCTAssertEqual(indicator.rowGroups.count, 7)
+    }
+
+    func testTileDefaultsAndLimitRangeDecode() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Tiles","values":[{"name":"Default","type":"TileMark","values":[{"group":"A","value":1}]},{"name":"Too small","type":"TileMark","maxTiles":1,"values":[{"group":"A","value":1}]},{"name":"Minimum","type":"TileMark","maxTiles":2,"values":[{"group":"A","value":1}]},{"name":"Maximum","type":"TileMark","maxTiles":20,"values":[{"group":"A","value":1}]},{"name":"Too large","type":"TileMark","maxTiles":21,"values":[{"group":"A","value":1}]}]}]}"#.utf8
+        )
+
+        let indicators = try JSONDecoder()
+            .decode(AnalyticsAPIResponse.self, from: data)
+            .toDashboard()
+            .indicators
+
+        XCTAssertEqual(indicators.map(\.maxTiles), [nil, nil, 2, 20, nil])
+        XCTAssertEqual(indicators.map(\.resolvedMaximumTiles), [8, 8, 2, 20, 8])
+        XCTAssertEqual(indicators.map(\.resolvedTileLayout), [.mosaic, .mosaic, .mosaic, .mosaic, .mosaic])
+    }
+
+    func testSquarifiedTileLayoutFillsAreaWithoutOverlap() {
+        let values = [50.0, 30.0, 15.0, 5.0]
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 240)
+        let frames = TileMosaicLayout.frames(for: values, in: bounds, spacing: 0)
+
+        XCTAssertEqual(frames.count, values.count)
+        XCTAssertTrue(frames.allSatisfy { $0.width > 0 && $0.height > 0 && bounds.contains($0) })
+        XCTAssertEqual(
+            frames.reduce(0) { $0 + $1.width * $1.height },
+            bounds.width * bounds.height,
+            accuracy: 0.01
+        )
+
+        for leftIndex in frames.indices {
+            for rightIndex in frames.indices where rightIndex > leftIndex {
+                let intersection = frames[leftIndex].intersection(frames[rightIndex])
+                XCTAssertEqual(intersection.width * intersection.height, 0, accuracy: 0.001)
+            }
+        }
+
+        let totalValue = values.reduce(0, +)
+        let totalArea = bounds.width * bounds.height
+        for index in frames.indices {
+            let expectedArea = totalArea * CGFloat(values[index] / totalValue)
+            XCTAssertEqual(frames[index].width * frames[index].height, expectedArea, accuracy: 0.01)
+        }
+    }
+
+    func testTileGridAndProgressiveLabelVisibility() {
+        XCTAssertEqual(TileGridLayout.columnCount(availableWidth: 390, contentScale: 1), 2)
+        XCTAssertEqual(TileGridLayout.columnCount(availableWidth: 600, contentScale: 1), 3)
+        XCTAssertEqual(TileGridLayout.columnCount(availableWidth: 900, contentScale: 1), 4)
+
+        XCTAssertEqual(
+            TileLabelVisibilityPolicy.visibility(
+                for: CGSize(width: 80, height: 80),
+                contentScale: 1,
+                showValueLabels: true
+            ),
+            TileLabelVisibility(showsTitle: true, showsValue: true, showsPercentage: true)
+        )
+        XCTAssertEqual(
+            TileLabelVisibilityPolicy.visibility(
+                for: CGSize(width: 48, height: 44),
+                contentScale: 1,
+                showValueLabels: true
+            ),
+            TileLabelVisibility(showsTitle: true, showsValue: true, showsPercentage: false)
+        )
+        XCTAssertEqual(
+            TileLabelVisibilityPolicy.visibility(
+                for: CGSize(width: 30, height: 24),
+                contentScale: 1,
+                showValueLabels: true
+            ),
+            TileLabelVisibility(showsTitle: true, showsValue: false, showsPercentage: false)
+        )
+        XCTAssertEqual(
+            TileLabelVisibilityPolicy.visibility(
+                for: CGSize(width: 80, height: 80),
+                contentScale: 1,
+                showValueLabels: false
+            ),
+            TileLabelVisibility(showsTitle: true, showsValue: false, showsPercentage: false)
+        )
+    }
+
+    func testPasswordExpirySkipIsRestrictedToRUDNIdentityHost() throws {
+        XCTAssertTrue(
+            RUDNPasswordExpiryWarningPolicy.canInject(
+                on: try XCTUnwrap(URL(string: "https://id.rudn.ru/login"))
+            )
+        )
+        XCTAssertFalse(
+            RUDNPasswordExpiryWarningPolicy.canInject(
+                on: try XCTUnwrap(URL(string: "https://id.rudn.ru.example.com/login"))
+            )
+        )
+        XCTAssertTrue(RUDNPasswordExpiryWarningPolicy.script.contains("Срок действия пароля истекает"))
+        XCTAssertTrue(RUDNPasswordExpiryWarningPolicy.script.contains("Пропустить"))
     }
 
     func testAuthenticationFailureReplacesCachedDashboardAndNotifiesRoot() async {

@@ -217,11 +217,7 @@ extension AnalyticsChart {
         case .donut:
             return displayValue(for: row)
         case .percentDonut:
-            let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
-            guard total > 0 else {
-                return "0%"
-            }
-            return (row.value / total).formatted(.percent.precision(.fractionLength(0)))
+            return displayValue(for: row)
         default:
             return nil
         }
@@ -236,16 +232,19 @@ extension AnalyticsChart {
         case .stackedBar:
             return !indicator.barDataShape.series.isEmpty
         case .compactBar:
-            return indicator.prefersHorizontalGroupedBars
-                && !indicator.barDataShape.series.isEmpty
+            return !indicator.barDataShape.series.isEmpty
         case .donut, .percentDonut,
-             .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy:
+             .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy, .tile:
             return false
         }
     }
 
     var displaysLegend: Bool {
-        indicator.showLegend ?? showsLegend
+        LegendVisibilityPolicy.isVisible(
+            contractPreference: indicator.showLegend,
+            defaultEnabled: showsLegend,
+            itemCount: displayedLegendRows.count
+        )
     }
 
     @ViewBuilder

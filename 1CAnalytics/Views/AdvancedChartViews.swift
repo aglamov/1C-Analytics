@@ -355,6 +355,459 @@ private extension CGPoint {
     }
 }
 
+struct TileChartView: View {
+    let indicator: Indicator
+    let appliesCardLimit: Bool
+    private let externalSelectedRowID: IndicatorRow.ID?
+    private let onSelect: ((IndicatorRow.ID) -> Void)?
+    @State private var localSelectedRowID: IndicatorRow.ID?
+    @Environment(\.chartPaletteScheme) private var paletteScheme
+    @Environment(\.dashboardContentScale) private var contentScale
+
+    init(
+        indicator: Indicator,
+        appliesCardLimit: Bool,
+        selectedRowID: IndicatorRow.ID? = nil,
+        onSelect: ((IndicatorRow.ID) -> Void)? = nil
+    ) {
+        self.indicator = indicator
+        self.appliesCardLimit = appliesCardLimit
+        self.externalSelectedRowID = selectedRowID
+        self.onSelect = onSelect
+        _localSelectedRowID = State(initialValue: nil)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10 * contentScale) {
+            chart
+            if indicator.showsLegend, !items.isEmpty {
+                legend
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var chart: some View {
+        if items.isEmpty {
+            ContentUnavailableView(
+                "Данные пока отсутствуют",
+                systemImage: "square.grid.2x2",
+                description: Text("Для плитки нужны положительные значения.")
+            )
+        } else if indicator.resolvedTileLayout == .grid {
+            grid
+        } else {
+            mosaic
+        }
+    }
+
+    private var legend: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 120 * contentScale), spacing: 8 * contentScale)],
+            alignment: .leading,
+            spacing: 7 * contentScale
+        ) {
+            ForEach(items) { item in
+                HStack(spacing: 6 * contentScale) {
+                    Circle()
+                        .fill(indicator.chartColor(for: item.row, scheme: paletteScheme))
+                        .frame(width: 8 * contentScale, height: 8 * contentScale)
+                    Text(item.title)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Text(formattedValue(item.value))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption2.weight(.semibold))
+            }
+        }
+    }
+
+    private var grid: some View {
+        GeometryReader { geometry in
+            let columnCount = TileGridLayout.columnCount(
+                availableWidth: geometry.size.width,
+                contentScale: contentScale
+            )
+            let columns = Array(
+                repeating: GridItem(.flexible(), spacing: spacing),
+                count: columnCount
+            )
+            let itemWidth = max(
+                (geometry.size.width - spacing * CGFloat(columnCount - 1)) / CGFloat(columnCount),
+                1
+            )
+
+            LazyVGrid(columns: columns, spacing: spacing) {
+                ForEach(items) { item in
+                    tile(item, size: CGSize(width: itemWidth, height: 88 * contentScale))
+                        .frame(minHeight: 80 * contentScale)
+                }
+            }
+        }
+    }
+
+    private var mosaic: some View {
+        GeometryReader { geometry in
+            let frames = TileMosaicLayout.frames(
+                for: items.map(\.value),
+                in: CGRect(origin: .zero, size: geometry.size),
+                spacing: spacing
+            )
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    let frame = frames[index]
+                    tile(item, size: frame.size)
+                        .frame(width: frame.width, height: frame.height)
+                        .offset(x: frame.minX, y: frame.minY)
+                }
+            }
+        }
+    }
+
+    private func tile(_ item: TileChartItem, size: CGSize) -> some View {
+        let row = item.row
+        let color = indicator.chartColor(for: row, scheme: paletteScheme)
+        let visibility = TileLabelVisibilityPolicy.visibility(
+            for: size,
+            contentScale: contentScale,
+            showValueLabels: indicator.showsValueLabels
+        )
+        let isSelected = item.sourceRowIDs.contains(activeSelectedRowID ?? "")
+        let isDimmed = activeSelectedRowID != nil && !isSelected
+
+        return Button {
+            select(item)
+        } label: {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 9 * contentScale, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [color.opacity(0.96), color.opacity(0.72)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                VStack(alignment: .leading, spacing: 3 * contentScale) {
+                    if visibility.showsTitle {
+                        Text(item.title)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(size.height >= 54 * contentScale ? 2 : 1)
+                            .minimumScaleFactor(0.58)
+                    }
+
+                    if visibility.showsValue {
+                        Text(formattedValue(item.value))
+                            .font(.caption2.monospacedDigit().weight(.bold))
+                            .foregroundStyle(.white.opacity(0.96))
+                            .lineLimit(1)
+                    }
+
+                    if visibility.showsPercentage {
+                        Text(item.percentage.formatted(.percent.precision(.fractionLength(1))))
+                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.82))
+                    }
+                }
+                .padding(8 * contentScale)
+
+                RoundedRectangle(cornerRadius: 9 * contentScale, style: .continuous)
+                    .strokeBorder(.white.opacity(isSelected ? 0.95 : 0), lineWidth: 3 * contentScale)
+            }
+        }
+        .buttonStyle(.plain)
+        .opacity(isDimmed ? 0.34 : 1)
+        .scaleEffect(isSelected ? 0.97 : 1)
+        .animation(.spring(response: 0.30, dampingFraction: 0.78), value: activeSelectedRowID)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(
+            "\(formattedValue(item.value)), "
+                + item.percentage.formatted(.percent.precision(.fractionLength(1)))
+        )
+        .accessibilityHint("Выбрать плитку")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var spacing: CGFloat {
+        CGFloat(indicator.valueSpacing ?? 4) * contentScale
+    }
+
+    private func formattedValue(_ value: Double) -> String {
+        let number = indicator.formattedNumber(value)
+        guard let unit = indicator.displayUnit else { return number }
+        return "\(number) \(unit)"
+    }
+
+    private var activeSelectedRowID: IndicatorRow.ID? {
+        onSelect == nil ? localSelectedRowID : externalSelectedRowID
+    }
+
+    private var items: [TileChartItem] {
+        TilePresentationPolicy.items(for: indicator, appliesLimit: appliesCardLimit)
+    }
+
+    private func select(_ item: TileChartItem) {
+        if let onSelect {
+            onSelect(item.selectionRowID)
+        } else {
+            localSelectedRowID = localSelectedRowID == item.selectionRowID
+                ? nil
+                : item.selectionRowID
+        }
+    }
+}
+
+struct TileChartItem: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let value: Double
+    let percentage: Double
+    let row: IndicatorRow
+    let sourceRowIDs: Set<IndicatorRow.ID>
+    let selectionRowID: IndicatorRow.ID
+    let isRemainder: Bool
+}
+
+enum TilePresentationPolicy {
+    static func items(for indicator: Indicator, appliesLimit: Bool) -> [TileChartItem] {
+        let sorted = indicator.rowGroups
+            .map { group in
+                (group: group, value: group.rows.reduce(0) { $0 + $1.value })
+            }
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value { return lhs.group.label < rhs.group.label }
+                return lhs.value > rhs.value
+            }
+
+        struct DisplayedGroup {
+            let id: String
+            let title: String
+            let value: Double
+            let row: IndicatorRow
+            let sourceRowIDs: Set<IndicatorRow.ID>
+            let selectionRowID: IndicatorRow.ID
+            let isRemainder: Bool
+        }
+
+        var displayed = sorted.compactMap { element -> DisplayedGroup? in
+            guard let row = element.group.rows.first else { return nil }
+            return DisplayedGroup(
+                id: "tile-\(element.group.id)",
+                title: element.group.label,
+                value: element.value,
+                row: row,
+                sourceRowIDs: Set(element.group.rows.map(\.id)),
+                selectionRowID: row.id,
+                isRemainder: false
+            )
+        }
+
+        let limit = indicator.resolvedMaximumTiles
+        if appliesLimit, displayed.count > limit {
+            let visibleCount = limit - 1
+            let hidden = displayed.dropFirst(visibleCount)
+            let hiddenValue = hidden.reduce(0) { $0 + $1.value }
+            let hiddenRowIDs = hidden.reduce(into: Set<IndicatorRow.ID>()) {
+                $0.formUnion($1.sourceRowIDs)
+            }
+            let selectionRowID = hidden.first?.selectionRowID ?? "tile-other"
+            let otherRow = IndicatorRow(
+                id: "tile-other",
+                label: "Прочее",
+                value: hiddenValue,
+                series: nil,
+                sortOrder: limit - 1
+            )
+            displayed = Array(displayed.prefix(visibleCount)) + [
+                DisplayedGroup(
+                    id: "tile-other",
+                    title: "Прочее",
+                    value: hiddenValue,
+                    row: otherRow,
+                    sourceRowIDs: hiddenRowIDs,
+                    selectionRowID: selectionRowID,
+                    isRemainder: true
+                )
+            ]
+        }
+
+        let percentages = TilePercentagePolicy.percentages(for: displayed.map(\.value))
+        return displayed.enumerated().map { index, element in
+            TileChartItem(
+                id: element.id,
+                title: element.title,
+                value: element.value,
+                percentage: percentages[index],
+                row: element.row,
+                sourceRowIDs: element.sourceRowIDs,
+                selectionRowID: element.selectionRowID,
+                isRemainder: element.isRemainder
+            )
+        }
+    }
+}
+
+enum TilePercentagePolicy {
+    static func percentages(for values: [Double]) -> [Double] {
+        let total = values.reduce(0, +)
+        guard total > 0 else { return Array(repeating: 0, count: values.count) }
+        let rawUnits = values.map { max($0, 0) / total * 1_000 }
+        var units = rawUnits.map { Int($0.rounded(.down)) }
+        var remainder = 1_000 - units.reduce(0, +)
+        let order = rawUnits.indices.sorted {
+            let lhs = rawUnits[$0] - Double(units[$0])
+            let rhs = rawUnits[$1] - Double(units[$1])
+            return lhs == rhs ? $0 < $1 : lhs > rhs
+        }
+        for index in order where remainder > 0 {
+            units[index] += 1
+            remainder -= 1
+        }
+        return units.map { Double($0) / 1_000 }
+    }
+}
+
+enum TileMosaicLayout {
+    static func frames(for values: [Double], in rect: CGRect, spacing: CGFloat) -> [CGRect] {
+        guard !values.isEmpty, rect.width > 0, rect.height > 0 else { return [] }
+        var result = Array(repeating: CGRect.zero, count: values.count)
+        let positiveTotal = CGFloat(values.reduce(0) { $0 + max($1, 0) })
+        guard positiveTotal > 0 else { return result }
+
+        let areaScale = rect.width * rect.height / positiveTotal
+        var pending = values.indices
+            .map { (index: $0, area: CGFloat(max(values[$0], 0)) * areaScale) }
+            .filter { $0.area > 0 }
+            .sorted { $0.area > $1.area }
+        var remainingRect = rect
+        var row: [(index: Int, area: CGFloat)] = []
+
+        while let candidate = pending.first {
+            let shortSide = max(min(remainingRect.width, remainingRect.height), 0.000_001)
+            if row.isEmpty || worstAspectRatio(for: row + [candidate], side: shortSide)
+                <= worstAspectRatio(for: row, side: shortSide) {
+                row.append(candidate)
+                pending.removeFirst()
+            } else {
+                remainingRect = layout(row: row, in: remainingRect, result: &result)
+                row.removeAll(keepingCapacity: true)
+            }
+        }
+        if !row.isEmpty {
+            _ = layout(row: row, in: remainingRect, result: &result)
+        }
+
+        let insetAmount = max(spacing, 0) / 2
+        return result.map { inset($0, by: insetAmount) }
+    }
+
+    private static func worstAspectRatio(
+        for row: [(index: Int, area: CGFloat)],
+        side: CGFloat
+    ) -> CGFloat {
+        guard !row.isEmpty else { return .infinity }
+        let sum = row.reduce(0) { $0 + $1.area }
+        let largest = row.map(\.area).max() ?? 0
+        let smallest = row.map(\.area).min() ?? 0
+        guard sum > 0, smallest > 0, side > 0 else { return .infinity }
+        let sideSquared = side * side
+        let sumSquared = sum * sum
+        return max(
+            sideSquared * largest / sumSquared,
+            sumSquared / (sideSquared * smallest)
+        )
+    }
+
+    private static func layout(
+        row: [(index: Int, area: CGFloat)],
+        in rect: CGRect,
+        result: inout [CGRect]
+    ) -> CGRect {
+        guard !row.isEmpty else { return rect }
+        let rowArea = row.reduce(0) { $0 + $1.area }
+
+        if rect.width >= rect.height {
+            let stripWidth = min(rowArea / max(rect.height, 0.000_001), rect.width)
+            var y = rect.minY
+            for (offset, item) in row.enumerated() {
+                let height = offset == row.count - 1
+                    ? rect.maxY - y
+                    : min(item.area / max(stripWidth, 0.000_001), rect.maxY - y)
+                result[item.index] = CGRect(x: rect.minX, y: y, width: stripWidth, height: height)
+                y += height
+            }
+            return CGRect(
+                x: rect.minX + stripWidth,
+                y: rect.minY,
+                width: max(rect.width - stripWidth, 0),
+                height: rect.height
+            )
+        } else {
+            let stripHeight = min(rowArea / max(rect.width, 0.000_001), rect.height)
+            var x = rect.minX
+            for (offset, item) in row.enumerated() {
+                let width = offset == row.count - 1
+                    ? rect.maxX - x
+                    : min(item.area / max(stripHeight, 0.000_001), rect.maxX - x)
+                result[item.index] = CGRect(x: x, y: rect.minY, width: width, height: stripHeight)
+                x += width
+            }
+            return CGRect(
+                x: rect.minX,
+                y: rect.minY + stripHeight,
+                width: rect.width,
+                height: max(rect.height - stripHeight, 0)
+            )
+        }
+    }
+
+    private static func inset(_ rect: CGRect, by amount: CGFloat) -> CGRect {
+        let horizontalInset = min(amount, rect.width / 2)
+        let verticalInset = min(amount, rect.height / 2)
+        return rect.insetBy(dx: horizontalInset, dy: verticalInset)
+    }
+}
+
+struct TileLabelVisibility: Equatable {
+    let showsTitle: Bool
+    let showsValue: Bool
+    let showsPercentage: Bool
+}
+
+enum TileLabelVisibilityPolicy {
+    static func visibility(
+        for size: CGSize,
+        contentScale: CGFloat,
+        showValueLabels: Bool
+    ) -> TileLabelVisibility {
+        let scale = max(contentScale, 0.1)
+        let width = size.width / scale
+        let height = size.height / scale
+        let showsTitle = width >= 24 && height >= 20
+        let showsValue = showsTitle && showValueLabels && width >= 42 && height >= 38
+        let showsPercentage = showsValue && width >= 54 && height >= 56
+        return TileLabelVisibility(
+            showsTitle: showsTitle,
+            showsValue: showsValue,
+            showsPercentage: showsPercentage
+        )
+    }
+}
+
+enum TileGridLayout {
+    static func columnCount(availableWidth: CGFloat, contentScale: CGFloat) -> Int {
+        let normalizedWidth = availableWidth / max(contentScale, 0.1)
+        if normalizedWidth >= 720 { return 4 }
+        if normalizedWidth >= 500 { return 3 }
+        return 2
+    }
+}
+
 struct ExpandableHierarchyChartView: View {
     let indicator: Indicator
     let showsExpandedHierarchy: Bool
@@ -370,6 +823,18 @@ struct ExpandableHierarchyChartView: View {
            !hierarchy.nodes.isEmpty,
            !hierarchy.displayedSeries.isEmpty {
             VStack(alignment: .leading, spacing: 12 * contentScale) {
+                if showsExpandedHierarchy, !expandedNodeIDs.isEmpty {
+                    HStack {
+                        Spacer()
+                        Button("Свернуть все") {
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                expandedNodeIDs.removeAll()
+                            }
+                        }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.bordered)
+                    }
+                }
                 if indicator.showsLegend {
                     hierarchyLegend(hierarchy)
                 }
@@ -719,7 +1184,11 @@ struct ExpandableHierarchyChartView: View {
         _ series: ExpandableHierarchySeries,
         in hierarchy: ExpandableHierarchy
     ) -> Color {
-        ChartPalette.color(
+        if paletteScheme.usesAPIColors,
+           let apiColor = Color(apiHex: series.colorGraph) {
+            return apiColor
+        }
+        return ChartPalette.color(
             for: series.name,
             in: hierarchy.displayedSeries.map(\.name),
             scheme: paletteScheme,

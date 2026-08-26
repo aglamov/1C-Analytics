@@ -34,13 +34,18 @@ struct ContractPlanFactCompletionChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14 * contentScale) {
-            VStack(alignment: .leading, spacing: 3 * contentScale) {
-                Text("Выполнение плана")
-                    .font(.title3.weight(.bold))
-
-                Text("Оплачено относительно плана")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if overviewTitle != nil || overviewSubtitle != nil {
+                VStack(alignment: .leading, spacing: 3 * contentScale) {
+                    if let overviewTitle {
+                        Text(overviewTitle)
+                            .font(.title3.weight(.bold))
+                    }
+                    if let overviewSubtitle {
+                        Text(overviewSubtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Chart {
@@ -66,8 +71,10 @@ struct ContractPlanFactCompletionChart: View {
             .chartYScale(domain: yDomain)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine()
-                        .foregroundStyle(.secondary.opacity(0.16))
+                    if indicator.showGrid != false {
+                        AxisGridLine()
+                            .foregroundStyle(.secondary.opacity(0.16))
+                    }
                     AxisTick()
 
                     AxisValueLabel {
@@ -75,6 +82,15 @@ struct ContractPlanFactCompletionChart: View {
                             Text(ratio.formatted(.percent.precision(.fractionLength(0))))
                         }
                     }
+                }
+            }
+            .chartXAxis {
+                AxisMarks { value in
+                    if indicator.showGrid != false {
+                        AxisGridLine()
+                            .foregroundStyle(.secondary.opacity(0.16))
+                    }
+                    AxisValueLabel()
                 }
             }
             .chartLegend(.hidden)
@@ -105,6 +121,14 @@ struct ContractPlanFactCompletionChart: View {
         .onDisappear {
             selectedPointID = nil
         }
+    }
+
+    private var overviewTitle: String? {
+        indicator.overviewTitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+
+    private var overviewSubtitle: String? {
+        indicator.overviewSubtitle?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
     private func completionLabel(for point: ContractPlanFactCompletionPoint) -> some View {
@@ -258,6 +282,10 @@ struct ContractPlanFactCompletionChart: View {
     private var categories: [String] {
         indicator.contractPlanFactCategories.map(\.label)
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 private struct ContractPlanFactCompletionPoint: Identifiable {

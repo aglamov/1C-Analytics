@@ -6,14 +6,12 @@ struct GeoMapIndicatorView: View {
     private let valuesByCountryKey: [String: Double]
     private let selectedCountryKeys: Set<String>
     private let maximumValue: Double
-    private let minimumValue: Double
     @State private var geometry = GeoMapGeometry.empty
     @Environment(\.chartPaletteScheme) private var chartPaletteScheme
 
     init(indicator: Indicator, selectedRowID: IndicatorRow.ID? = nil) {
         self.indicator = indicator
         self.maximumValue = indicator.rows.map(\.value).max() ?? 1
-        self.minimumValue = indicator.rows.map(\.value).filter { $0 > 0 }.min() ?? 0
         self.valuesByCountryKey = indicator.rows.reduce(into: [:]) { values, row in
             let key = row.label.geoCountryKey
             values[key] = row.value
@@ -70,7 +68,7 @@ struct GeoMapIndicatorView: View {
             return Color.secondary.opacity(0.075)
         }
 
-        let intensity = sqrt(max(value, 0) / max(maximumValue, 1))
+        let intensity = log1p(max(value, 0)) / max(log1p(max(maximumValue, 1)), 1)
         let opacity = 0.20 + 0.76 * intensity
 
         if isSelected(shape) {
@@ -126,7 +124,7 @@ struct GeoMapIndicatorView: View {
             }
 
             HStack(spacing: 6) {
-                Text(indicator.formattedNumber(minimumValue))
+                Text(indicator.formattedNumber(0.0))
                 LinearGradient(
                     colors: [
                         paletteColor.opacity(0.18),
@@ -143,10 +141,13 @@ struct GeoMapIndicatorView: View {
             .foregroundStyle(.primary)
         }
         .padding(9)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.regularMaterial)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            "Шкала от \(minimumValue.formatted(.number.grouping(.automatic))) "
+            "Шкала от 0 "
                 + "до \(maximumValue.formatted(.number.grouping(.automatic)))"
         )
     }

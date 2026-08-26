@@ -137,26 +137,20 @@ struct AnalyticsChart: View {
             emptyDataState(message: "Для показателя пока нет значений")
         } else if indicator.hasOnlyZeroValues {
             emptyDataState
-        } else if indicator.usesMixedUnitPersonnelPresentation {
-            personnelComposition
-        } else if indicator.usesCitizenshipCompositionPresentation {
-            citizenshipComposition
-        } else if indicator.usesDenseEnrollmentCompositionPresentation {
-            horizontalStackedComposition
-        } else if indicator.prefersTrendPresentation {
-            trendLine(smooth: false)
         } else {
             switch indicator.chartType {
             case .bar, .compactBar:
-                if indicator.prefersHorizontalGroupedBars {
-                    horizontalBars
-                } else {
-                    verticalBars
-                }
+                verticalBars
             case .horizontalBar:
-                horizontalBars
+                if indicator.usesMixedUnitPersonnelPresentation {
+                    personnelComposition
+                } else if indicator.usesCitizenshipCompositionPresentation {
+                    citizenshipComposition
+                } else {
+                    horizontalBars
+                }
             case .stackedBar:
-                stackedBars
+                horizontalStackedComposition
             case .donut:
                 donut(showsPercentages: false)
             case .percentDonut:
@@ -173,7 +167,7 @@ struct AnalyticsChart: View {
                 forecastLine
             case .radar:
                 radarChart
-            case .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy:
+            case .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy, .tile:
                 EmptyView()
             }
         }
@@ -297,20 +291,26 @@ struct AnalyticsChart: View {
             .opacity(opacity(for: row))
             .annotation(position: .overlay, alignment: .center) {
                 if shouldShowValueLabel(for: row),
-                   indicator.showValueLabels == true
-                    || rowMatchesSelection(row)
+                   rowMatchesSelection(row)
                     || compositionShare(for: row) >= 0.10 {
                     valueLabel(for: row, usesContrastingForeground: true)
                 }
             }
 
-            if isLastRowInGroup(row), let group = rowGroup(for: row) {
+            if indicator.showsAggregateValue,
+               isLastRowInGroup(row),
+               let group = rowGroup(for: row) {
                 PointMark(
                     x: .value("Итого", group.totalValue),
                     y: .value("Период", group.label)
                 )
                 .symbolSize(0)
-                .annotation(position: .trailing, alignment: .center, spacing: 6) {
+                .annotation(
+                    position: .trailing,
+                    alignment: .center,
+                    spacing: 6,
+                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                ) {
                     groupTotalLabel(group)
                 }
             }

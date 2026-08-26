@@ -40,8 +40,12 @@ struct IndicatorDashboardCard: View {
 
     @ViewBuilder
     private var visualization: some View {
-        if indicator.usesContractPlanFactPresentation {
-            ContractPlanFactCompletionChart(indicator: indicator)
+        if presentationIndicator.usesContractPlanFactPresentation {
+            if presentationIndicator.useOverviewStyle == true {
+                ContractPlanFactCompletionChart(indicator: presentationIndicator)
+            } else {
+                ContractPlanFactView(indicator: presentationIndicator)
+            }
         } else {
             standardVisualization
         }
@@ -49,29 +53,31 @@ struct IndicatorDashboardCard: View {
 
     @ViewBuilder
     private var standardVisualization: some View {
-        switch indicator.chartType {
+        switch presentationIndicator.chartType {
         case .oneValue:
             EmptyView()
         case .linearProgress:
-            LinearProgressIndicatorView(indicator: indicator)
+            LinearProgressIndicatorView(indicator: presentationIndicator)
         case .gauge:
             GaugeIndicatorView(
-                indicator: indicator,
+                indicator: presentationIndicator,
                 animationTrigger: animationTrigger,
                 maximumDialWidth: 200
             )
             .frame(maxWidth: .infinity)
         case .geoMap:
-            GeoMapIndicatorView(indicator: indicator)
+            GeoMapIndicatorView(indicator: presentationIndicator)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: chartHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case .expandableHierarchy:
-            ExpandableHierarchyChartView(indicator: indicator, showsExpandedHierarchy: false)
+            expandableHierarchyOverview
+        case .tile:
+            TileChartView(indicator: presentationIndicator, appliesCardLimit: true)
                 .frame(minHeight: chartHeight, alignment: .top)
         case .compactBar:
             AnalyticsChart(
-                indicator: indicator,
+                indicator: presentationIndicator,
                 usesCardBackground: false,
                 showsLegend: true,
                 animatesOnAppear: true,
@@ -82,7 +88,7 @@ struct IndicatorDashboardCard: View {
         case .bar, .horizontalBar, .stackedBar, .donut, .percentDonut,
              .line, .area, .splineLine, .splineArea, .forecastLine, .radar:
             AnalyticsChart(
-                indicator: indicator,
+                indicator: presentationIndicator,
                 usesCardBackground: false,
                 showsLegend: true,
                 animatesOnAppear: true,
@@ -93,38 +99,58 @@ struct IndicatorDashboardCard: View {
         }
     }
 
+    @ViewBuilder
+    private var expandableHierarchyOverview: some View {
+        switch presentationIndicator.resolvedExpandableOverviewType {
+        case .map:
+            if let overview = presentationIndicator.hierarchyOverviewIndicator(chartType: .geoMap) {
+                GeoMapIndicatorView(indicator: overview)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: chartHeight)
+            }
+        case .tile:
+            if let overview = presentationIndicator.hierarchyOverviewIndicator(chartType: .tile) {
+                TileChartView(indicator: overview, appliesCardLimit: true)
+                    .frame(minHeight: chartHeight)
+            }
+        case nil:
+            ExpandableHierarchyChartView(indicator: presentationIndicator, showsExpandedHierarchy: false)
+                .frame(minHeight: chartHeight, alignment: .top)
+        }
+    }
+
+    private var presentationIndicator: Indicator {
+        indicator.cardPresentationIndicator
+    }
+
     private var chartHeight: CGFloat {
         unscaledChartHeight * contentScale
     }
 
     private var unscaledChartHeight: CGFloat {
-        let categoryCount = max(Set(indicator.orderedRows.map(\.label)).count, 1)
+        let categoryCount = max(Set(presentationIndicator.orderedRows.map(\.label)).count, 1)
 
-        if indicator.usesMixedUnitPersonnelPresentation {
-            return max(250, CGFloat(indicator.orderedRows.count) * 30 + 96)
+        if presentationIndicator.usesMixedUnitPersonnelPresentation {
+            return max(250, CGFloat(presentationIndicator.orderedRows.count) * 30 + 96)
         }
 
-        if indicator.usesDenseEnrollmentCompositionPresentation {
+        if presentationIndicator.usesDenseEnrollmentCompositionPresentation {
             return max(CGFloat(categoryCount) * 50 + 142, 296)
         }
 
-        if indicator.prefersHorizontalGroupedBars {
-            return ChartHeightPolicy.horizontalBarHeight(
-                categoryCount: categoryCount,
-                seriesCount: max(indicator.barDataShape.series.count, 1)
-            )
-        }
-
-        switch indicator.chartType {
+        switch presentationIndicator.chartType {
         case .horizontalBar:
             return ChartHeightPolicy.horizontalBarHeight(
                 categoryCount: categoryCount,
-                seriesCount: max(indicator.barDataShape.series.count, 1)
+                seriesCount: max(presentationIndicator.barDataShape.series.count, 1)
             )
         case .bar:
             return 238
         case .stackedBar:
-            return 252
+            return ChartHeightPolicy.horizontalBarHeight(
+                categoryCount: categoryCount,
+                seriesCount: 1
+            )
         case .compactBar:
             return 214
         case .line, .area, .splineLine, .splineArea, .forecastLine:
@@ -132,14 +158,16 @@ struct IndicatorDashboardCard: View {
         case .radar:
             return 300
         case .expandableHierarchy:
-            let rootCount = max(indicator.hierarchy?.nodes.count ?? 0, 1)
-            let seriesCount = max(indicator.hierarchy?.displayedSeries.count ?? 0, 1)
-            let rowHeight: CGFloat = indicator.hierarchy?.barMode == .grouped
+            let rootCount = max(presentationIndicator.hierarchy?.nodes.count ?? 0, 1)
+            let seriesCount = max(presentationIndicator.hierarchy?.displayedSeries.count ?? 0, 1)
+            let rowHeight: CGFloat = presentationIndicator.hierarchy?.barMode == .grouped
                 ? CGFloat(seriesCount) * 32 + 40
                 : 70
             return max(190, CGFloat(rootCount) * rowHeight + 52)
         case .donut, .percentDonut:
-            return indicator.orderedRows.count > 4 ? 310 : 286
+            return presentationIndicator.orderedRows.count > 4 ? 310 : 286
+        case .tile:
+            return 260
         case .gauge:
             return 250
         case .oneValue, .linearProgress, .geoMap:

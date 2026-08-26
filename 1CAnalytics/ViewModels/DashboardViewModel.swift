@@ -411,7 +411,7 @@ final class DashboardViewModel: ObservableObject {
               let index = dashboard.sections.firstIndex(where: { $0.id == parent.id }) else { return }
         let child = DashboardExtendedSection(
             id: extendedTaskID(parent.id),
-            title: "\(parent.title) · 2 уровень",
+            title: "\(parent.title) 2 уровень",
             indicators: mergedIndicators(
                 fresh: response.indicators,
                 cached: dashboard.sections[index].extended?.indicators ?? [],
@@ -474,13 +474,13 @@ final class DashboardViewModel: ObservableObject {
 
     private func partialSectionMessage(for section: DashboardSection) -> String {
         let count = section.indicatorDecodeFailureCount ?? 0
-        return "Не удалось обработать \(count) \(Self.graphWord(for: count)) из-за изменившегося контракта. Остальные данные обновлены."
+        return "Не удалось обработать \(count) \(Self.graphWord(for: count)) из-за некорректных данных в ответе. Остальные данные обновлены."
     }
 
     private func partialResponseMessage(for sections: [DashboardSection]) -> String? {
         let count = sections.reduce(0) { $0 + ($1.indicatorDecodeFailureCount ?? 0) }
         guard count > 0 else { return nil }
-        return "Не удалось обработать \(count) \(Self.graphWord(for: count)) из-за изменившегося контракта. Остальные данные обновлены."
+        return "Не удалось обработать \(count) \(Self.graphWord(for: count)) из-за некорректных данных в ответе. Остальные данные обновлены."
     }
 
     private static func graphWord(for count: Int) -> String {
@@ -636,7 +636,7 @@ final class DashboardViewModel: ObservableObject {
 
     private func synchronizationItem(for section: DashboardSection) -> DashboardSynchronizationSession.Item {
         DashboardSynchronizationSession.Item(
-            id: extendedTaskID(section.id), title: "\(section.title) · 2 уровень", kind: .extended,
+            id: extendedTaskID(section.id), title: "\(section.title) 2 уровень", kind: .extended,
             status: .pending, timestamp: section.extended?.fetchedAt, errorMessage: nil,
             charts: chartItems(
                 for: section.extended?.indicators ?? [],

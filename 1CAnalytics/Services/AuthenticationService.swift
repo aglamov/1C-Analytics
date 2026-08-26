@@ -194,6 +194,60 @@ enum OAuthFlow {
     }
 }
 
+enum RUDNPasswordExpiryWarningPolicy {
+    static func canInject(on url: URL?) -> Bool {
+        url?.host?.lowercased() == "id.rudn.ru"
+    }
+
+    static let script = #"""
+    (() => {
+      if (window.__analyticsPasswordExpirySkipInstalled) return;
+      window.__analyticsPasswordExpirySkipInstalled = true;
+
+      const warningText = 'Срок действия пароля истекает';
+      const changeText = 'Перейти к смене пароля';
+      const skipText = 'Пропустить';
+      const maxAttempts = 3;
+      let attempts = 0;
+      let scheduled = false;
+
+      const normalizedText = element => (element?.textContent || '').replace(/\s+/g, ' ').trim();
+      const isVisible = element => {
+        if (!element) return false;
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden'
+          && Number(style.opacity || 1) > 0 && rect.width > 0 && rect.height > 0;
+      };
+      const warningIsPresent = () => {
+        const text = (document.body?.innerText || '').replace(/\s+/g, ' ');
+        return text.includes(warningText) && text.includes(changeText);
+      };
+      const skipElement = () => Array.from(
+        document.querySelectorAll('button, a, [role="button"], div')
+      ).find(element => normalizedText(element) === skipText && isVisible(element));
+
+      const attempt = () => {
+        if (scheduled || attempts >= maxAttempts || !warningIsPresent()) return;
+        const target = skipElement();
+        if (!target) return;
+        scheduled = true;
+        window.setTimeout(() => {
+          scheduled = false;
+          if (!warningIsPresent() || !isVisible(target)) return;
+          attempts += 1;
+          target.click();
+          if (attempts < maxAttempts) window.setTimeout(attempt, 1500);
+        }, 750);
+      };
+
+      const observer = new MutationObserver(attempt);
+      observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      attempt();
+    })();
+    """#
+}
+
 private struct AuthorizationCodeRequest: Encodable {
     let codeAnalitic: String
 
@@ -283,6 +337,13 @@ private final class RUDNAuthorizationViewController: UIViewController, WKNavigat
         } catch {
             finish(with: .failure(error))
         }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard RUDNPasswordExpiryWarningPolicy.canInject(on: webView.url) else {
+            return
+        }
+        webView.evaluateJavaScript(RUDNPasswordExpiryWarningPolicy.script)
     }
 
     @objc

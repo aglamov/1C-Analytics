@@ -180,6 +180,8 @@ struct IndicatorCard: View {
             "map.fill"
         case .expandableHierarchy:
             "chart.bar.doc.horizontal.fill"
+        case .tile:
+            "square.grid.2x2.fill"
         }
     }
 

@@ -77,7 +77,7 @@ struct DetailGroupRowView: View {
         DetailPresentationPolicy.shareText(
             for: value,
             denominator: denominator,
-            fractionDigits: indicator.chartType == .geoMap ? 3 : 0
+            fractionDigits: 3
         )
     }
 
@@ -191,9 +191,11 @@ struct DetailGroupRowView: View {
                     .contentTransition(.numericText())
                     .lineLimit(1)
 
-                Text(shareText(for: value, denominator: shareDenominator))
-                    .font(.caption2.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if indicator.showsPercentagesInDetails {
+                    Text(shareText(for: value, denominator: shareDenominator))
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
             .fixedSize(horizontal: true, vertical: false)
         }

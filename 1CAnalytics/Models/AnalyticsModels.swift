@@ -121,6 +121,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showLegend: Bool?
     let showTotal: Bool?
     let showDetails: Bool?
+    let showPercentagesInDetails: Bool?
     let showValueLabels: Bool?
     let showRowValues: Bool?
     let alwaysShowPointValues: Bool?
@@ -128,6 +129,14 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
     let useCompactNumbers: Bool?
+    let useOverviewStyle: Bool?
+    let showGrid: Bool?
+    let maxGroups: Int?
+    let maxTiles: Int?
+    let tileLayout: TileLayout?
+    let overviewType: ExpandableOverviewType?
+    let overviewTitle: String?
+    let overviewSubtitle: String?
     let valueSpacing: Double?
     let barLayout: BarLayout?
     let lineStyle: ChartLineStyle?
@@ -152,6 +161,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showLegend: Bool? = nil,
         showTotal: Bool? = nil,
         showDetails: Bool? = nil,
+        showPercentagesInDetails: Bool? = nil,
         showValueLabels: Bool? = nil,
         showRowValues: Bool? = nil,
         alwaysShowPointValues: Bool? = nil,
@@ -159,6 +169,14 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         detailsOrientation: DetailsOrientation? = nil,
         widthPercent: Double? = nil,
         useCompactNumbers: Bool? = nil,
+        useOverviewStyle: Bool? = nil,
+        showGrid: Bool? = nil,
+        maxGroups: Int? = nil,
+        maxTiles: Int? = nil,
+        tileLayout: TileLayout? = nil,
+        overviewType: ExpandableOverviewType? = nil,
+        overviewTitle: String? = nil,
+        overviewSubtitle: String? = nil,
         valueSpacing: Double? = nil,
         barLayout: BarLayout? = nil,
         lineStyle: ChartLineStyle? = nil,
@@ -182,6 +200,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showLegend = showLegend
         self.showTotal = showTotal
         self.showDetails = showDetails
+        self.showPercentagesInDetails = showPercentagesInDetails
         self.showValueLabels = showValueLabels
         self.showRowValues = showRowValues
         self.alwaysShowPointValues = alwaysShowPointValues
@@ -189,6 +208,14 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.detailsOrientation = detailsOrientation
         self.widthPercent = widthPercent
         self.useCompactNumbers = useCompactNumbers
+        self.useOverviewStyle = useOverviewStyle
+        self.showGrid = showGrid
+        self.maxGroups = maxGroups
+        self.maxTiles = maxTiles
+        self.tileLayout = tileLayout
+        self.overviewType = overviewType
+        self.overviewTitle = overviewTitle
+        self.overviewSubtitle = overviewSubtitle
         self.valueSpacing = valueSpacing
         self.barLayout = barLayout
         self.lineStyle = lineStyle
@@ -253,6 +280,16 @@ enum ChartLineStyle: String, Codable, Sendable {
 enum DetailsOrientation: String, Codable, Sendable {
     case vertical
     case horizontal
+}
+
+enum TileLayout: String, Codable, Sendable {
+    case mosaic
+    case grid
+}
+
+enum ExpandableOverviewType: String, Codable, Sendable {
+    case map
+    case tile
 }
 
 enum ExpandableHierarchyBarMode: String, Codable, Sendable {
@@ -371,11 +408,12 @@ struct ContractPlanFactPeriodRows: Identifiable, Equatable, Sendable {
     var id: ContractPlanFactPeriod.ID { period.id }
 
     var planRow: IndicatorRow? {
-        rows.first(where: \.isContractPlanMetric)
+        rows.first(where: \.isContractPlanMetric) ?? rows.first
     }
 
     var paidRow: IndicatorRow? {
-        rows.first { !$0.isContractPlanMetric }
+        guard let planRow else { return nil }
+        return rows.first { $0.id != planRow.id }
     }
 
     var completionRatio: Double? {
@@ -428,6 +466,7 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
     case forecastLine = "ForecastLineMark"
     case radar = "RadarMark"
     case expandableHierarchy = "ExpandableTableMark"
+    case tile = "TileMark"
     case oneValue = "OneValue"
     case linearProgress = "LinearProgressIndicator"
     case gauge = "Gauge"
@@ -470,16 +509,29 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             return .radar
         case "ExpandableTableMark":
             return .expandableHierarchy
+        case "TileMark", "TileChart", "Treemap":
+            return .tile
         case Self.stackedBar.rawValue:
             return .stackedBar
         case Self.horizontalBar.rawValue:
             return .horizontalBar
         case "GeoMap", "WorldMap", "Map", "GeoChoropleth":
             return .geoMap
-        case "PlanFactProgress":
+        case "PlanFactProgress", "PlanFact", "PlanFactMark", "PlanFactProgressMark",
+             "PeriodProgressMark", "PlanFactByPeriod":
             return .horizontalBar
         default:
             return nil
+        }
+    }
+
+    static func isPlanFactBackendType(_ value: String) -> Bool {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "PlanFactProgress", "PlanFact", "PlanFactMark", "PlanFactProgressMark",
+             "PeriodProgressMark", "PlanFactByPeriod":
+            true
+        default:
+            false
         }
     }
 
@@ -516,6 +568,8 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
             "RadarMark"
         case .expandableHierarchy:
             "ExpandableTableMark"
+        case .tile:
+            "TileMark"
         case .oneValue:
             "OneValue"
         case .linearProgress:
@@ -528,7 +582,132 @@ enum ChartType: String, CaseIterable, Codable, Sendable {
     }
 }
 
+enum BarChartOrientation: Equatable, Sendable {
+    case vertical
+    case horizontal
+}
+
+extension ChartType {
+    var barOrientation: BarChartOrientation? {
+        switch self {
+        case .bar, .compactBar:
+            .vertical
+        case .horizontalBar, .stackedBar:
+            .horizontal
+        case .donut, .percentDonut, .line, .area, .splineLine, .splineArea,
+             .forecastLine, .radar, .expandableHierarchy, .tile, .oneValue,
+             .linearProgress, .gauge, .geoMap:
+            nil
+        }
+    }
+}
+
 extension Indicator {
+    var cardPresentationIndicator: Indicator {
+        guard let maxGroups,
+              chartType != .tile,
+              chartType != .oneValue,
+              chartType != .linearProgress,
+              chartType != .gauge,
+              chartType != .geoMap,
+              chartType != .expandableHierarchy,
+              rowGroups.count > maxGroups else {
+            return self
+        }
+
+        let visibleGroups = Array(rowGroups.prefix(maxGroups))
+        let hiddenRows = rowGroups.dropFirst(maxGroups).flatMap(\.rows)
+        var remainderRows: [IndicatorRow]
+        let series = hiddenRows.compactMap(\.series).uniquePreservingOrder
+        if series.isEmpty {
+            remainderRows = [
+                IndicatorRow(
+                    id: "card-other",
+                    label: "Прочие",
+                    value: hiddenRows.reduce(0) { $0 + $1.value },
+                    series: nil,
+                    sortOrder: maxGroups * 100,
+                    colorGraph: nil,
+                    colorValue: nil
+                )
+            ]
+        } else {
+            remainderRows = series.enumerated().map { index, seriesName in
+                let matching = hiddenRows.filter { $0.series == seriesName }
+                return IndicatorRow(
+                    id: "card-other-\(index)",
+                    label: "Прочие",
+                    value: matching.reduce(0) { $0 + $1.value },
+                    series: seriesName,
+                    sortOrder: maxGroups * 100 + index,
+                    colorGraph: matching.first?.colorGraph,
+                    colorValue: matching.first?.colorValue,
+                    lineStyle: matching.first?.lineStyle
+                )
+            }
+        }
+        return replacingRows(visibleGroups.flatMap(\.rows) + remainderRows)
+    }
+
+    func replacingRows(_ replacementRows: [IndicatorRow], chartType replacementChartType: ChartType? = nil) -> Indicator {
+        Indicator(
+            id: id,
+            title: title,
+            value: value,
+            valueMax: valueMax,
+            unit: unit,
+            chartType: replacementChartType ?? chartType,
+            source: source,
+            colorGraph: colorGraph,
+            colorValue: colorValue,
+            showLegend: showLegend,
+            showTotal: showTotal,
+            showDetails: showDetails,
+            showPercentagesInDetails: showPercentagesInDetails,
+            showValueLabels: showValueLabels,
+            showRowValues: showRowValues,
+            alwaysShowPointValues: alwaysShowPointValues,
+            showYAxisLabels: showYAxisLabels,
+            detailsOrientation: detailsOrientation,
+            widthPercent: widthPercent,
+            useCompactNumbers: useCompactNumbers,
+            useOverviewStyle: useOverviewStyle,
+            showGrid: showGrid,
+            maxGroups: maxGroups,
+            maxTiles: maxTiles,
+            tileLayout: tileLayout,
+            overviewType: overviewType,
+            overviewTitle: overviewTitle,
+            overviewSubtitle: overviewSubtitle,
+            valueSpacing: valueSpacing,
+            barLayout: barLayout,
+            lineStyle: lineStyle,
+            forecastFromIndex: forecastFromIndex,
+            highlightCrossing: highlightCrossing,
+            highlightSeriesIndex: highlightSeriesIndex,
+            referenceSeriesIndex: referenceSeriesIndex,
+            isExplicitPlanFactProgress: isExplicitPlanFactProgress,
+            hierarchy: hierarchy,
+            rows: replacementRows
+        )
+    }
+
+    func hierarchyOverviewIndicator(chartType: ChartType) -> Indicator? {
+        guard let hierarchy else { return nil }
+        let rows = hierarchy.nodes.enumerated().map { index, node in
+            let geometryValue = hierarchy.displayedTotal(for: node)
+                ?? hierarchy.displayedSeries.reduce(0) { $0 + (node.values[$1.key]?.value ?? 0) }
+            return IndicatorRow(
+                id: "overview-\(node.id)",
+                label: node.label,
+                value: geometryValue,
+                series: nil,
+                sortOrder: index
+            )
+        }
+        return replacingRows(rows, chartType: chartType)
+    }
+
     var showsAggregateValue: Bool {
         showTotal ?? (chartType != .geoMap && chartType != .radar)
     }
@@ -542,7 +721,7 @@ extension Indicator {
     }
 
     var showsLegend: Bool {
-        showLegend ?? (chartType != .geoMap)
+        showLegend ?? (chartType != .geoMap && chartType != .expandableHierarchy && chartType != .tile)
     }
 
     var showsAggregateValueInHeader: Bool {
@@ -585,11 +764,25 @@ extension Indicator {
         widthPercent ?? 100
     }
 
+    var showsPercentagesInDetails: Bool {
+        showPercentagesInDetails ?? true
+    }
+
+    var resolvedTileLayout: TileLayout {
+        tileLayout ?? .mosaic
+    }
+
+    var resolvedMaximumTiles: Int {
+        min(max(maxTiles ?? 8, 2), 20)
+    }
+
+    var resolvedExpandableOverviewType: ExpandableOverviewType? {
+        overviewType
+    }
+
     func formattedNumber(_ value: Double) -> String {
         if useCompactNumbers == true {
-            return value.formatted(
-                .number.notation(.compactName).precision(.fractionLength(0...2))
-            )
+            return Self.compactNumber(value)
         }
 
         return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
@@ -597,9 +790,7 @@ extension Indicator {
 
     func formattedNumber(_ value: Decimal) -> String {
         if useCompactNumbers == true {
-            return value.formatted(
-                .number.notation(.compactName).precision(.fractionLength(0...2))
-            )
+            return Self.compactNumber(NSDecimalNumber(decimal: value).doubleValue)
         }
 
         return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
@@ -624,7 +815,9 @@ extension Indicator {
 
     var usesMixedUnitPersonnelPresentation: Bool {
         let normalizedTitle = title.lowercased()
-        guard normalizedTitle.contains("доля ауп") && normalizedTitle.contains("увп") else {
+        guard chartType == .horizontalBar,
+              normalizedTitle.contains("доля ауп"),
+              normalizedTitle.contains("увп") else {
             return false
         }
 
@@ -634,13 +827,15 @@ extension Indicator {
     }
 
     var usesDenseEnrollmentCompositionPresentation: Bool {
-        title.lowercased().contains("динамика зачисления иг")
+        chartType == .stackedBar
+            && title.lowercased().contains("динамика зачисления иг")
             && barDataShape.series.count >= 4
             && rowGroups.count >= 2
     }
 
     var usesCitizenshipCompositionPresentation: Bool {
-        title.lowercased().contains("всего обучающихся рф и иг")
+        chartType == .horizontalBar
+            && title.lowercased().contains("всего обучающихся рф и иг")
             && barDataShape.series.count >= 2
             && !rowGroups.isEmpty
     }
@@ -649,20 +844,6 @@ extension Indicator {
         chartType == .stackedBar
             && !rowGroups.isEmpty
             && !barDataShape.series.isEmpty
-    }
-
-    var prefersTrendPresentation: Bool {
-        guard chartType == .bar || chartType == .compactBar,
-              barDataShape.series.isEmpty,
-              orderedRows.count >= 3,
-              !title.isPlanFactIndicatorTitle else {
-            return false
-        }
-
-        return orderedRows.allSatisfy { row in
-            let digits = row.label.filter(\.isNumber)
-            return digits.count >= 4 && row.label.contains("20")
-        }
     }
 
     var rowGroups: [IndicatorRowGroup] {
@@ -689,43 +870,8 @@ extension Indicator {
             : .multipleValuesPerGroup(series: series)
     }
 
-    var prefersHorizontalGroupedBars: Bool {
-        guard useCompactNumbers != true,
-              chartType == .bar || chartType == .compactBar,
-              !title.isPlanFactIndicatorTitle else {
-            return false
-        }
-
-        let seriesCount = barDataShape.series.count
-        if chartType == .bar,
-           seriesCount > 1,
-           rowGroups.count * seriesCount >= 4 {
-            let longestValue = orderedRows
-                .map { formattedNumber($0.value).count }
-                .max() ?? 0
-            if longestValue >= 6 {
-                return true
-            }
-        }
-
-        guard barLayout == .stacked,
-              seriesCount > 1 else {
-            return false
-        }
-
-        let positiveValues = orderedRows.map(\.value).filter { $0 > 0 }
-        guard let largestValue = positiveValues.max(),
-              let smallestValue = positiveValues.min() else {
-            return false
-        }
-
-        return rowGroups.count >= 4 || smallestValue < largestValue * 0.18
-    }
-
     var usesContractPlanFactPresentation: Bool {
-        let matchesLegacyTitleHeuristic = title.isPlanFactIndicatorTitle
-            && title.lowercased().contains("контракт")
-        guard isExplicitPlanFactProgress == true || matchesLegacyTitleHeuristic,
+        guard isExplicitPlanFactProgress == true,
               !orderedRows.isEmpty else {
             return false
         }
@@ -775,7 +921,7 @@ extension Indicator {
             switch chartType {
             case .bar, .compactBar, .line, .forecastLine, .radar:
                 .blue
-            case .horizontalBar, .area, .expandableHierarchy:
+            case .horizontalBar, .area, .expandableHierarchy, .tile:
                 .green
             case .stackedBar, .splineLine, .splineArea:
                 .violet
@@ -795,6 +941,38 @@ extension Indicator {
         showDetails ?? true
     }
 
+    private static func compactNumber(_ value: Double) -> String {
+        let magnitude = abs(value)
+        let divisor: Double
+        let suffix: String
+        switch magnitude {
+        case 1_000_000_000...:
+            divisor = 1_000_000_000
+            suffix = "B"
+        case 1_000_000...:
+            divisor = 1_000_000
+            suffix = "M"
+        case 1_000...:
+            divisor = 1_000
+            suffix = "K"
+        default:
+            return value.formatted(.number.grouping(.automatic).precision(.fractionLength(0...2)))
+        }
+        return value.divided(by: divisor)
+            .formatted(.number.grouping(.never).precision(.fractionLength(0...2))) + suffix
+    }
+
+}
+
+private extension Array where Element == String {
+    var uniquePreservingOrder: [String] {
+        var seen = Set<String>()
+        return filter { seen.insert($0).inserted }
+    }
+}
+
+private extension Double {
+    func divided(by divisor: Double) -> Double { self / divisor }
 }
 
 extension String {

@@ -28,13 +28,13 @@ enum DetailPresentationPolicy {
     static func shareText(
         for value: Double,
         denominator: Double?,
-        fractionDigits: Int = 0,
+        fractionDigits: Int = 3,
         locale: Locale = .current
     ) -> String {
         let share = denominator.map { $0 > 0 ? value / $0 : 0 } ?? 0
         return share.formatted(
             .percent
-                .precision(.fractionLength(fractionDigits))
+                .precision(.fractionLength(0...fractionDigits))
                 .locale(locale)
         )
     }

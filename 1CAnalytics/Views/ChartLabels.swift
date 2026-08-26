@@ -44,16 +44,12 @@ extension AnalyticsChart {
     }
 
     private var usesTrendValueLabelContract: Bool {
-        if indicator.prefersTrendPresentation {
-            return true
-        }
-
         switch indicator.chartType {
         case .line, .area, .splineLine, .splineArea, .forecastLine:
             return true
         case .bar, .compactBar, .horizontalBar, .stackedBar, .donut,
              .percentDonut, .radar, .expandableHierarchy,
-             .oneValue, .linearProgress, .gauge, .geoMap:
+             .oneValue, .linearProgress, .gauge, .geoMap, .tile:
             return false
         }
     }

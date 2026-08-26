@@ -54,6 +54,7 @@ enum AppAccent {
 }
 
 enum ChartPaletteScheme: String, CaseIterable, Identifiable {
+    case standard
     case playful
     case corporate
 
@@ -63,6 +64,8 @@ enum ChartPaletteScheme: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .standard:
+            "По умолч."
         case .playful:
             "Веселая"
         case .corporate:
@@ -72,16 +75,20 @@ enum ChartPaletteScheme: String, CaseIterable, Identifiable {
 
     var accessibilityTitle: String {
         switch self {
+        case .standard:
+            "Цветовая схема по умолчанию"
         case .playful:
             "Веселая цветовая схема"
         case .corporate:
             "Корпоративная цветовая схема"
         }
     }
+
+    var usesAPIColors: Bool { self == .standard }
 }
 
 private struct ChartPaletteSchemeKey: EnvironmentKey {
-    static let defaultValue: ChartPaletteScheme = .corporate
+    static let defaultValue: ChartPaletteScheme = .standard
 }
 
 enum DashboardContentScalePolicy {
@@ -152,6 +159,15 @@ extension View {
 enum ChartPalette {
     static func colors(for scheme: ChartPaletteScheme) -> [Color] {
         switch scheme {
+        case .standard:
+            [
+                Color(red: 0.09, green: 0.54, blue: 0.95),
+                Color(red: 0.40, green: 0.71, blue: 0.28),
+                Color(red: 0.96, green: 0.62, blue: 0.04),
+                Color(red: 0.55, green: 0.36, blue: 0.96),
+                Color(red: 0.94, green: 0.27, blue: 0.27),
+                Color(red: 0.02, green: 0.71, blue: 0.83)
+            ]
         case .playful:
             [
                 Color(red: 0.00, green: 0.48, blue: 1.00),
@@ -241,7 +257,7 @@ extension Indicator {
         case .bar where !barDataShape.series.isEmpty,
              .horizontalBar where !barDataShape.series.isEmpty:
             return barDataShape.series
-        case .bar, .compactBar, .horizontalBar, .donut, .percentDonut:
+        case .bar, .compactBar, .horizontalBar, .donut, .percentDonut, .tile:
             return orderedRows.uniqueValues(\.label)
         case .oneValue, .linearProgress, .gauge, .geoMap:
             return []
@@ -249,6 +265,10 @@ extension Indicator {
     }
 
     func chartColor(for row: IndicatorRow, scheme: ChartPaletteScheme) -> Color {
+        if scheme.usesAPIColors,
+           let apiColor = Color(apiHex: row.colorGraph ?? colorGraph) {
+            return apiColor
+        }
         let key: String
         switch chartType {
         case .stackedBar:
@@ -258,7 +278,7 @@ extension Indicator {
         case .bar where !barDataShape.series.isEmpty,
              .horizontalBar where !barDataShape.series.isEmpty:
             key = row.series ?? "Значение"
-        case .bar, .compactBar, .horizontalBar, .donut, .percentDonut:
+        case .bar, .compactBar, .horizontalBar, .donut, .percentDonut, .tile:
             key = row.label
         case .oneValue, .linearProgress, .gauge, .geoMap, .expandableHierarchy:
             return accent.primary
@@ -268,6 +288,10 @@ extension Indicator {
     }
 
     func chartColor(forGroupLabel label: String, scheme: ChartPaletteScheme) -> Color {
+        if scheme.usesAPIColors,
+           let apiColor = Color(apiHex: orderedRows.first(where: { $0.label == label })?.colorGraph ?? colorGraph) {
+            return apiColor
+        }
         return ChartPalette.color(
             for: label,
             in: orderedRows.uniqueValues(\.label),
@@ -277,7 +301,10 @@ extension Indicator {
     }
 
     func paletteColor(scheme: ChartPaletteScheme) -> Color {
-        ChartPalette.colors(for: scheme).first ?? accent.primary
+        if scheme.usesAPIColors, let apiColor = Color(apiHex: colorGraph) {
+            return apiColor
+        }
+        return ChartPalette.colors(for: scheme).first ?? accent.primary
     }
 
     var graphColor: Color {

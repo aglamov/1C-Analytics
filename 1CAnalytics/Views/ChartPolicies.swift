@@ -115,10 +115,6 @@ enum ChartHeightPolicy {
         let categoryCount = max(indicator.orderedRows.uniqueValues(\.label).count, 1)
         let seriesCount = max(indicator.barDataShape.series.count, 1)
 
-        if indicator.prefersHorizontalGroupedBars || indicator.chartType == .horizontalBar {
-            return horizontalBarHeight(categoryCount: categoryCount, seriesCount: seriesCount)
-        }
-
         switch indicator.chartType {
         case .horizontalBar:
             return horizontalBarHeight(categoryCount: categoryCount, seriesCount: seriesCount)
@@ -133,7 +129,9 @@ enum ChartHeightPolicy {
                 ? CGFloat(seriesCount) * 34 + 42
                 : 74
             return max(220, CGFloat(rootCount) * rowHeight + 64)
-        case .bar, .compactBar, .stackedBar:
+        case .stackedBar:
+            return horizontalBarHeight(categoryCount: categoryCount, seriesCount: 1)
+        case .bar, .compactBar:
             return min(max(availableWidth * 0.68, 280), 390)
         case .oneValue:
             return 180
@@ -142,6 +140,8 @@ enum ChartHeightPolicy {
         case .gauge:
             return 300
         case .geoMap:
+            return 300
+        case .tile:
             return 300
         }
     }
@@ -351,6 +351,20 @@ enum LegendSelectionPolicy {
         usesSeriesLegend
             ? selectedSeriesKey != nil && rowMatchesSelection
             : rowMatchesSelection
+    }
+}
+
+enum LegendVisibilityPolicy {
+    static func isVisible(
+        contractPreference: Bool?,
+        defaultEnabled: Bool,
+        itemCount: Int
+    ) -> Bool {
+        if let contractPreference {
+            return contractPreference
+        }
+
+        return defaultEnabled && itemCount > 1
     }
 }
 

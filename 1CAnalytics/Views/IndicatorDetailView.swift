@@ -93,16 +93,10 @@ struct IndicatorDetailView: View {
     }
 
     private var contractPlanFactSection: some View {
-        VStack(alignment: .leading, spacing: 16 * contentScale) {
-            ContractPlanFactCompletionChart(indicator: indicator)
-                .padding(16 * contentScale)
-                .premiumPanel()
-
-            ContractPlanFactView(indicator: indicator)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(16 * contentScale)
-                .premiumPanel()
-        }
+        ContractPlanFactView(indicator: indicator)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(16 * contentScale)
+            .premiumPanel()
     }
 
     private var expandableHierarchySection: some View {
@@ -155,6 +149,14 @@ struct IndicatorDetailView: View {
             } else if indicator.chartType == .gauge {
                 GaugeIndicatorView(indicator: indicator)
                     .frame(maxWidth: .infinity)
+            } else if indicator.chartType == .tile {
+                TileChartView(
+                    indicator: indicator,
+                    appliesCardLimit: true,
+                    selectedRowID: selectedRowID,
+                    onSelect: selectRow
+                )
+                    .frame(maxWidth: .infinity, minHeight: 280 * contentScale)
             } else {
                 let chart = AnalyticsChart(
                     indicator: indicator,

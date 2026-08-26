@@ -440,6 +440,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showLegend: Bool?
     let showTotal: Bool?
     let showDetails: Bool?
+    let showPercentagesInDetails: Bool?
     let showValueLabels: Bool?
     let showRowValues: Bool?
     let alwaysShowPointValues: Bool?
@@ -447,6 +448,14 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
     let useCompactNumbers: Bool?
+    let useOverviewStyle: Bool?
+    let showGrid: Bool?
+    let maxGroups: Int?
+    let maxTiles: Int?
+    let tileLayout: TileLayout?
+    let overviewType: ExpandableOverviewType?
+    let overviewTitle: String?
+    let overviewSubtitle: String?
     let valueSpacing: Double?
     let barLayout: BarLayout?
     let lineStyle: ChartLineStyle?
@@ -476,6 +485,10 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case showDetails
         case showDetailsSnake = "show_details"
         case displayDetails
+        case showPercentagesInDetails
+        case showPercentagesInDetailsSnake = "show_percentages_in_details"
+        case showDetailPercentages
+        case displayPercentagesInDetails
         case showValueLabels
         case showRowValues
         case showLabels
@@ -494,6 +507,20 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case useAbbreviations
         case compactValues
         case abbreviateValues
+        case useOverviewStyle
+        case showGrid
+        case maxGroups
+        case maxGroupsSnake = "max_groups"
+        case groupLimit
+        case maxItems
+        case topN
+        case maxTiles
+        case maxTilesSnake = "max_tiles"
+        case tileLimit
+        case tileLayout
+        case overviewType
+        case overviewTitle
+        case overviewSubtitle
         case valueSpacing
         case valueGap
         case itemSpacing
@@ -522,15 +549,14 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         let rawType = try? container.decodeFlexibleString(forKey: .type)
         type = rawType.flatMap(ChartType.backendType(for:)) ?? .bar
         hasUnsupportedChartType = rawType.map { ChartType.backendType(for: $0) == nil } ?? false
-        isExplicitPlanFactProgress = rawType == "PlanFactProgress"
+        isExplicitPlanFactProgress = rawType.map(ChartType.isPlanFactBackendType) ?? false
 
         if type == .expandableHierarchy {
             let rawBarMode = try container.decodeFlexibleString(forKey: .barMode)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .lowercased()
             let barMode = rawBarMode.flatMap(ExpandableHierarchyBarMode.init(rawValue:))
-                ?? .grouped
-
+                ?? .stacked
             let hierarchySeries = (try? container.decodeFlexibleArray(
                 AnalyticsAPIHierarchySeries.self,
                 forKey: .series
@@ -560,6 +586,10 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         showDetails = try container.decodeFlexibleBool(forKey: .showDetails)
             ?? container.decodeFlexibleBool(forKey: .showDetailsSnake)
             ?? container.decodeFlexibleBool(forKey: .displayDetails)
+        showPercentagesInDetails = try container.decodeFlexibleBool(forKey: .showPercentagesInDetails)
+            ?? container.decodeFlexibleBool(forKey: .showPercentagesInDetailsSnake)
+            ?? container.decodeFlexibleBool(forKey: .showDetailPercentages)
+            ?? container.decodeFlexibleBool(forKey: .displayPercentagesInDetails)
         showValueLabels = try container.decodeFlexibleBool(forKey: .showValueLabels)
             ?? container.decodeFlexibleBool(forKey: .showLabels)
             ?? container.decodeFlexibleBool(forKey: .displayValueLabels)
@@ -584,6 +614,25 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             ?? container.decodeFlexibleBool(forKey: .useAbbreviations)
             ?? container.decodeFlexibleBool(forKey: .compactValues)
             ?? container.decodeFlexibleBool(forKey: .abbreviateValues)
+        useOverviewStyle = try container.decodeFlexibleBool(forKey: .useOverviewStyle)
+        showGrid = try container.decodeFlexibleBool(forKey: .showGrid)
+
+        maxGroups = try Self.decodeLimit(
+            from: container,
+            keys: [.maxGroups, .maxGroupsSnake, .groupLimit, .maxItems, .topN],
+            validRange: 1...100
+        )
+        maxTiles = try Self.decodeLimit(
+            from: container,
+            keys: [.maxTiles, .maxTilesSnake, .tileLimit],
+            validRange: 2...20
+        )
+        tileLayout = try container.decodeFlexibleString(forKey: .tileLayout)
+            .flatMap { TileLayout(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) }
+        overviewType = try container.decodeFlexibleString(forKey: .overviewType)
+            .flatMap { ExpandableOverviewType(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) }
+        overviewTitle = try container.decodeFlexibleString(forKey: .overviewTitle)
+        overviewSubtitle = try container.decodeFlexibleString(forKey: .overviewSubtitle)
 
         let rawSpacing = try container.decodeFlexibleDouble(forKey: .valueSpacing)
             ?? container.decodeFlexibleDouble(forKey: .valueGap)
@@ -691,6 +740,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             showLegend: isExplicitPlanFactProgress ? (showLegend ?? false) : showLegend,
             showTotal: isExplicitPlanFactProgress ? (showTotal ?? false) : showTotal,
             showDetails: showDetails,
+            showPercentagesInDetails: showPercentagesInDetails,
             showValueLabels: showValueLabels,
             showRowValues: showRowValues,
             alwaysShowPointValues: alwaysShowPointValues,
@@ -698,6 +748,14 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             detailsOrientation: detailsOrientation,
             widthPercent: widthPercent,
             useCompactNumbers: useCompactNumbers,
+            useOverviewStyle: useOverviewStyle,
+            showGrid: showGrid,
+            maxGroups: maxGroups,
+            maxTiles: maxTiles,
+            tileLayout: tileLayout,
+            overviewType: overviewType,
+            overviewTitle: overviewTitle,
+            overviewSubtitle: overviewSubtitle,
             valueSpacing: valueSpacing,
             barLayout: barLayout,
             lineStyle: lineStyle,
@@ -713,14 +771,6 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
 
     private var resolvedChartType: ChartType {
         if hasUnsupportedChartType {
-            return value != nil && values.isEmpty ? .oneValue : .bar
-        }
-
-        if type == .radar,
-           values.count < 3 || values.contains(where: { value in
-               if let scalar = value.value, scalar < 0 { return true }
-               return value.subgroup?.contains(where: { ($0.value ?? 0) < 0 }) == true
-           }) {
             return .bar
         }
 
@@ -729,21 +779,9 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         }
 
         let normalizedName = AnalyticsAPIContract.normalize(name)
-        let citizenshipIndicatorName = AnalyticsAPIContract.normalize("Всего обучающихся РФ и ИГ")
-
-        if normalizedName == citizenshipIndicatorName {
-            return .horizontalBar
-        }
-
         let hasMultipleValues = values.reduce(0) { count, value in
             count + max(value.subgroup?.count ?? 0, value.value == nil ? 0 : 1)
         } >= 2
-
-        if name.isPlanFactIndicatorTitle,
-           normalizedName.contains(AnalyticsAPIContract.normalize("контракт")),
-           hasMultipleValues {
-            return .horizontalBar
-        }
 
         if normalizedName.contains(AnalyticsAPIContract.normalize("средний балл егэ")),
            hasMultipleValues,
@@ -754,13 +792,28 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         return type
     }
 
+    private static func decodeLimit(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        keys: [CodingKeys],
+        validRange: ClosedRange<Int>
+    ) throws -> Int? {
+        for key in keys {
+            if let value = try container.decodeFlexibleDouble(forKey: key) {
+                guard value.rounded() == value else { return nil }
+                let integer = Int(value)
+                return validRange.contains(integer) ? integer : nil
+            }
+        }
+        return nil
+    }
+
 }
 
 private extension ChartType {
     var displaysRows: Bool {
         switch self {
         case .bar, .compactBar, .horizontalBar, .stackedBar, .donut, .percentDonut,
-             .line, .area, .splineLine, .splineArea, .forecastLine, .radar, .geoMap:
+             .line, .area, .splineLine, .splineArea, .forecastLine, .radar, .geoMap, .tile:
             true
         case .oneValue, .linearProgress, .gauge, .expandableHierarchy:
             false
@@ -869,11 +922,20 @@ private struct AnalyticsAPIHierarchyNode: Decodable, Sendable {
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeFlexibleString(forKey: .id)
-        label = try container.decodeFlexibleString(forKey: .label) ?? ""
-        values = try container.decodeIfPresent(
+        let decodedLabel = try container.decodeFlexibleString(forKey: .label)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackLabel = id?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let decodedLabel, !decodedLabel.isEmpty {
+            label = decodedLabel
+        } else if let fallbackLabel, !fallbackLabel.isEmpty {
+            label = fallbackLabel
+        } else {
+            label = "Узел"
+        }
+        values = (try? container.decode(
             [String: AnalyticsAPIHierarchyValue].self,
             forKey: .values
-        ) ?? [:]
+        )) ?? [:]
         children = try container.decodeFlexibleArray(
             AnalyticsAPIHierarchyNode.self,
             forKey: .children
@@ -893,19 +955,23 @@ private struct AnalyticsAPIHierarchyValue: Decodable, Sendable {
     }
 
     init(from decoder: any Decoder) throws {
-        if let scalar = try? decoder.singleValueContainer(),
-           let value = try? scalar.decode(Double.self) {
-            self.value = value
-            valueLabel = nil
-            return
-        }
-
-        if let scalar = try? decoder.singleValueContainer(),
-           let string = try? scalar.decode(String.self),
-           let value = Double(string.replacingOccurrences(of: ",", with: ".")) {
-            self.value = value
-            valueLabel = nil
-            return
+        if let scalar = try? decoder.singleValueContainer() {
+            if scalar.decodeNil() {
+                value = 0
+                valueLabel = nil
+                return
+            }
+            if let value = try? scalar.decode(Double.self) {
+                self.value = value
+                valueLabel = nil
+                return
+            }
+            if let string = try? scalar.decode(String.self),
+               let value = Double(string.replacingOccurrences(of: ",", with: ".")) {
+                self.value = value
+                valueLabel = nil
+                return
+            }
         }
 
         let container = try decoder.container(keyedBy: CodingKeys.self)
