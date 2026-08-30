@@ -53,39 +53,128 @@ extension AnalyticsChart {
     }
 
     var horizontalBars: some View {
-        Chart(indicator.orderedRows) { row in
-            BarMark(
-                x: .value("Значение", animatedValue(for: row)),
-                y: .value("Группа", row.label),
-                height: barMarkDimension
-            )
-            .position(by: .value("Серия", horizontalBarPosition(for: row)), axis: .vertical)
-            .foregroundStyle(horizontalGradient(for: row))
-            .alignsMarkStylesWithPlotArea(false)
-            .opacity(opacity(for: row))
-            .cornerRadius(3)
-            .annotation(
-                position: .trailing,
-                alignment: .center,
-                spacing: 5,
-                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
-            ) {
-                if shouldShowValueLabel(for: row) {
-                    valueLabel(for: row)
+        let domain = HorizontalBarTrackScale.domain(for: indicator.orderedRows.map(\.value))
+
+        return VStack(alignment: .leading, spacing: 18 * dashboardContentScale) {
+            ForEach(indicator.rowGroups) { group in
+                horizontalBarGroup(group, domain: domain)
+            }
+        }
+        .padding(.vertical, 4 * dashboardContentScale)
+    }
+
+    private func horizontalBarGroup(
+        _ group: IndicatorRowGroup,
+        domain: ClosedRange<Double>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10 * dashboardContentScale) {
+            if group.rows.count > 1 {
+                HStack(alignment: .firstTextBaseline, spacing: 10 * dashboardContentScale) {
+                    Text(group.label)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+
+                    Spacer(minLength: 8 * dashboardContentScale)
+
+                    if HorizontalBarLabelPolicy.showsGroupTotal(
+                        rowCount: group.rows.count,
+                        showsAggregateValue: indicator.showsAggregateValue
+                    ) {
+                        Text(group.totalLabel ?? indicator.formattedNumber(group.totalValue))
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10 * dashboardContentScale) {
+                ForEach(group.rows) { row in
+                    horizontalBarRow(row, group: group, domain: domain)
                 }
             }
         }
-        .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
-        .chartXScale(domain: horizontalBarValueLabelDomain)
-        .chartXAxis {
-            humanReadableValueAxis(position: .bottom)
+    }
+
+    private func horizontalBarRow(
+        _ row: IndicatorRow,
+        group: IndicatorRowGroup,
+        domain: ClosedRange<Double>
+    ) -> some View {
+        let title = group.rows.count > 1 ? (row.series ?? "Значение") : group.label
+        let color = chartColor(for: row)
+        let isSelected = rowMatchesSelection(row)
+
+        return Button {
+            toggleSelection(row.id)
+        } label: {
+            VStack(alignment: .leading, spacing: 6 * dashboardContentScale) {
+                HStack(alignment: .firstTextBaseline, spacing: 10 * dashboardContentScale) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
+
+                    Spacer(minLength: 8 * dashboardContentScale)
+
+                    if HorizontalBarLabelPolicy.showsRowValue(
+                        showRowValues: indicator.showRowValues,
+                        showValueLabels: indicator.showValueLabels
+                    ) {
+                        Text(displayValue(for: row))
+                            .font(.caption.monospacedDigit().weight(.bold))
+                            .foregroundStyle(indicator.valueColor(for: row))
+                            .contentTransition(.numericText())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+
+                horizontalBarTrack(row, domain: domain)
+            }
+            .padding(.horizontal, 7 * dashboardContentScale)
+            .padding(.vertical, 5 * dashboardContentScale)
+            .background(color.opacity(isSelected ? 0.09 : 0), in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(color.opacity(isSelected ? 0.24 : 0), lineWidth: 1)
+            }
+            .contentShape(Rectangle())
+            .opacity(opacity(for: row))
         }
-        .chartYAxis {
-            readableHorizontalCategoryAxis
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(displayValue(for: row))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func horizontalBarTrack(
+        _ row: IndicatorRow,
+        domain: ClosedRange<Double>
+    ) -> some View {
+        GeometryReader { geometry in
+            let segment = HorizontalBarTrackScale.segment(
+                for: animatedValue(for: row),
+                in: domain
+            )
+            let width = geometry.size.width * segment.lengthFraction
+
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 5 * dashboardContentScale)
+                    .fill(Color.secondary.opacity(colorScheme == .dark ? 0.16 : 0.10))
+
+                RoundedRectangle(cornerRadius: 5 * dashboardContentScale)
+                    .fill(horizontalGradient(for: row))
+                    .frame(width: segment.lengthFraction > 0 ? max(width, 1) : 0)
+                    .offset(x: geometry.size.width * segment.startFraction)
+            }
         }
-        .chartOverlay { proxy in
-            chartTapOverlay(proxy: proxy, mode: .horizontalBar)
-        }
+        .frame(height: 10 * dashboardContentScale)
     }
 
     var stackedBars: some View {

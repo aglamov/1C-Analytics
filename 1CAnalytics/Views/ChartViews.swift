@@ -144,8 +144,6 @@ struct AnalyticsChart: View {
             case .horizontalBar:
                 if indicator.usesMixedUnitPersonnelPresentation {
                     personnelComposition
-                } else if indicator.usesCitizenshipCompositionPresentation {
-                    citizenshipComposition
                 } else {
                     horizontalBars
                 }
@@ -249,7 +247,10 @@ struct AnalyticsChart: View {
                     }
                     .frame(height: 9)
 
-                    if shouldShowValueLabel(for: row) {
+                    if HorizontalBarLabelPolicy.showsRowValue(
+                        showRowValues: indicator.showRowValues,
+                        showValueLabels: indicator.showValueLabels
+                    ) {
                         if rowMatchesSelection(row) {
                             valueLabel(for: row)
                         } else {
@@ -330,114 +331,6 @@ struct AnalyticsChart: View {
         .chartOverlay { proxy in
             chartTapOverlay(proxy: proxy, mode: .stackedBar)
         }
-    }
-
-    var citizenshipComposition: some View {
-        let groups = indicator.rowGroups
-        let maximumTotal = max(groups.map(\.totalValue).max() ?? 0, 1)
-
-        return VStack(alignment: .leading, spacing: 18) {
-            ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(group.label)
-                            .font(histogramYAxisFont.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        Spacer(minLength: 8)
-
-                        Text(citizenshipValuesLabel(for: group))
-                            .font(.caption2.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-                    }
-
-                    GeometryReader { geometry in
-                        let filledWidth = geometry.size.width
-                            * min(max(group.totalValue / maximumTotal, 0), 1)
-
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.secondary.opacity(colorScheme == .dark ? 0.16 : 0.10))
-
-                            HStack(spacing: 0) {
-                                ForEach(group.rows) { row in
-                                    Rectangle()
-                                        .fill(horizontalGradient(for: row))
-                                        .frame(
-                                            width: filledWidth
-                                                * max(row.value, 0)
-                                                / max(group.totalValue, 1)
-                                        )
-                                        .opacity(opacity(for: row))
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            toggleSelection(row.id)
-                                        }
-                                }
-                            }
-                            .frame(width: filledWidth, alignment: .leading)
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                            ForEach(group.rows.filter(rowMatchesSelection)) { row in
-                                Text(displayValue(for: row))
-                                    .font(.headline.monospacedDigit().weight(.bold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .fixedSize(horizontal: true, vertical: false)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(opaqueLabelBackground, in: Capsule())
-                                    .overlay {
-                                        Capsule()
-                                            .strokeBorder(chartColor(for: row).opacity(0.42), lineWidth: 1)
-                                    }
-                                    .position(
-                                        x: citizenshipSelectedLabelX(
-                                            for: row,
-                                            in: group,
-                                            filledWidth: filledWidth,
-                                            availableWidth: geometry.size.width
-                                        ),
-                                        y: geometry.size.height / 2
-                                    )
-                                    .subtleTextShadow()
-                                    .allowsHitTesting(false)
-                                    .transition(.scale.combined(with: .opacity))
-                            }
-                        }
-                    }
-                    .frame(height: 26)
-                }
-                .accessibilityElement(children: .combine)
-            }
-        }
-    }
-
-    func citizenshipSelectedLabelX(
-        for row: IndicatorRow,
-        in group: IndicatorRowGroup,
-        filledWidth: CGFloat,
-        availableWidth: CGFloat
-    ) -> CGFloat {
-        let leadingValue = group.rows
-            .prefix { $0.id != row.id }
-            .reduce(0) { $0 + max($1.value, 0) }
-        let centerValue = leadingValue + max(row.value, 0) / 2
-        let naturalX = filledWidth * centerValue / max(group.totalValue, 1)
-        return min(max(naturalX, 42), max(availableWidth - 42, 42))
-    }
-
-    func citizenshipValuesLabel(for group: IndicatorRowGroup) -> String {
-        group.rows.map { row in
-            let name = row.series?.replacingOccurrences(of: ", чел", with: "")
-            return [name, displayValue(for: row)]
-                .compactMap { $0 }
-                .joined(separator: ": ")
-        }
-        .joined(separator: "  ·  ")
     }
 
     func compositionShare(for row: IndicatorRow) -> Double {

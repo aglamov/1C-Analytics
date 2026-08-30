@@ -713,7 +713,67 @@ final class ReleaseReadinessTests: XCTestCase {
 
         XCTAssertGreaterThan(threeSeriesHeight, singleSeriesHeight)
         XCTAssertEqual(singleSeriesHeight, 240)
-        XCTAssertEqual(threeSeriesHeight, 424)
+        XCTAssertEqual(threeSeriesHeight, 672)
+    }
+
+    func testHorizontalBarLabelFlagsStayIndependentWithoutDuplicatingValues() {
+        XCTAssertTrue(
+            HorizontalBarLabelPolicy.showsRowValue(
+                showRowValues: true,
+                showValueLabels: false
+            )
+        )
+        XCTAssertTrue(
+            HorizontalBarLabelPolicy.showsRowValue(
+                showRowValues: false,
+                showValueLabels: true
+            )
+        )
+        XCTAssertFalse(
+            HorizontalBarLabelPolicy.showsRowValue(
+                showRowValues: false,
+                showValueLabels: false
+            )
+        )
+        XCTAssertTrue(
+            HorizontalBarLabelPolicy.showsGroupTotal(
+                rowCount: 2,
+                showsAggregateValue: true
+            )
+        )
+        XCTAssertFalse(
+            HorizontalBarLabelPolicy.showsGroupTotal(
+                rowCount: 2,
+                showsAggregateValue: false
+            )
+        )
+    }
+
+    func testHorizontalBarTrackScaleSupportsPositiveNegativeAndMixedValues() {
+        let positiveDomain = HorizontalBarTrackScale.domain(for: [40, 100])
+        XCTAssertEqual(positiveDomain, 0...100)
+        XCTAssertEqual(
+            HorizontalBarTrackScale.segment(for: 40, in: positiveDomain),
+            HorizontalBarTrackSegment(startFraction: 0, lengthFraction: 0.4)
+        )
+
+        let negativeDomain = HorizontalBarTrackScale.domain(for: [-100, -40])
+        XCTAssertEqual(negativeDomain, -100...0)
+        XCTAssertEqual(
+            HorizontalBarTrackScale.segment(for: -40, in: negativeDomain),
+            HorizontalBarTrackSegment(startFraction: 0.6, lengthFraction: 0.4)
+        )
+
+        let mixedDomain = HorizontalBarTrackScale.domain(for: [-25, 75])
+        XCTAssertEqual(mixedDomain, -25...75)
+        XCTAssertEqual(
+            HorizontalBarTrackScale.segment(for: -25, in: mixedDomain),
+            HorizontalBarTrackSegment(startFraction: 0, lengthFraction: 0.25)
+        )
+        XCTAssertEqual(
+            HorizontalBarTrackScale.segment(for: 75, in: mixedDomain),
+            HorizontalBarTrackSegment(startFraction: 0.25, lengthFraction: 0.75)
+        )
     }
 
     func testDetailPresentationKeepsMultipleParametersSeparate() {

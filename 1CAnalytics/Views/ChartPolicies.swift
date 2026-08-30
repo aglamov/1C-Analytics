@@ -107,8 +107,12 @@ struct ValidChartGeometry<Content: View>: View {
 enum ChartHeightPolicy {
     static func horizontalBarHeight(categoryCount: Int, seriesCount: Int) -> CGFloat {
         let rowsPerCategory = max(seriesCount, 1)
-        let categoryHeight = max(46, CGFloat(rowsPerCategory) * 23 + 24)
-        return max(196, CGFloat(max(categoryCount, 1)) * categoryHeight + 52)
+        let groupHeaderHeight: CGFloat = rowsPerCategory > 1 ? 28 : 0
+        let categoryHeight = max(
+            52,
+            CGFloat(rowsPerCategory) * 40 + groupHeaderHeight + 16
+        )
+        return max(196, CGFloat(max(categoryCount, 1)) * categoryHeight + 16)
     }
 
     static func detailHeight(for indicator: Indicator, availableWidth: CGFloat) -> CGFloat {
@@ -144,6 +148,63 @@ enum ChartHeightPolicy {
         case .tile:
             return 300
         }
+    }
+}
+
+struct HorizontalBarTrackSegment: Equatable {
+    let startFraction: Double
+    let lengthFraction: Double
+}
+
+enum HorizontalBarLabelPolicy {
+    static func showsRowValue(
+        showRowValues: Bool?,
+        showValueLabels: Bool?
+    ) -> Bool {
+        (showRowValues ?? true) || (showValueLabels ?? true)
+    }
+
+    static func showsGroupTotal(
+        rowCount: Int,
+        showsAggregateValue: Bool
+    ) -> Bool {
+        rowCount > 1 && showsAggregateValue
+    }
+}
+
+enum HorizontalBarTrackScale {
+    static func domain(for values: [Double]) -> ClosedRange<Double> {
+        let finiteValues = values.filter(\.isFinite)
+        guard let minimum = finiteValues.min(), let maximum = finiteValues.max() else {
+            return 0...1
+        }
+
+        let lowerBound = min(minimum, 0)
+        let upperBound = max(maximum, 0)
+        guard lowerBound < upperBound else {
+            return 0...1
+        }
+
+        return lowerBound...upperBound
+    }
+
+    static func segment(
+        for value: Double,
+        in domain: ClosedRange<Double>
+    ) -> HorizontalBarTrackSegment {
+        let span = domain.upperBound - domain.lowerBound
+        guard value.isFinite, span.isFinite, span > 0 else {
+            return HorizontalBarTrackSegment(startFraction: 0, lengthFraction: 0)
+        }
+
+        let clampedValue = min(max(value, domain.lowerBound), domain.upperBound)
+        let zeroFraction = min(max(-domain.lowerBound / span, 0), 1)
+        let valueFraction = min(max((clampedValue - domain.lowerBound) / span, 0), 1)
+
+        return HorizontalBarTrackSegment(
+            startFraction: min(zeroFraction, valueFraction),
+            lengthFraction: abs(valueFraction - zeroFraction)
+        )
     }
 }
 
