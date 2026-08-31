@@ -382,6 +382,23 @@ enum VerticalBarValueLabelScale {
     }
 }
 
+enum VerticalBarPresentationPolicy {
+    static func extentValues(
+        for rows: [IndicatorRow],
+        layout: BarLayout?
+    ) -> [Double] {
+        guard layout == .stacked else {
+            return rows.map(\.value)
+        }
+
+        return Dictionary(grouping: rows, by: \.label).values.flatMap { groupRows in
+            let positiveExtent = groupRows.reduce(0) { $0 + max($1.value, 0) }
+            let negativeExtent = groupRows.reduce(0) { $0 + min($1.value, 0) }
+            return [negativeExtent, positiveExtent]
+        }
+    }
+}
+
 enum DonutLabelPlacementPolicy {
     static func shouldPlaceOutside(
         share: Double,

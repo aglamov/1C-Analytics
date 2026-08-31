@@ -59,7 +59,12 @@ extension AnalyticsChart {
     }
 
     var verticalBarValueLabelDomain: ClosedRange<Double> {
-        VerticalBarValueLabelScale.domain(for: indicator.orderedRows.map(\.value))
+        VerticalBarValueLabelScale.domain(
+            for: VerticalBarPresentationPolicy.extentValues(
+                for: indicator.orderedRows,
+                layout: indicator.barLayout
+            )
+        )
     }
 
     var horizontalBarValueLabelDomain: ClosedRange<Double> {
@@ -67,7 +72,12 @@ extension AnalyticsChart {
     }
 
     var stackedBarValueLabelDomain: ClosedRange<Double> {
-        VerticalBarValueLabelScale.domain(for: indicator.rowGroups.map(\.totalValue))
+        VerticalBarValueLabelScale.domain(
+            for: VerticalBarPresentationPolicy.extentValues(
+                for: indicator.orderedRows,
+                layout: .stacked
+            )
+        )
     }
 
     func trendValueLabelDomain(includesZero: Bool) -> ClosedRange<Double> {

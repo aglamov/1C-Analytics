@@ -140,7 +140,11 @@ struct AnalyticsChart: View {
         } else {
             switch indicator.chartType {
             case .bar, .compactBar:
-                verticalBars
+                if indicator.barLayout == .stacked {
+                    stackedBars
+                } else {
+                    verticalBars
+                }
             case .horizontalBar:
                 if indicator.usesMixedUnitPersonnelPresentation {
                     personnelComposition

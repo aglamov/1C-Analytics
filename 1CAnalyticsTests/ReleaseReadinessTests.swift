@@ -569,6 +569,32 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(domain.upperBound, 61, accuracy: 0.0001)
     }
 
+    func testVerticalBarExtentUsesFullStackAndKeepsGroupedValuesSeparate() {
+        let rows = [
+            IndicatorRow(id: "a", label: "2026", value: 2_000, series: "A", sortOrder: 0),
+            IndicatorRow(id: "b", label: "2026", value: 3_000, series: "B", sortOrder: 1),
+            IndicatorRow(id: "c", label: "2027", value: -400, series: "A", sortOrder: 2),
+            IndicatorRow(id: "d", label: "2027", value: -600, series: "B", sortOrder: 3)
+        ]
+
+        XCTAssertEqual(
+            VerticalBarPresentationPolicy.extentValues(for: rows, layout: .spaced),
+            [2_000, 3_000, -400, -600]
+        )
+
+        let stackedExtents = VerticalBarPresentationPolicy.extentValues(
+            for: rows,
+            layout: .stacked
+        )
+        XCTAssertEqual(stackedExtents.max(), 5_000)
+        XCTAssertEqual(stackedExtents.min(), -1_000)
+        XCTAssertEqual(
+            VerticalBarValueLabelScale.domain(for: stackedExtents).upperBound,
+            6_320,
+            accuracy: 0.0001
+        )
+    }
+
     func testSmallDonutLabelsMoveOutside() {
         XCTAssertTrue(
             DonutLabelPlacementPolicy.shouldPlaceOutside(

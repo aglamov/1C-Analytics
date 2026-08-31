@@ -23,7 +23,10 @@ extension AnalyticsChart {
                 .annotation(
                     position: .top,
                     alignment: .center,
-                    overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                    overflowResolution: .init(
+                        x: .fit(to: .chart),
+                        y: .fit(to: .chart)
+                    )
                 ) {
                     if shouldShowValueLabel(for: row) {
                         valueLabel(for: row)
@@ -208,7 +211,15 @@ extension AnalyticsChart {
                             y: .value("Итого", group.totalValue)
                         )
                         .symbolSize(0)
-                        .annotation(position: .top, alignment: .center, spacing: 5) {
+                        .annotation(
+                            position: .top,
+                            alignment: .center,
+                            spacing: 5,
+                            overflowResolution: .init(
+                                x: .fit(to: .chart),
+                                y: .fit(to: .chart)
+                            )
+                        ) {
                             groupTotalLabel(group)
                         }
                     }
