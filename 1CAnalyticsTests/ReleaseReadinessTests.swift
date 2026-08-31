@@ -1936,9 +1936,76 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertEqual(indicator.chartType, .bar)
-        XCTAssertEqual(indicator.rows.map(\.label), ["1", "2"])
+        XCTAssertEqual(indicator.rows.map(\.label), ["Не указано 1", "Не указано 2"])
         XCTAssertEqual(indicator.rows.map(\.value), [86.4, 88.1])
         XCTAssertEqual(indicator.value, Decimal(string: "174.5"))
+    }
+
+    func testEveryRowBasedChartKeepsUnnamedValuesFromMixedPayloads() throws {
+        let chartTypes = [
+            "BarMark",
+            "BarMarkHorizon",
+            "BarMarkStacking",
+            "SectorMarkInnerRadius",
+            "LineMark",
+            "AreaMark",
+            "BarMarkCompact",
+            "GeoMap",
+            "TileMark"
+        ]
+
+        for chartType in chartTypes {
+            let data = Data(
+                """
+                {
+                  "sections": [{
+                    "name": "Международная деятельность",
+                    "values": [{
+                      "name": "Количество ИГ",
+                      "type": "\(chartType)",
+                      "values": [
+                        {"group": "Клиническая медицина", "value": 1444},
+                        {"value": 827},
+                        {"group": "Экономика и управление", "value": 679}
+                      ]
+                    }]
+                  }]
+                }
+                """.utf8
+            )
+
+            let indicator = try XCTUnwrap(
+                JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                    .toDashboard()
+                    .indicators
+                    .first
+            )
+
+            XCTAssertEqual(
+                indicator.rows.map(\.label),
+                ["Клиническая медицина", "Не указано", "Экономика и управление"],
+                chartType
+            )
+            XCTAssertEqual(indicator.rows.map(\.value), [1444, 827, 679], chartType)
+            XCTAssertEqual(indicator.value, Decimal(2950), chartType)
+        }
+    }
+
+    func testUnnamedNestedSeriesUsesReadableFallback() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Test","values":[{"name":"Chart","type":"BarMarkHorizon","values":[{"group":"Экономика и управление","subgroup":[{"value":679},{"name":"Иностранные граждане","value":28}]}]}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertEqual(indicator.rows.map(\.label), ["Экономика и управление", "Экономика и управление"])
+        XCTAssertEqual(indicator.rows.map(\.series), ["Не указано", "Иностранные граждане"])
+        XCTAssertEqual(indicator.rows.map(\.value), [679, 28])
     }
 
     func testCompactBarAcceptsNumericGroupsFromScienceSection() throws {

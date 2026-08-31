@@ -681,26 +681,45 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         let uncategorizedValues = values.filter {
             !$0.hasCategoryLabel && !$0.hasSubgroupValues
         }
-        let totalRow = categorizedValues.isEmpty
-            ? (chartType.displaysRows ? nil : uncategorizedValues.first)
-            : uncategorizedValues.first
+        let totalRow = chartType.displaysRows ? nil : uncategorizedValues.first
         let rowValues: [AnalyticsAPIValue]
         if chartType == .compactBar {
             rowValues = values.filter(\.hasCompactBarValues)
-        } else if !categorizedValues.isEmpty {
-            rowValues = categorizedValues
         } else if chartType.displaysRows {
-            // Some 1C responses contain several numeric values without group
-            // labels. They are separate data points, not duplicate total rows.
-            rowValues = uncategorizedValues.filter { $0.value != nil }
+            // A missing group/name/title is still a data point. In mixed 1C
+            // responses it must not be mistaken for an implicit total and
+            // silently removed from the chart.
+            rowValues = values.filter { $0.value != nil || $0.hasSubgroupValues }
+        } else if !categorizedValues.isEmpty {
+            // Scalar cards may still carry named detail rows.
+            rowValues = categorizedValues
         } else {
             rowValues = []
         }
-        var rows = rowValues
-            .enumerated()
-            .flatMap { rowIndex, value in
-                value.toRows(index: rowIndex, chartType: chartType)
+        let unnamedScalarCount = rowValues.count {
+            !$0.hasCategoryLabel && !$0.hasSubgroupValues && $0.value != nil
+        }
+        var unnamedScalarIndex = 0
+        var rows = rowValues.enumerated().flatMap { rowIndex, value in
+            let isUnnamedScalar = !value.hasCategoryLabel
+                && !value.hasSubgroupValues
+                && value.value != nil
+            let unnamedCategoryLabel: String
+            if isUnnamedScalar {
+                unnamedScalarIndex += 1
+                unnamedCategoryLabel = unnamedScalarCount > 1
+                    ? "\(AnalyticsFallbackLabel.unnamedCategory) \(unnamedScalarIndex)"
+                    : AnalyticsFallbackLabel.unnamedCategory
+            } else {
+                unnamedCategoryLabel = AnalyticsFallbackLabel.unnamedCategory
             }
+
+            return value.toRows(
+                index: rowIndex,
+                chartType: chartType,
+                unnamedCategoryLabel: unnamedCategoryLabel
+            )
+        }
         let calculatedTotal = rows.isEmpty
             ? nil
             : rows.reduce(0) { $0 + $1.value }
@@ -1072,7 +1091,11 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         subgroup?.isEmpty == false
     }
 
-    func toRows(index: Int, chartType: ChartType) -> [IndicatorRow] {
+    func toRows(
+        index: Int,
+        chartType: ChartType,
+        unnamedCategoryLabel: String
+    ) -> [IndicatorRow] {
         if let subgroup, !subgroup.isEmpty {
             let flattenedSubgroups = subgroup.flatMap {
                 $0.flattened(
@@ -1088,7 +1111,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                     let label = subgroup.name
                     return IndicatorRow(
                         id: "\(index)-\(subgroupIndex)-\(label.stableID)",
-                        label: label.isEmpty ? fallbackLabel(index: subgroupIndex) : label,
+                        label: label.isEmpty ? AnalyticsFallbackLabel.unnamedCategory : label,
                         value: subgroup.value,
                         series: nil,
                         sortOrder: index * 100 + subgroupIndex,
@@ -1101,13 +1124,18 @@ struct AnalyticsAPIValue: Decodable, Sendable {
                 }
             }
 
-            let groupLabel = normalizedGroup.isEmpty ? preferredLabel(index: index) : normalizedGroup
+            let groupLabel = normalizedGroup.isEmpty
+                ? preferredLabel(unnamedCategoryLabel: unnamedCategoryLabel)
+                : normalizedGroup
             return flattenedSubgroups.enumerated().map { subgroupIndex, subgroup in
-                IndicatorRow(
+                let series = subgroup.name.isEmpty
+                    ? AnalyticsFallbackLabel.unnamedCategory
+                    : subgroup.name
+                return IndicatorRow(
                     id: "\(groupLabel.stableID)-\(subgroupIndex)-\(subgroup.name.stableID)",
                     label: groupLabel,
                     value: subgroup.value,
-                    series: subgroup.name,
+                    series: series,
                     sortOrder: index * 100 + subgroupIndex,
                     colorGraph: subgroup.colorGraph,
                     colorValue: subgroup.colorValue,
@@ -1118,7 +1146,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
             }
         }
 
-        let label = preferredLabel(index: index)
+        let label = preferredLabel(unnamedCategoryLabel: unnamedCategoryLabel)
         return [
             IndicatorRow(
                 id: "\(index)-\(label.stableID)",
@@ -1135,7 +1163,7 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         ]
     }
 
-    private func preferredLabel(index: Int) -> String {
+    private func preferredLabel(unnamedCategoryLabel: String) -> String {
         if !normalizedGroup.isEmpty {
             return normalizedGroup
         }
@@ -1145,12 +1173,12 @@ struct AnalyticsAPIValue: Decodable, Sendable {
         if !normalizedTitle.isEmpty {
             return normalizedTitle
         }
-        return fallbackLabel(index: index)
+        return unnamedCategoryLabel
     }
+}
 
-    private func fallbackLabel(index: Int) -> String {
-        String(index + 1)
-    }
+private enum AnalyticsFallbackLabel {
+    static let unnamedCategory = "Не указано"
 }
 
 struct AnalyticsAPISubgroup: Decodable, Sendable {
