@@ -105,6 +105,8 @@ struct ValidChartGeometry<Content: View>: View {
 }
 
 enum ChartHeightPolicy {
+    static let dashboardTileHeight: CGFloat = 260
+
     static func horizontalBarHeight(categoryCount: Int, seriesCount: Int) -> CGFloat {
         let rowsPerCategory = max(seriesCount, 1)
         let groupHeaderHeight: CGFloat = rowsPerCategory > 1 ? 28 : 0
@@ -113,6 +115,19 @@ enum ChartHeightPolicy {
             CGFloat(rowsPerCategory) * 40 + groupHeaderHeight + 16
         )
         return max(196, CGFloat(max(categoryCount, 1)) * categoryHeight + 16)
+    }
+
+    static func dashboardExpandableHierarchyHeight(for indicator: Indicator) -> CGFloat {
+        if indicator.resolvedExpandableOverviewType == .tile {
+            return dashboardTileHeight
+        }
+
+        let rootCount = max(indicator.hierarchy?.nodes.count ?? 0, 1)
+        let seriesCount = max(indicator.hierarchy?.displayedSeries.count ?? 0, 1)
+        let rowHeight: CGFloat = indicator.hierarchy?.barMode == .grouped
+            ? CGFloat(seriesCount) * 32 + 40
+            : 70
+        return max(190, CGFloat(rootCount) * rowHeight + 52)
     }
 
     static func detailHeight(for indicator: Indicator, availableWidth: CGFloat) -> CGFloat {

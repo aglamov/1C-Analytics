@@ -111,7 +111,7 @@ struct IndicatorDashboardCard: View {
         case .tile:
             if let overview = presentationIndicator.hierarchyOverviewIndicator(chartType: .tile) {
                 TileChartView(indicator: overview, appliesCardLimit: true)
-                    .frame(minHeight: chartHeight)
+                    .frame(height: chartHeight, alignment: .top)
             }
         case nil:
             ExpandableHierarchyChartView(indicator: presentationIndicator, showsExpandedHierarchy: false)
@@ -158,16 +158,13 @@ struct IndicatorDashboardCard: View {
         case .radar:
             return 300
         case .expandableHierarchy:
-            let rootCount = max(presentationIndicator.hierarchy?.nodes.count ?? 0, 1)
-            let seriesCount = max(presentationIndicator.hierarchy?.displayedSeries.count ?? 0, 1)
-            let rowHeight: CGFloat = presentationIndicator.hierarchy?.barMode == .grouped
-                ? CGFloat(seriesCount) * 32 + 40
-                : 70
-            return max(190, CGFloat(rootCount) * rowHeight + 52)
+            return ChartHeightPolicy.dashboardExpandableHierarchyHeight(
+                for: presentationIndicator
+            )
         case .donut, .percentDonut:
             return presentationIndicator.orderedRows.count > 4 ? 310 : 286
         case .tile:
-            return 260
+            return ChartHeightPolicy.dashboardTileHeight
         case .gauge:
             return 250
         case .oneValue, .linearProgress, .geoMap:

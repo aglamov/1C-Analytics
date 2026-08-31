@@ -2633,6 +2633,10 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(indicators[2].maxGroups, 4)
         XCTAssertEqual(indicators[2].hierarchy?.nodes.first?.label, "Без явного id")
         XCTAssertFalse(indicators[2].showsLegend)
+        XCTAssertEqual(
+            ChartHeightPolicy.dashboardExpandableHierarchyHeight(for: indicators[2]),
+            ChartHeightPolicy.dashboardTileHeight
+        )
     }
 
     func testCardGroupLimitAggregatesRemainderAndTilePercentagesSumExactly() {
