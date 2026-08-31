@@ -182,6 +182,12 @@ extension AnalyticsChart {
 
                     ForEach(Array(categoryLabels.enumerated()), id: \.offset) { index, label in
                         if let position = proxy.position(forX: Double(index)) {
+                            let xPosition = TrendAxisLabelPositionPolicy.clampedCenter(
+                                proposedX: frame.minX + position,
+                                labelWidth: labelWidth,
+                                plotRange: frame.minX...frame.maxX
+                            )
+
                             Text(wrappedAxisLabel(label))
                                 .font(.caption2)
                                 .foregroundStyle(Color.secondary)
@@ -191,7 +197,7 @@ extension AnalyticsChart {
                                 .allowsTightening(true)
                                 .frame(width: labelWidth)
                                 .position(
-                                    x: frame.minX + position,
+                                    x: xPosition,
                                     y: frame.maxY + axisHeight / 2
                                 )
                         }

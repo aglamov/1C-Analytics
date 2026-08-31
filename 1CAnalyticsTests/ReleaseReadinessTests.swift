@@ -691,6 +691,35 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(TrendLabelPlacementPolicy.placement(for: rows[2], in: rows), .below)
     }
 
+    func testTrendAxisLabelsStayInsidePlotBounds() {
+        let plotRange: ClosedRange<CGFloat> = 40...340
+
+        XCTAssertEqual(
+            TrendAxisLabelPositionPolicy.clampedCenter(
+                proposedX: 40,
+                labelWidth: 100,
+                plotRange: plotRange
+            ),
+            90
+        )
+        XCTAssertEqual(
+            TrendAxisLabelPositionPolicy.clampedCenter(
+                proposedX: 190,
+                labelWidth: 100,
+                plotRange: plotRange
+            ),
+            190
+        )
+        XCTAssertEqual(
+            TrendAxisLabelPositionPolicy.clampedCenter(
+                proposedX: 340,
+                labelWidth: 100,
+                plotRange: plotRange
+            ),
+            290
+        )
+    }
+
     func testEqualTrendValuesArePlacedOnOppositeSides() {
         let rows = [
             IndicatorRow(id: "first", label: "2025", value: 88, series: "A", sortOrder: 0),

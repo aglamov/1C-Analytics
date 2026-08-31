@@ -283,6 +283,26 @@ enum TrendLabelPlacementPolicy {
     }
 }
 
+enum TrendAxisLabelPositionPolicy {
+    static func clampedCenter(
+        proposedX: CGFloat,
+        labelWidth: CGFloat,
+        plotRange: ClosedRange<CGFloat>
+    ) -> CGFloat {
+        let plotWidth = max(plotRange.upperBound - plotRange.lowerBound, 0)
+        let effectiveLabelWidth = min(max(labelWidth, 0), plotWidth)
+        let halfWidth = effectiveLabelWidth / 2
+        let lowerBound = plotRange.lowerBound + halfWidth
+        let upperBound = plotRange.upperBound - halfWidth
+
+        guard lowerBound <= upperBound else {
+            return (plotRange.lowerBound + plotRange.upperBound) / 2
+        }
+
+        return min(max(proposedX, lowerBound), upperBound)
+    }
+}
+
 enum SelectedTrendLabelPositionPolicy {
     static func center(
         for point: CGPoint,
