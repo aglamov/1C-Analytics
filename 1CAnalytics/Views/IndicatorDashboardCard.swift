@@ -68,7 +68,7 @@ struct IndicatorDashboardCard: View {
         case .geoMap:
             GeoMapIndicatorView(indicator: presentationIndicator)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: chartHeight)
+                .frame(height: chartHeight, alignment: .top)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
         case .expandableHierarchy:
             expandableHierarchyOverview
@@ -106,7 +106,8 @@ struct IndicatorDashboardCard: View {
             if let overview = presentationIndicator.hierarchyOverviewIndicator(chartType: .geoMap) {
                 GeoMapIndicatorView(indicator: overview)
                     .frame(maxWidth: .infinity)
-                    .frame(minHeight: chartHeight)
+                    .frame(height: chartHeight, alignment: .top)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         case .tile:
             if let overview = presentationIndicator.hierarchyOverviewIndicator(chartType: .tile) {
@@ -167,7 +168,9 @@ struct IndicatorDashboardCard: View {
             return ChartHeightPolicy.dashboardTileHeight
         case .gauge:
             return 250
-        case .oneValue, .linearProgress, .geoMap:
+        case .geoMap:
+            return ChartHeightPolicy.dashboardMapHeight
+        case .oneValue, .linearProgress:
             return 220
         }
     }

@@ -918,28 +918,56 @@ struct ExpandableHierarchyChartView: View {
         }
     }
 
+    @ViewBuilder
     private func hierarchyNodeRow(
         _ visibleNode: HierarchyVisibleNode,
         hierarchy: ExpandableHierarchy
     ) -> some View {
+        let isExpandable = showsExpandedHierarchy
+            && !visibleNode.isTotal
+            && !visibleNode.node.children.isEmpty
+        let isExpanded = expandedNodeIDs.contains(visibleNode.node.id)
+
+        if isExpandable {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    toggleExpansion(visibleNode.node.id)
+                }
+            } label: {
+                hierarchyNodeRowContent(
+                    visibleNode,
+                    hierarchy: hierarchy,
+                    showsChevron: true,
+                    isExpanded: isExpanded
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(isExpanded ? "Свернуть вложенные строки" : "Показать вложенные строки")
+        } else {
+            hierarchyNodeRowContent(
+                visibleNode,
+                hierarchy: hierarchy,
+                showsChevron: false,
+                isExpanded: false
+            )
+        }
+    }
+
+    private func hierarchyNodeRowContent(
+        _ visibleNode: HierarchyVisibleNode,
+        hierarchy: ExpandableHierarchy,
+        showsChevron: Bool,
+        isExpanded: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 7 * contentScale) {
             HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
-                if showsExpandedHierarchy,
-                   !visibleNode.isTotal,
-                   !visibleNode.node.children.isEmpty {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            toggleExpansion(visibleNode.node.id)
-                        }
-                    } label: {
-                        Image(systemName: expandedNodeIDs.contains(visibleNode.node.id)
-                            ? "chevron.down"
-                            : "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .frame(width: 24, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(expandedNodeIDs.contains(visibleNode.node.id) ? "Свернуть" : "Развернуть")
+                if showsChevron {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 24, height: 24)
+                        .accessibilityHidden(true)
                 }
 
                 Text(visibleNode.isTotal ? "Итого" : visibleNode.node.label)

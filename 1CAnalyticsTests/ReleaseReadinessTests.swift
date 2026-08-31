@@ -2639,6 +2639,26 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testExpandableMapOverviewHeightDoesNotDependOnNodeCount() throws {
+        let data = Data(
+            #"{"sections":[{"name":"Контракт","values":[{"name":"Карта","type":"ExpandableTableMark","overviewType":"map","series":[{"key":"value","name":"Значение"}],"nodes":[{"label":"A","values":{"value":1}},{"label":"B","values":{"value":2}},{"label":"C","values":{"value":3}},{"label":"D","values":{"value":4}},{"label":"E","values":{"value":5}},{"label":"F","values":{"value":6}},{"label":"G","values":{"value":7}}]}]}]}"#.utf8
+        )
+
+        let indicator = try XCTUnwrap(
+            JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+                .toDashboard()
+                .indicators
+                .first
+        )
+
+        XCTAssertEqual(indicator.resolvedExpandableOverviewType, .map)
+        XCTAssertEqual(indicator.hierarchy?.nodes.count, 7)
+        XCTAssertEqual(
+            ChartHeightPolicy.dashboardExpandableHierarchyHeight(for: indicator),
+            ChartHeightPolicy.dashboardMapHeight
+        )
+    }
+
     func testCardGroupLimitAggregatesRemainderAndTilePercentagesSumExactly() {
         let indicator = Indicator(
             id: "limited",

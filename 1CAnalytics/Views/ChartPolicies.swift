@@ -105,6 +105,7 @@ struct ValidChartGeometry<Content: View>: View {
 }
 
 enum ChartHeightPolicy {
+    static let dashboardMapHeight: CGFloat = 220
     static let dashboardTileHeight: CGFloat = 260
 
     static func horizontalBarHeight(categoryCount: Int, seriesCount: Int) -> CGFloat {
@@ -118,8 +119,13 @@ enum ChartHeightPolicy {
     }
 
     static func dashboardExpandableHierarchyHeight(for indicator: Indicator) -> CGFloat {
-        if indicator.resolvedExpandableOverviewType == .tile {
+        switch indicator.resolvedExpandableOverviewType {
+        case .map:
+            return dashboardMapHeight
+        case .tile:
             return dashboardTileHeight
+        case nil:
+            break
         }
 
         let rootCount = max(indicator.hierarchy?.nodes.count ?? 0, 1)
