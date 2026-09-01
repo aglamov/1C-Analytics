@@ -26,6 +26,28 @@ final class ReleaseReadinessTests: XCTestCase {
         )
     }
 
+    func testFirstExtendedLoadDoesNotPretendGraphCountIsKnown() {
+        let item = DashboardSynchronizationSession.Item(
+            id: "extended:education",
+            title: "Образование 2 уровень",
+            kind: .extended,
+            status: .updating
+        )
+        let session = DashboardSynchronizationSession(
+            id: UUID(),
+            title: "Ручное обновление второго уровня",
+            startedAt: Date(),
+            completedAt: nil,
+            phase: .running,
+            items: [item]
+        )
+
+        XCTAssertEqual(
+            DashboardSynchronizationProgressTextPolicy.text(for: session),
+            "Загружаем графики…"
+        )
+    }
+
     func testSignOutClearsDashboardBeforeCredentials() {
         let events = SignOutEventRecorder()
         let credentialsStore = StubAuthenticationCredentialsStore(events: events)

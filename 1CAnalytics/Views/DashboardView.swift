@@ -70,6 +70,28 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             content
+                .overlay(alignment: .bottomTrailing) {
+                    if let session = viewModel.synchronizationSession {
+                        DashboardSynchronizationIndicator(
+                            session: session,
+                            isCached: viewModel.isShowingCachedData,
+                            hasCacheError: viewModel.cacheErrorMessage != nil
+                        ) {
+                            isShowingSynchronizationDetails = true
+                        }
+                        .padding(.trailing, horizontalSizeClass == .regular ? 20 : 16)
+                        .padding(.bottom, 8)
+                    }
+                }
+                .sheet(isPresented: synchronizationDetailsBinding(forPad: false)) {
+                    synchronizationDetails
+                        .presentationDetents([.medium, .large])
+                        .presentationDragIndicator(.visible)
+                }
+                .popover(isPresented: synchronizationDetailsBinding(forPad: true), arrowEdge: .bottom) {
+                    synchronizationDetails
+                        .frame(width: 430, height: 480)
+                }
                 .navigationTitle(navigationTitle)
                 .navigationDestination(for: DashboardRoute.self) { route in
                     switch route {
@@ -241,28 +263,6 @@ struct DashboardView: View {
                     }
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
-                if let session = viewModel.synchronizationSession {
-                    DashboardSynchronizationIndicator(
-                        session: session,
-                        isCached: viewModel.isShowingCachedData,
-                        hasCacheError: viewModel.cacheErrorMessage != nil
-                    ) {
-                        isShowingSynchronizationDetails = true
-                    }
-                    .padding(.trailing, horizontalSizeClass == .regular ? 20 : 16)
-                    .padding(.bottom, 8)
-                }
-            }
-            .sheet(isPresented: synchronizationDetailsBinding(forPad: false)) {
-                synchronizationDetails
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
-            .popover(isPresented: synchronizationDetailsBinding(forPad: true), arrowEdge: .bottom) {
-                synchronizationDetails
-                    .frame(width: 430, height: 480)
-            }
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
         }
     }
@@ -287,7 +287,7 @@ struct DashboardView: View {
             }
             .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
             .padding(.top, 16)
-            .padding(.bottom, 32)
+            .padding(.bottom, 92)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
     }

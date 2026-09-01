@@ -11,6 +11,25 @@ enum DashboardSynchronizationItemPresentationPolicy {
     }
 }
 
+enum DashboardSynchronizationProgressTextPolicy {
+    static func text(for session: DashboardSynchronizationSession) -> String {
+        let isExtendedOnly = !session.items.isEmpty && session.items.allSatisfy { $0.kind == .extended }
+        guard isExtendedOnly else {
+            return "Обновлено \(session.completedCount) из \(session.totalCount)"
+        }
+
+        if session.phase == .running {
+            return "Загружаем графики…"
+        }
+
+        let chartCount = session.items.reduce(0) { $0 + $1.charts.count }
+        guard chartCount > 0 else {
+            return "Графики не получены"
+        }
+        return "Загружено \(DashboardSectionTextPolicy.graphCountText(chartCount))"
+    }
+}
+
 struct DashboardSynchronizationIndicator: View {
     let session: DashboardSynchronizationSession
     let isCached: Bool
@@ -24,7 +43,7 @@ struct DashboardSynchronizationIndicator: View {
                 if session.phase == .running || showsCompletionPill {
                     HStack(spacing: 9) {
                         statusIcon
-                        Text("Обновлено \(session.completedCount) из \(session.totalCount)")
+                        Text(DashboardSynchronizationProgressTextPolicy.text(for: session))
                             .font(.subheadline.monospacedDigit().weight(.semibold))
                     }
                     .padding(.horizontal, 14)
@@ -72,7 +91,7 @@ struct DashboardSynchronizationIndicator: View {
 
     private var accessibilityLabel: String {
         let phase = session.phase == .running ? "Обновление выполняется" : "Обновление завершено"
-        return "\(phase). Обновлено \(session.completedCount) из \(session.totalCount)"
+        return "\(phase). \(DashboardSynchronizationProgressTextPolicy.text(for: session))"
     }
 }
 
