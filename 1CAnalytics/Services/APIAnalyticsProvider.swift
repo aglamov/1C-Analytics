@@ -444,6 +444,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
     let showValueLabels: Bool?
     let showRowValues: Bool?
     let alwaysShowPointValues: Bool?
+    let showXAxisLabels: Bool?
     let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
@@ -496,6 +497,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         case alwaysShowPointValues
         case showPointValues
         case displayPointValues
+        case showXAxisLabels
         case showYAxisLabels
         case showYAxis
         case showScale
@@ -597,6 +599,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
         alwaysShowPointValues = try container.decodeFlexibleBool(forKey: .alwaysShowPointValues)
             ?? container.decodeFlexibleBool(forKey: .showPointValues)
             ?? container.decodeFlexibleBool(forKey: .displayPointValues)
+        showXAxisLabels = try container.decodeFlexibleBool(forKey: .showXAxisLabels)
         showYAxisLabels = try container.decodeFlexibleBool(forKey: .showYAxisLabels)
             ?? container.decodeFlexibleBool(forKey: .showYAxis)
             ?? container.decodeFlexibleBool(forKey: .showScale)
@@ -763,6 +766,7 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
             showValueLabels: showValueLabels,
             showRowValues: showRowValues,
             alwaysShowPointValues: alwaysShowPointValues,
+            showXAxisLabels: showXAxisLabels,
             showYAxisLabels: showYAxisLabels,
             detailsOrientation: detailsOrientation,
             widthPercent: widthPercent,

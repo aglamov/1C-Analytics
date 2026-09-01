@@ -85,12 +85,19 @@ struct ContractPlanFactCompletionChart: View {
                 }
             }
             .chartXAxis {
-                AxisMarks { value in
-                    if indicator.showGrid != false {
+                if indicator.showsXAxisLabels {
+                    AxisMarks { value in
+                        if indicator.showGrid != false {
+                            AxisGridLine()
+                                .foregroundStyle(.secondary.opacity(0.16))
+                        }
+                        AxisValueLabel()
+                    }
+                } else if indicator.showGrid != false {
+                    AxisMarks { _ in
                         AxisGridLine()
                             .foregroundStyle(.secondary.opacity(0.16))
                     }
-                    AxisValueLabel()
                 }
             }
             .chartLegend(.hidden)

@@ -171,40 +171,42 @@ extension AnalyticsChart {
 
     func trendChartOverlay(proxy: ChartProxy) -> some View {
         ZStack {
-            GeometryReader { geometry in
-                if let plotFrame = proxy.plotFrame {
-                    let frame = geometry[plotFrame]
-                    let axisHeight = max(geometry.size.height - frame.maxY, 1)
-                    let labelWidth = min(
-                        120,
-                        max(40, frame.width / CGFloat(max(categoryLabels.count, 1)) - 4)
-                    )
+            if indicator.showsXAxisLabels {
+                GeometryReader { geometry in
+                    if let plotFrame = proxy.plotFrame {
+                        let frame = geometry[plotFrame]
+                        let axisHeight = max(geometry.size.height - frame.maxY, 1)
+                        let labelWidth = min(
+                            120,
+                            max(40, frame.width / CGFloat(max(categoryLabels.count, 1)) - 4)
+                        )
 
-                    ForEach(Array(categoryLabels.enumerated()), id: \.offset) { index, label in
-                        if let position = proxy.position(forX: Double(index)) {
-                            let xPosition = TrendAxisLabelPositionPolicy.clampedCenter(
-                                proposedX: frame.minX + position,
-                                labelWidth: labelWidth,
-                                plotRange: frame.minX...frame.maxX
-                            )
-
-                            Text(wrappedAxisLabel(label))
-                                .font(.caption2)
-                                .foregroundStyle(Color.secondary)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.72)
-                                .allowsTightening(true)
-                                .frame(width: labelWidth)
-                                .position(
-                                    x: xPosition,
-                                    y: frame.maxY + axisHeight / 2
+                        ForEach(Array(categoryLabels.enumerated()), id: \.offset) { index, label in
+                            if let position = proxy.position(forX: Double(index)) {
+                                let xPosition = TrendAxisLabelPositionPolicy.clampedCenter(
+                                    proposedX: frame.minX + position,
+                                    labelWidth: labelWidth,
+                                    plotRange: frame.minX...frame.maxX
                                 )
+
+                                Text(wrappedAxisLabel(label))
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.72)
+                                    .allowsTightening(true)
+                                    .frame(width: labelWidth)
+                                    .position(
+                                        x: xPosition,
+                                        y: frame.maxY + axisHeight / 2
+                                    )
+                            }
                         }
                     }
                 }
+                .allowsHitTesting(false)
             }
-            .allowsHitTesting(false)
 
             chartTapOverlay(proxy: proxy, mode: .point)
 

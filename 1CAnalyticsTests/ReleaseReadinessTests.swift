@@ -2236,6 +2236,7 @@ final class ReleaseReadinessTests: XCTestCase {
                   "name": "Алиасы",
                   "type": "LineMark",
                   "displayValueLabels": false,
+                  "showXAxisLabels": false,
                   "showScale": true,
                   "detailsLayout": "horizontal",
                   "abbreviateValues": true,
@@ -2270,6 +2271,7 @@ final class ReleaseReadinessTests: XCTestCase {
         )
 
         XCTAssertFalse(indicator.showsValueLabels)
+        XCTAssertFalse(indicator.showsXAxisLabels)
         XCTAssertTrue(indicator.showsYAxisLabels)
         XCTAssertEqual(indicator.resolvedDetailsOrientation, .horizontal)
         XCTAssertEqual(indicator.useCompactNumbers, true)
@@ -2312,6 +2314,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(line.showsAggregateValue)
         XCTAssertTrue(line.supportsDetail)
         XCTAssertTrue(line.showsValueLabels)
+        XCTAssertTrue(line.showsXAxisLabels)
         XCTAssertFalse(line.showsYAxisLabels)
         XCTAssertTrue(line.showsLegend)
         XCTAssertEqual(line.resolvedDetailsOrientation, .vertical)

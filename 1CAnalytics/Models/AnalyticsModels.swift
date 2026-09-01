@@ -125,6 +125,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
     let showValueLabels: Bool?
     let showRowValues: Bool?
     let alwaysShowPointValues: Bool?
+    let showXAxisLabels: Bool?
     let showYAxisLabels: Bool?
     let detailsOrientation: DetailsOrientation?
     let widthPercent: Double?
@@ -165,6 +166,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         showValueLabels: Bool? = nil,
         showRowValues: Bool? = nil,
         alwaysShowPointValues: Bool? = nil,
+        showXAxisLabels: Bool? = nil,
         showYAxisLabels: Bool? = nil,
         detailsOrientation: DetailsOrientation? = nil,
         widthPercent: Double? = nil,
@@ -204,6 +206,7 @@ struct Indicator: Identifiable, Codable, Equatable, Sendable {
         self.showValueLabels = showValueLabels
         self.showRowValues = showRowValues
         self.alwaysShowPointValues = alwaysShowPointValues
+        self.showXAxisLabels = showXAxisLabels
         self.showYAxisLabels = showYAxisLabels
         self.detailsOrientation = detailsOrientation
         self.widthPercent = widthPercent
@@ -667,6 +670,7 @@ extension Indicator {
             showValueLabels: showValueLabels,
             showRowValues: showRowValues,
             alwaysShowPointValues: alwaysShowPointValues,
+            showXAxisLabels: showXAxisLabels,
             showYAxisLabels: showYAxisLabels,
             detailsOrientation: detailsOrientation,
             widthPercent: widthPercent,
@@ -710,6 +714,10 @@ extension Indicator {
 
     var showsAggregateValue: Bool {
         showTotal ?? (chartType != .geoMap && chartType != .radar)
+    }
+
+    var showsXAxisLabels: Bool {
+        showXAxisLabels ?? true
     }
 
     var displayUnit: String? {

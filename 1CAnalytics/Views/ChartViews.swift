@@ -327,7 +327,14 @@ struct AnalyticsChart: View {
             )
         )
         .chartXAxis {
-            humanReadableValueAxis(position: .bottom)
+            if indicator.showsXAxisLabels {
+                humanReadableValueAxis(position: .bottom)
+            } else {
+                AxisMarks { _ in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.6))
+                        .foregroundStyle(Color.secondary.opacity(0.16))
+                }
+            }
         }
         .chartYAxis {
             readableHorizontalCategoryAxis

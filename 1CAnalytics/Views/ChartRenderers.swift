@@ -42,7 +42,9 @@ extension AnalyticsChart {
                 )
             }
             .chartXAxis {
-                responsiveCategoryAxis(availableWidth: contentWidth)
+                if indicator.showsXAxisLabels {
+                    responsiveCategoryAxis(availableWidth: contentWidth)
+                }
             }
             .chartOverlay { proxy in
                 chartTapOverlay(
@@ -229,7 +231,11 @@ extension AnalyticsChart {
                 .chartYAxis {
                     humanReadableValueAxis(position: .leading, font: histogramYAxisFont)
                 }
-                .chartXAxis { responsiveCategoryAxis(availableWidth: contentWidth) }
+                .chartXAxis {
+                    if indicator.showsXAxisLabels {
+                        responsiveCategoryAxis(availableWidth: contentWidth)
+                    }
+                }
                 .chartOverlay { proxy in chartTapOverlay(proxy: proxy, mode: .stackedBar) }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
@@ -318,7 +324,11 @@ extension AnalyticsChart {
                 .chartXScale(domain: trendXDomain, range: .plotDimension(startPadding: 0, endPadding: 5))
                 .chartYScale(domain: trendValueLabelDomain(includesZero: false))
                 .chartYAxis { valueAxis }
-                .chartXAxis { responsiveTrendAxis(availableWidth: contentWidth) }
+                .chartXAxis {
+                    if indicator.showsXAxisLabels {
+                        responsiveTrendAxis(availableWidth: contentWidth)
+                    }
+                }
                 .chartOverlay { proxy in trendChartOverlay(proxy: proxy) }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
@@ -371,7 +381,11 @@ extension AnalyticsChart {
                 .chartXScale(domain: trendXDomain, range: .plotDimension(startPadding: 0, endPadding: 5))
                 .chartYScale(domain: trendValueLabelDomain(includesZero: true))
                 .chartYAxis { valueAxis }
-                .chartXAxis { responsiveTrendAxis(availableWidth: contentWidth) }
+                .chartXAxis {
+                    if indicator.showsXAxisLabels {
+                        responsiveTrendAxis(availableWidth: contentWidth)
+                    }
+                }
                 .chartOverlay { proxy in trendChartOverlay(proxy: proxy) }
                 .frame(width: contentWidth, height: geometry.size.height)
             }
@@ -439,7 +453,9 @@ extension AnalyticsChart {
                 valueAxis
             }
             .chartXAxis {
-                responsiveTrendAxis(availableWidth: contentWidth)
+                if indicator.showsXAxisLabels {
+                    responsiveTrendAxis(availableWidth: contentWidth)
+                }
             }
             .chartOverlay { proxy in
                 trendChartOverlay(proxy: proxy)
