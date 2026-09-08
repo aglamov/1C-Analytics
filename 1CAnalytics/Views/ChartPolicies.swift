@@ -105,7 +105,7 @@ struct ValidChartGeometry<Content: View>: View {
 }
 
 enum ChartHeightPolicy {
-    static let dashboardMapHeight: CGFloat = 220
+    static let dashboardMapHeight: CGFloat = 170
     static let dashboardTileHeight: CGFloat = 260
 
     static func horizontalBarHeight(categoryCount: Int, seriesCount: Int) -> CGFloat {

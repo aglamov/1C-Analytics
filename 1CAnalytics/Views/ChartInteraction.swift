@@ -217,42 +217,38 @@ extension AnalyticsChart {
 
     func selectedTrendValueOverlay(proxy: ChartProxy) -> some View {
         GeometryReader { geometry in
-            if let row = selectedTrendRow,
-               shouldShowValueLabel(for: row),
-               let plotFrame = proxy.plotFrame,
-               let xPosition = proxy.position(forX: trendXValue(for: row)),
-               let yPosition = proxy.position(forY: row.value) {
+            if let plotFrame = proxy.plotFrame {
                 let frame = geometry[plotFrame]
-                let point = CGPoint(
-                    x: frame.minX + xPosition,
-                    y: frame.minY + yPosition
-                )
-                let placement = TrendLabelPlacementPolicy.placement(
-                    for: row,
-                    in: indicator.orderedRows
-                )
 
-                valueLabel(for: row)
-                    .position(
-                        SelectedTrendLabelPositionPolicy.center(
-                            for: point,
-                            placement: placement,
-                            in: geometry.size,
-                            contentScale: dashboardContentScale
+                // Keep every selected series label above all chart annotations.
+                ForEach(indicator.orderedRows.filter { rowMatchesSelection($0) }) { row in
+                    if shouldShowValueLabel(for: row),
+                       let xPosition = proxy.position(forX: trendXValue(for: row)),
+                       let yPosition = proxy.position(forY: animatedValue(for: row)) {
+                        let point = CGPoint(
+                            x: frame.minX + xPosition,
+                            y: frame.minY + yPosition
                         )
-                    )
-                    .zIndex(1_000)
+                        let placement = TrendLabelPlacementPolicy.placement(
+                            for: row,
+                            in: indicator.orderedRows
+                        )
+
+                        valueLabel(for: row)
+                            .position(
+                                SelectedTrendLabelPositionPolicy.center(
+                                    for: point,
+                                    placement: placement,
+                                    in: geometry.size,
+                                    contentScale: dashboardContentScale
+                                )
+                            )
+                            .zIndex(1_000)
+                    }
+                }
             }
         }
         .allowsHitTesting(false)
-    }
-
-    var selectedTrendRow: IndicatorRow? {
-        guard let selectedRowID else {
-            return nil
-        }
-
-        return indicator.orderedRows.first { $0.id == selectedRowID }
     }
 
     func donutTapOverlay(proxy: ChartProxy) -> some View {

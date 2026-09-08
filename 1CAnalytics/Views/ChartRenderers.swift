@@ -304,7 +304,7 @@ extension AnalyticsChart {
                             alignment: trendAnnotationAlignment(for: row),
                             overflowResolution: .init(x: .disabled, y: .disabled)
                         ) {
-                            if shouldShowValueLabel(for: row), selectedRowID != row.id { valueLabel(for: row) }
+                            if shouldShowValueLabel(for: row), !rowMatchesSelection(row) { valueLabel(for: row) }
                         }
                     }
                     crossingHighlightMarks(smooth: smooth, forecastAware: false)
@@ -361,7 +361,7 @@ extension AnalyticsChart {
                                 alignment: trendAnnotationAlignment(for: row),
                                 overflowResolution: .init(x: .disabled, y: .disabled)
                             ) {
-                                if shouldShowValueLabel(for: row), selectedRowID != row.id { valueLabel(for: row) }
+                                if shouldShowValueLabel(for: row), !rowMatchesSelection(row) { valueLabel(for: row) }
                             }
                     }
                     crossingHighlightMarks(smooth: smooth, forecastAware: false)
@@ -413,7 +413,7 @@ extension AnalyticsChart {
                         alignment: trendAnnotationAlignment(for: row),
                         overflowResolution: .init(x: .disabled, y: .disabled)
                     ) {
-                        if shouldShowValueLabel(for: row), selectedRowID != row.id {
+                        if shouldShowValueLabel(for: row), !rowMatchesSelection(row) {
                             valueLabel(for: row)
                         }
                     }
