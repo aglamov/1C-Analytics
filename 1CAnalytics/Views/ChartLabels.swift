@@ -1,5 +1,6 @@
 import Charts
 import SwiftUI
+import UIKit
 
 extension AnalyticsChart {
     func valueLabel(
@@ -141,84 +142,79 @@ extension AnalyticsChart {
             .transition(.identity)
     }
 
-    func donutExternalLabels(
+    func donutValueLabels(
         showsPercentages: Bool,
         size: CGSize
     ) -> some View {
-        let positions = donutExternalLabelPositions(in: size)
+        let positions = donutLabelPositions(in: size, showsPercentages: showsPercentages)
 
         return ZStack {
             ForEach(positions) { position in
-                valueLabel(
-                    for: position.row,
-                    displayText: donutLabelText(
-                        for: position.row,
-                        showsPercentages: showsPercentages
-                    )
-                )
-                    .zIndex(20)
+                Text(donutLabelText(for: position.row, showsPercentages: showsPercentages))
+                    .font(.caption2.monospacedDigit().weight(.bold))
+                    .foregroundStyle(indicator.apiValueColor(for: position.row) ?? .primary)
+                    .fixedSize()
+                    .padding(.horizontal, 5 * dashboardContentScale)
+                    .padding(.vertical, 3 * dashboardContentScale)
+                    .background(opaqueLabelBackground, in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(
+                            chartColor(for: position.row).opacity(rowMatchesSelection(position.row) ? 0.8 : 0.25),
+                            lineWidth: 1
+                        )
+                    }
                     .position(position.labelCenter)
             }
         }
         .allowsHitTesting(false)
     }
 
-    func shouldPlaceDonutLabelOutside(
-        _ row: IndicatorRow,
-        plotSize: CGSize
-    ) -> Bool {
-        let total = indicator.orderedRows.reduce(0) { $0 + max($1.value, 0) }
-        guard total > 0 else {
-            return false
-        }
-
-        let share = max(row.value, 0) / total
-        if rowMatchesSelection(row), share <= 0.12 {
-            return true
-        }
-
-        let radius = min(plotSize.width, plotSize.height) * 0.36
-        return DonutLabelPlacementPolicy.shouldPlaceOutside(
-            share: share,
-            labelCharacterCount: displayValue(for: row).count,
-            radius: radius
-        )
-    }
-
-    func donutExternalLabelPositions(
-        in size: CGSize
-    ) -> [DonutExternalLabelPosition] {
+    func donutLabelPositions(
+        in size: CGSize,
+        showsPercentages: Bool = false
+    ) -> [DonutLabelPosition] {
+        guard indicator.showValueLabels != false,
+              ChartRenderGeometryPolicy.canRender(in: size) else { return [] }
         let rows = indicator.orderedRows
-        guard let selectedDonutRow,
-              shouldPlaceDonutLabelOutside(selectedDonutRow, plotSize: size),
-              let angle = DonutSelectionGeometryPolicy.middleAngle(
-                  for: selectedDonutRow.id,
-                  in: rows
-              ) else {
-            return []
-        }
+        let total = rows.reduce(0) { $0 + max($1.value, 0) }
+        guard total.isFinite, total > 0 else { return [] }
 
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(size.width, size.height) * 0.46
-        let cosine = CGFloat(cos(angle))
-        let sine = CGFloat(sin(angle))
-        let labelCenter = CGPoint(
-            x: min(
-                max(center.x + cosine * (radius + 36), 48),
-                max(48, size.width - 48)
-            ),
-            y: min(
-                max(center.y + sine * (radius + 36), 22),
-                max(22, size.height - 22)
-            )
+        let radius = min(size.width, size.height) / 2
+        let bounds = CGRect(origin: .zero, size: size).insetBy(dx: 2, dy: 2)
+        let font = UIFont.monospacedDigitSystemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: .caption2).pointSize,
+            weight: .bold
         )
-
-        return [
-            DonutExternalLabelPosition(
-                row: selectedDonutRow,
-                labelCenter: labelCenter
+        var occupied: [CGRect] = []
+        var result: [DonutLabelPosition] = []
+        // Give the selected sector first choice, then fit shorter labels first.
+        let candidates = rows.filter { $0.value > 0 }.sorted {
+            if rowMatchesSelection($0) != rowMatchesSelection($1) {
+                return rowMatchesSelection($0)
+            }
+            return donutLabelText(for: $0, showsPercentages: showsPercentages).count
+                < donutLabelText(for: $1, showsPercentages: showsPercentages).count
+        }
+        for row in candidates {
+            guard let angle = DonutSelectionGeometryPolicy.middleAngle(for: row.id, in: rows) else { continue }
+            let text = donutLabelText(for: row, showsPercentages: showsPercentages)
+            let labelSize = CGSize(
+                width: ceil((text as NSString).size(withAttributes: [.font: font]).width) + 10 * dashboardContentScale + 2,
+                height: ceil(font.lineHeight) + 6 * dashboardContentScale + 2
             )
-        ]
+            let direction = CGPoint(x: cos(angle), y: sin(angle))
+            let point = CGPoint(x: center.x + direction.x * radius * 0.77,
+                                y: center.y + direction.y * radius * 0.77)
+            let rect = CGRect(x: point.x - labelSize.width / 2,
+                              y: point.y - labelSize.height / 2,
+                              width: labelSize.width, height: labelSize.height)
+            guard bounds.contains(rect),
+                  !occupied.contains(where: { $0.intersects(rect.insetBy(dx: -2, dy: -2)) }) else { continue }
+            occupied.append(rect)
+            result.append(DonutLabelPosition(row: row, labelCenter: point))
+        }
+        return result
     }
 
     func donutLabelText(for row: IndicatorRow, showsPercentages: Bool) -> String {
@@ -653,7 +649,7 @@ private struct CrossingCurveSample {
     let isIntersection: Bool
 }
 
-struct DonutExternalLabelPosition: Identifiable {
+struct DonutLabelPosition: Identifiable {
     let row: IndicatorRow
     let labelCenter: CGPoint
 

@@ -244,7 +244,6 @@ extension AnalyticsChart {
 
     func donut(showsPercentages: Bool) -> some View {
         GeometryReader { geometry in
-            let plotSize = DonutPlotLayoutPolicy.plotSize(in: geometry.size)
 
             ValidChartGeometry(size: geometry.size) {
                 ZStack {
@@ -259,24 +258,14 @@ extension AnalyticsChart {
                     .foregroundStyle(sectorGradient(for: row))
                     .alignsMarkStylesWithPlotArea(false)
                     .opacity(opacity(for: row))
-                    .annotation(position: .overlay, alignment: .center) {
-                        if shouldShowValueLabel(for: row),
-                            !shouldPlaceDonutLabelOutside(row, plotSize: plotSize)
-                        {
-                            if showsPercentages {
-                                percentLabel(for: row)
-                            } else {
-                                valueLabel(for: row, usesContrastingForeground: true)
-                            }
-                        }
-                    }
+
                 }
                 .chartForegroundStyleScale(domain: indicator.chartColorDomain, range: chartColors)
                 .chartOverlay { proxy in
                     donutTapOverlay(proxy: proxy)
                 }
 
-                donutExternalLabels(
+                donutValueLabels(
                     showsPercentages: showsPercentages,
                     size: geometry.size
                 )
