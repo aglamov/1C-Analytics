@@ -79,6 +79,15 @@ struct DashboardView: View {
                         ) {
                             isShowingSynchronizationDetails = true
                         }
+                        // Anchor to the status button so iPad has room above it for the popover.
+                        .popover(
+                            isPresented: synchronizationDetailsBinding(forPad: true),
+                            attachmentAnchor: .rect(.bounds),
+                            arrowEdge: .bottom
+                        ) {
+                            synchronizationDetails
+                                .frame(width: 430, height: 480)
+                        }
                         .padding(.trailing, horizontalSizeClass == .regular ? 20 : 16)
                         .padding(.bottom, 8)
                     }
@@ -87,10 +96,6 @@ struct DashboardView: View {
                     synchronizationDetails
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
-                }
-                .popover(isPresented: synchronizationDetailsBinding(forPad: true), arrowEdge: .bottom) {
-                    synchronizationDetails
-                        .frame(width: 430, height: 480)
                 }
                 .navigationTitle(navigationTitle)
                 .navigationDestination(for: DashboardRoute.self) { route in
