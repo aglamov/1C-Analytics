@@ -524,7 +524,8 @@ final class DashboardViewModel: ObservableObject {
         if !dashboard.indicators.contains(where: { $0.id == selectedIndicatorID }) {
             selectedIndicatorID = dashboard.indicators.first?.id
         }
-        for section in dashboard.sections where section.extended != nil {
+        // Publishing another section must not finish or clear this section's request.
+        for section in dashboard.sections where section.extended != nil && extendedSectionStates[section.id] == nil {
             extendedSectionStates[section.id] = .loaded
         }
         updateFreshnessState()

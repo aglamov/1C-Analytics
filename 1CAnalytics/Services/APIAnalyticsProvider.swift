@@ -6,13 +6,22 @@ final class APIAnalyticsProvider: AnalyticsProvider {
     private let urlSession: URLSession
     private let credentialsStore: any AuthenticationRequestAuthorizing
 
+    static func makeSessionConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        // Each standard section and its second level can have a request in flight.
+        configuration.httpMaximumConnectionsPerHost = AnalyticsAPIContract.sections.count * 2
+        return configuration
+    }
+
+    private static let analyticsSession = URLSession(configuration: makeSessionConfiguration())
+
     init(
         configuration: AppConfiguration = .load(),
-        urlSession: URLSession = .shared,
+        urlSession: URLSession? = nil,
         credentialsStore: any AuthenticationRequestAuthorizing = AuthenticationCredentialsStore.shared
     ) {
         self.configuration = configuration
-        self.urlSession = urlSession
+        self.urlSession = urlSession ?? Self.analyticsSession
         self.credentialsStore = credentialsStore
     }
 

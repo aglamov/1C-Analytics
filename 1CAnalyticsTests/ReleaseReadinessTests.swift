@@ -3226,6 +3226,59 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertFalse(viewModel.isRefreshing)
     }
 
+    func testExtendedResponsesPublishIndependentlyWhileOtherRequestsArePending() async {
+        let sections = AnalyticsAPIContract.sections.prefix(2).map { contract in
+            DashboardSection(
+                id: contract.id, title: contract.displayName, indicators: [], hasExtended: true,
+                extended: DashboardExtendedSection(
+                    id: "extended:\(contract.id)", title: "2 уровень",
+                    indicators: [], fetchedAt: .distantPast
+                )
+            )
+        }
+        let cached = Dashboard(id: "analytics", title: "Аналитика", fetchedAt: .distantPast, sections: sections)
+        let provider = ControlledExtendedDashboardProvider(dashboard: cached)
+        let viewModel = DashboardViewModel(provider: provider, cache: StubDashboardCache(dashboard: cached))
+        let task = Task { await viewModel.load() }
+        await waitUntil { provider.pending.count == 2 && provider.standardContinuation != nil }
+        defer { provider.finishAll() }
+        XCTAssertEqual(provider.pending.count, 2)
+
+        provider.publishStandardSection()
+        XCTAssertEqual(viewModel.extendedState(for: sections[0].id), .loading)
+        XCTAssertEqual(viewModel.extendedState(for: sections[1].id), .loading)
+
+        let updatedAt = Date(timeIntervalSince1970: 12345)
+        provider.pending.removeValue(forKey: sections[0].id)?.resume(returning: DashboardSection(
+            id: sections[0].id, title: sections[0].title, indicators: [], fetchedAt: updatedAt
+        ))
+        await waitUntil { viewModel.dashboard?.sections[0].extended?.fetchedAt == updatedAt }
+        XCTAssertEqual(viewModel.dashboard?.sections[0].extended?.fetchedAt, updatedAt)
+        XCTAssertEqual(viewModel.extendedState(for: sections[0].id), .loaded)
+        XCTAssertEqual(viewModel.extendedState(for: sections[1].id), .loading)
+        XCTAssertEqual(viewModel.dashboard?.sections[1].extended?.fetchedAt, .distantPast)
+        XCTAssertTrue(viewModel.isRefreshing)
+
+        provider.pending.removeValue(forKey: sections[1].id)?.resume(throwing: URLError(.timedOut))
+        await waitUntil {
+            if case .failed = viewModel.extendedState(for: sections[1].id) { return true }
+            return false
+        }
+        provider.finishAll()
+        await task.value
+        XCTAssertEqual(viewModel.dashboard?.sections[0].extended?.fetchedAt, updatedAt)
+        if case .failed = viewModel.extendedState(for: sections[1].id) {} else {
+            XCTFail("Completing standard requests must preserve an extended request failure")
+        }
+        XCTAssertFalse(viewModel.isRefreshing)
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !condition(), ContinuousClock.now < deadline { await Task.yield() }
+        XCTAssertTrue(condition(), "Timed out waiting for controlled request progress")
+    }
+
     func testCacheWriteFailureIsVisibleAfterSuccessfulRefresh() async {
         let dashboard = Dashboard(id: "fresh", title: "Fresh", fetchedAt: Date(), indicators: [])
         let viewModel = DashboardViewModel(
@@ -3574,4 +3627,40 @@ private struct FailingWriteDashboardCache: DashboardCaching {
     }
 
     func clearDashboard() throws {}
+}
+
+@MainActor
+private final class ControlledExtendedDashboardProvider: AnalyticsProvider {
+    let dashboard: Dashboard
+    var pending: [String: CheckedContinuation<DashboardSection, Error>] = [:]
+    var standardContinuation: CheckedContinuation<Void, Never>?
+    var onEvent: (@MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void)?
+
+    init(dashboard: Dashboard) { self.dashboard = dashboard }
+
+    func fetchDashboard() async throws -> Dashboard { dashboard }
+
+    func fetchDashboard(
+        onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
+    ) async throws -> Dashboard {
+        self.onEvent = onEvent
+        await withCheckedContinuation { standardContinuation = $0 }
+        return dashboard
+    }
+
+    func publishStandardSection() {
+        onEvent?(.succeeded(AnalyticsAPIContract.sections[0], dashboard.sections[0]))
+    }
+
+    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+        try await withCheckedThrowingContinuation { pending[section.id] = $0 }
+    }
+
+    func finishAll() {
+        standardContinuation?.resume()
+        standardContinuation = nil
+        let remaining = pending
+        pending.removeAll()
+        for continuation in remaining.values { continuation.resume(throwing: CancellationError()) }
+    }
 }
