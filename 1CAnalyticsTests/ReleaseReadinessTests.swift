@@ -84,7 +84,7 @@ final class ReleaseReadinessTests: XCTestCase {
     func testDashboardCacheClearRemovesCurrentUsersStoredDashboard() throws {
         let credentialsStore = StubAuthenticationCredentialsStore(events: SignOutEventRecorder())
         let cache = try DashboardCache(inMemory: true, credentialsStore: credentialsStore)
-        let dashboard = Dashboard(
+        let dashboard = fixtureDashboard(
             id: "dashboard",
             title: "Дашборд",
             fetchedAt: Date(),
@@ -1097,7 +1097,7 @@ final class ReleaseReadinessTests: XCTestCase {
             credentialsStore: StubRequestAuthorizer()
         )
 
-        let request = try provider.makeRequest(for: AnalyticsAPIContract.sections[3])
+        let request = try provider.makeRequest(for: SectionFixtures.sections[3])
         let queryItems = try XCTUnwrap(
             URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
         )
@@ -1111,7 +1111,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Test-Authorization"), "attached")
 
         let extendedRequest = try provider.makeRequest(
-            for: AnalyticsAPIContract.sections[3],
+            for: SectionFixtures.sections[3],
             isExtended: true
         )
         let extendedItems = try XCTUnwrap(
@@ -2458,7 +2458,7 @@ final class ReleaseReadinessTests: XCTestCase {
         XCTAssertTrue(indicators[0].id.hasSuffix("-stable-chart"))
         XCTAssertTrue(indicators[1].id.hasSuffix("-stable-chart#2"))
         XCTAssertTrue(indicators[2].id.hasSuffix("-fallback-identifier"))
-        XCTAssertTrue(indicators[3].id.hasSuffix("-3"))
+        XCTAssertTrue(indicators[3].id.hasSuffix("-name:Вложенные серии"))
     }
 
     func testUnknownChartTypeUsesSafePresentationAndReplacesCachedShape() throws {
@@ -2553,7 +2553,7 @@ final class ReleaseReadinessTests: XCTestCase {
             indicators: [],
             fetchedAt: Date(timeIntervalSince1970: 100)
         )
-        let dashboard = Dashboard(
+        let dashboard = fixtureDashboard(
             id: "cached",
             title: "Cached",
             fetchedAt: nil,
@@ -2664,7 +2664,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testDashboardSectionSystemSymbolsExist() {
-        let titles = AnalyticsAPIContract.sections.map(\.displayName)
+        let titles = SectionFixtures.sections.map(\.displayName)
 
         for title in titles {
             let symbol = DashboardSectionVisualStyle.style(for: title).symbol
@@ -2936,7 +2936,7 @@ final class ReleaseReadinessTests: XCTestCase {
 
     func testAuthenticationFailureReplacesCachedDashboardAndNotifiesRoot() async {
         var didRequireAuthentication = false
-        let cached = Dashboard(id: "cached", title: "Cached", fetchedAt: .distantPast, indicators: [])
+        let cached = fixtureDashboard(id: "cached", title: "Cached", fetchedAt: .distantPast, indicators: [])
         let viewModel = DashboardViewModel(
             provider: AuthenticationFailingProvider(),
             cache: StubDashboardCache(dashboard: cached),
@@ -2952,7 +2952,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testNetworkFailureKeepsCachedDashboardAndShowsOfflineStatus() async {
-        let cached = Dashboard(id: "cached", title: "Cached", fetchedAt: .distantPast, indicators: [])
+        let cached = fixtureDashboard(id: "cached", title: "Cached", fetchedAt: .distantPast, indicators: [])
         let viewModel = DashboardViewModel(
             provider: NetworkFailingProvider(code: .timedOut),
             cache: StubDashboardCache(dashboard: cached)
@@ -2970,7 +2970,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testFailedRefreshSwitchesLoadedDashboardToOfflineStatus() async {
-        let dashboard = Dashboard(id: "fresh", title: "Fresh", fetchedAt: Date(), indicators: [])
+        let dashboard = fixtureDashboard(id: "fresh", title: "Fresh", fetchedAt: Date(), indicators: [])
         let viewModel = DashboardViewModel(
             provider: SucceedingThenFailingProvider(dashboard: dashboard),
             cache: StubDashboardCache(dashboard: nil)
@@ -2997,7 +2997,7 @@ final class ReleaseReadinessTests: XCTestCase {
             title: "Образование",
             indicators: []
         )
-        let cached = Dashboard(
+        let cached = fixtureDashboard(
             id: "cached",
             title: "Cached",
             fetchedAt: .distantPast,
@@ -3049,7 +3049,7 @@ final class ReleaseReadinessTests: XCTestCase {
             source: nil,
             rows: []
         )
-        let cached = Dashboard(
+        let cached = fixtureDashboard(
             id: "analytics",
             title: "Аналитика",
             fetchedAt: .distantPast,
@@ -3061,7 +3061,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 )
             ]
         )
-        let fresh = Dashboard(
+        let fresh = fixtureDashboard(
             id: "analytics",
             title: "Аналитика",
             fetchedAt: Date(),
@@ -3115,7 +3115,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 )
             ]
         )
-        let cached = Dashboard(
+        let cached = fixtureDashboard(
             id: "analytics",
             title: "Аналитика",
             fetchedAt: .distantPast,
@@ -3127,7 +3127,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 )
             ]
         )
-        let fresh = Dashboard(
+        let fresh = fixtureDashboard(
             id: "analytics",
             title: "Аналитика",
             fetchedAt: Date(),
@@ -3162,7 +3162,7 @@ final class ReleaseReadinessTests: XCTestCase {
             title: "Финансы",
             indicators: []
         )
-        let finalDashboard = Dashboard(
+        let finalDashboard = fixtureDashboard(
             id: "analytics",
             title: "Аналитика",
             fetchedAt: Date(),
@@ -3182,8 +3182,8 @@ final class ReleaseReadinessTests: XCTestCase {
             await Task.yield()
         }
 
-        XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование"])
-        XCTAssertEqual(viewModel.state, .loading)
+        XCTAssertEqual(viewModel.dashboard?.sections.map(\.title), ["Образование", "Финансы"])
+        if case .loaded = viewModel.state {} else { XCTFail("Catalog should publish immediately") }
         XCTAssertTrue(viewModel.isRefreshing)
 
         provider.finish()
@@ -3194,7 +3194,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testCachedExtendedSectionsRefreshInParallel() async {
-        let cachedSections = AnalyticsAPIContract.sections.prefix(2).map { contract in
+        let cachedSections = SectionFixtures.sections.prefix(2).map { contract in
             DashboardSection(
                 id: contract.id,
                 title: contract.displayName,
@@ -3207,7 +3207,7 @@ final class ReleaseReadinessTests: XCTestCase {
                 )
             )
         }
-        let cached = Dashboard(
+        let cached = fixtureDashboard(
             id: "cached",
             title: "Аналитика",
             fetchedAt: .distantPast,
@@ -3227,7 +3227,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testExtendedResponsesPublishIndependentlyWhileOtherRequestsArePending() async {
-        let sections = AnalyticsAPIContract.sections.prefix(2).map { contract in
+        let sections = SectionFixtures.sections.prefix(2).map { contract in
             DashboardSection(
                 id: contract.id, title: contract.displayName, indicators: [], hasExtended: true,
                 extended: DashboardExtendedSection(
@@ -3236,11 +3236,14 @@ final class ReleaseReadinessTests: XCTestCase {
                 )
             )
         }
-        let cached = Dashboard(id: "analytics", title: "Аналитика", fetchedAt: .distantPast, sections: sections)
+        let cached = fixtureDashboard(id: "analytics", title: "Аналитика", fetchedAt: .distantPast, sections: sections)
         let provider = ControlledExtendedDashboardProvider(dashboard: cached)
         let viewModel = DashboardViewModel(provider: provider, cache: StubDashboardCache(dashboard: cached))
         let task = Task { await viewModel.load() }
-        await waitUntil { provider.pending.count == 2 && provider.standardContinuation != nil }
+        await waitUntil { provider.standardContinuation != nil }
+        provider.standardContinuation?.resume()
+        provider.standardContinuation = nil
+        await waitUntil { provider.pending.count == 2 }
         defer { provider.finishAll() }
         XCTAssertEqual(provider.pending.count, 2)
 
@@ -3280,7 +3283,7 @@ final class ReleaseReadinessTests: XCTestCase {
     }
 
     func testCacheWriteFailureIsVisibleAfterSuccessfulRefresh() async {
-        let dashboard = Dashboard(id: "fresh", title: "Fresh", fetchedAt: Date(), indicators: [])
+        let dashboard = fixtureDashboard(id: "fresh", title: "Fresh", fetchedAt: Date(), indicators: [])
         let viewModel = DashboardViewModel(
             provider: StaticDashboardProvider(dashboard: dashboard),
             cache: FailingWriteDashboardCache()
@@ -3317,7 +3320,7 @@ final class ReleaseReadinessTests: XCTestCase {
             indicators: [baseIndicator],
             hasExtended: true
         )
-        let baseDashboard = Dashboard(
+        let baseDashboard = fixtureDashboard(
             id: "analytics",
             title: "Аналитика",
             fetchedAt: Date(),
@@ -3481,10 +3484,11 @@ private struct PartiallyFailingProvider: AnalyticsProvider {
     func fetchDashboard(
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        let contract = AnalyticsAPIContract.sections[0]
+        let contract = AnalyticsSectionDescriptor(id: section.id, parameter: section.title, name: section.title)
+        onEvent(.catalog([contract, AnalyticsSectionDescriptor(id: "финансы", parameter: "Финансы", name: "Финансы")]))
         onEvent(.started(contract))
         onEvent(.succeeded(contract, section))
-        let failed = AnalyticsAPIContract.sections[5]
+        let failed = SectionFixtures.sections[5]
         onEvent(.started(failed))
         onEvent(.failed(failed, "Ошибка"))
         throw AnalyticsError.partialFailure(sections: ["Кадры"])
@@ -3524,11 +3528,12 @@ private final class PausingProgressiveProvider: AnalyticsProvider {
     func fetchDashboard(
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        let first = AnalyticsAPIContract.sections[0]
+        onEvent(.catalog(finalDashboard.catalog!))
+        let first = finalDashboard.catalog![0]
         onEvent(.started(first))
         onEvent(.succeeded(first, firstSection))
         await withCheckedContinuation { continuation = $0 }
-        if let second = AnalyticsAPIContract.section(matching: "Финансы"),
+        if let second = SectionFixtures.section(matching: "Финансы"),
            let section = finalDashboard.sections.first(where: { $0.title == "Финансы" }) {
             onEvent(.started(second))
             onEvent(.succeeded(second, section))
@@ -3566,7 +3571,7 @@ private final class ExtendedDashboardProvider: AnalyticsProvider {
         dashboard
     }
 
-    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+    func fetchExtendedSection(for section: AnalyticsSectionDescriptor) async throws -> DashboardSection {
         extendedRequestCount += 1
         return extendedSection
     }
@@ -3587,7 +3592,7 @@ private final class ParallelExtendedDashboardProvider: AnalyticsProvider {
         dashboard
     }
 
-    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+    func fetchExtendedSection(for section: AnalyticsSectionDescriptor) async throws -> DashboardSection {
         extendedRequestCount += 1
         activeExtendedRequests += 1
         maximumConcurrentExtendedRequests = max(
@@ -3644,15 +3649,16 @@ private final class ControlledExtendedDashboardProvider: AnalyticsProvider {
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
         self.onEvent = onEvent
+        onEvent(.catalog(dashboard.catalog!))
         await withCheckedContinuation { standardContinuation = $0 }
         return dashboard
     }
 
     func publishStandardSection() {
-        onEvent?(.succeeded(AnalyticsAPIContract.sections[0], dashboard.sections[0]))
+        onEvent?(.succeeded(SectionFixtures.sections[0], dashboard.sections[0]))
     }
 
-    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+    func fetchExtendedSection(for section: AnalyticsSectionDescriptor) async throws -> DashboardSection {
         try await withCheckedThrowingContinuation { pending[section.id] = $0 }
     }
 
@@ -3663,4 +3669,191 @@ private final class ControlledExtendedDashboardProvider: AnalyticsProvider {
         pending.removeAll()
         for continuation in remaining.values { continuation.resume(throwing: CancellationError()) }
     }
+}
+
+private enum SectionFixtures {
+    static let sections = ["Образование", "Финансы", "Наука", "Приемная_кампания", "Международная_деятельность", "Кадры"].map {
+        AnalyticsSectionDescriptor(id: $0, parameter: $0, name: $0.replacingOccurrences(of: "_", with: " "))
+    }
+    static func section(matching title: String) -> AnalyticsSectionDescriptor? {
+        sections.first { AnalyticsAPIContract.normalize($0.name) == AnalyticsAPIContract.normalize(title) }
+    }
+}
+private extension AnalyticsSectionDescriptor {
+    var queryValue: String { parameter }
+    var displayName: String { name }
+}
+
+private func fixtureDashboard(id: String, title: String, fetchedAt: Date?, sections: [DashboardSection]) -> Dashboard {
+    var dashboard = Dashboard(id: id, title: title, fetchedAt: fetchedAt, sections: sections)
+    dashboard.catalog = sections.map { AnalyticsSectionDescriptor(id: $0.id, parameter: $0.title, name: $0.title) }
+    return dashboard
+}
+private func fixtureDashboard(id: String, title: String, fetchedAt: Date?, indicators: [Indicator]) -> Dashboard {
+    fixtureDashboard(id: id, title: title, fetchedAt: fetchedAt, sections: [DashboardSection(id: id, title: title, indicators: indicators)])
+}
+
+@MainActor
+final class ServerCatalogTests: XCTestCase {
+    private func provider(host: String) -> APIAnalyticsProvider {
+        let url = URL(string: "https://\(host)/analitycs")!
+        let configuration = AppConfiguration(analyticsBaseURL: url, analyticsAPIKey: nil,
+            authenticationURL: url, authenticationClientID: "test", authenticationCallbackURL: url,
+            authorizationCodeExchangeURL: url)
+        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        sessionConfiguration.protocolClasses = [CatalogURLProtocol.self]
+        return APIAnalyticsProvider(configuration: configuration,
+            urlSession: URLSession(configuration: sessionConfiguration), credentialsStore: StubRequestAuthorizer())
+    }
+
+    func testExtendedRequestUsesCurrentParameterRatherThanIDOrName() throws {
+        let descriptor = AnalyticsSectionDescriptor(id: "stable", parameter: "Новый_параметр", name: "Новый заголовок")
+        let request = try provider(host: "valid.example").makeRequest(for: descriptor, isExtended: true)
+        let parameter = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "section" }?.value
+        XCTAssertEqual(parameter, "Новый_параметр_Расширенный")
+    }
+
+    func testLegacyChartIDsSurviveReordering() throws {
+        let first = Data(#"{"sections":[{"values":[{"name":"A","type":"OneValue","value":1},{"name":"B","type":"OneValue","value":2}]}]}"#.utf8)
+        let reordered = Data(#"{"sections":[{"values":[{"name":"B","type":"OneValue","value":2},{"name":"A","type":"OneValue","value":1}]}]}"#.utf8)
+        let before = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: first).dashboardSection(preferredTitle: "Old", sectionID: "stable")
+        let after = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: reordered).dashboardSection(preferredTitle: "New", sectionID: "stable")
+        XCTAssertEqual(before.indicators.map(\.id), after.indicators.reversed().map(\.id))
+    }
+
+    func testCatalogValidation() throws {
+        XCTAssertNoThrow(try AnalyticsSectionDescriptor.validate([]))
+        for sections in [
+            [AnalyticsSectionDescriptor(id: " ", parameter: "A", name: "A")],
+            [AnalyticsSectionDescriptor(id: "a", parameter: "\n", name: "A")],
+            [AnalyticsSectionDescriptor(id: "a", parameter: "A", name: "A"),
+             AnalyticsSectionDescriptor(id: "a", parameter: "B", name: "B")]
+        ] { XCTAssertThrowsError(try AnalyticsSectionDescriptor.validate(sections)) }
+    }
+
+    func testCatalogArrivesBeforeDataAndControlsOrderAndStableIDs() async throws {
+        var catalogReceived = false
+        var started: Set<String> = []
+        let dashboard = try await provider(host: "valid.example").fetchDashboard { event in
+            switch event {
+            case let .catalog(catalog):
+                XCTAssertEqual(catalog.map(\.id), ["b", "a"])
+                catalogReceived = true
+            case let .started(section):
+                XCTAssertTrue(catalogReceived)
+                started.insert(section.id)
+            default: break
+            }
+        }
+        XCTAssertEqual(started, ["a", "b"])
+        XCTAssertEqual(dashboard.sections.map(\.id), ["b", "a"])
+        XCTAssertEqual(dashboard.sections.first?.indicators.first?.id, "b-chart")
+        XCTAssertEqual(dashboard.catalog?.first?.parameter, "B")
+        let restored = try JSONDecoder().decode(Dashboard.self, from: JSONEncoder().encode(dashboard))
+        XCTAssertEqual(restored, dashboard)
+    }
+
+    func testEmptyCatalogReplacesCacheAndSurvivesOffline() async throws {
+        let cache = CatalogMemoryCache(dashboard: fixtureDashboard(id: "analytics", title: "Аналитика", fetchedAt: .distantPast,
+            sections: [DashboardSection(id: "old", title: "Old", indicators: [])]))
+        let viewModel = DashboardViewModel(provider: provider(host: "empty.example"), cache: cache)
+        await viewModel.load()
+        XCTAssertEqual(viewModel.dashboard?.catalog, [])
+        XCTAssertEqual(viewModel.dashboard?.sections, [])
+        let offline = DashboardViewModel(provider: NetworkFailingProvider(code: .notConnectedToInternet), cache: cache)
+        await offline.load()
+        XCTAssertEqual(offline.dashboard?.catalog, [])
+        XCTAssertEqual(offline.dashboard?.sections, [])
+    }
+
+    func testInvalidCatalogPreservesCacheAndRequestsNoSections() async {
+        for host in ["invalid.example", "duplicate.example", "malformed.example"] {
+            let old = fixtureDashboard(id: "analytics", title: "Аналитика", fetchedAt: .distantPast,
+                sections: [DashboardSection(id: "old", title: "Old", indicators: [])])
+            let cache = CatalogMemoryCache(dashboard: old)
+            let model = DashboardViewModel(provider: provider(host: host), cache: cache)
+            await model.load()
+            XCTAssertEqual(model.dashboard, old)
+            XCTAssertEqual(cache.dashboard, old)
+            XCTAssertNotNil(model.refreshErrorMessage)
+            XCTAssertEqual(model.synchronizationSession?.items, [])
+        }
+    }
+
+    func testPartialFailureRemovesOldSectionRenamesAndKeepsCachedDataByID() async {
+        let indicator = Indicator(id: "a-chart", title: "Cached", value: 7, unit: nil, chartType: .oneValue, source: nil, rows: [])
+        let cache = CatalogMemoryCache(dashboard: fixtureDashboard(id: "analytics", title: "Аналитика", fetchedAt: .distantPast,
+            sections: [DashboardSection(id: "a", title: "Old name", indicators: [indicator], fetchedAt: .distantPast),
+                       DashboardSection(id: "removed", title: "Removed", indicators: [], hasExtended: true,
+                           extended: DashboardExtendedSection(id: "extended:removed", title: "Removed", indicators: []))]))
+        let model = DashboardViewModel(provider: provider(host: "partial.example"), cache: cache)
+        await model.load()
+        XCTAssertEqual(model.dashboard?.sections.map(\.id), ["b", "a"])
+        XCTAssertEqual(model.dashboard?.sections.last?.title, "Renamed")
+        XCTAssertEqual(model.dashboard?.sections.last?.indicators, [indicator])
+        XCTAssertEqual(model.dashboard?.sections.first?.indicators.first?.value, 42)
+        XCTAssertEqual(model.staleSectionIDs, ["a"])
+        XCTAssertEqual(cache.dashboard?.catalog?.map(\.id), ["b", "a"])
+        XCTAssertFalse(model.synchronizationSession?.items.contains { $0.id.contains("removed") } ?? true)
+    }
+
+    func testFirstInstallOfflineAndLegacyCacheRequireCatalog() async {
+        let cache = CatalogMemoryCache(dashboard: Dashboard(id: "legacy", title: "Legacy", fetchedAt: nil, sections: []))
+        let model = DashboardViewModel(provider: NetworkFailingProvider(code: .notConnectedToInternet), cache: cache)
+        await model.load()
+        XCTAssertNil(model.dashboard)
+        if case .failed = model.state {} else { XCTFail("A server catalog is required") }
+    }
+
+    func testSectionAndChartRenameKeepIdentityAndExtendedNamespace() throws {
+        let data = Data(#"{"sections":[{"name":"New title","values":[{"id":"chart","name":"New chart title","type":"OneValue","value":42}]}]}"#.utf8)
+        let response = try JSONDecoder().decode(AnalyticsAPIResponse.self, from: data)
+        let standard = try response.dashboardSection(preferredTitle: "Old title", sectionID: "stable")
+        let extended = try response.dashboardSection(preferredTitle: "Old title", sectionID: "stable", indicatorIDNamespace: "extended")
+        XCTAssertEqual(standard.id, "stable")
+        XCTAssertEqual(standard.indicators.first?.id, "stable-chart")
+        XCTAssertEqual(extended.indicators.first?.id, "stable-extended-chart")
+    }
+}
+
+@MainActor
+private final class CatalogMemoryCache: DashboardCaching {
+    var dashboard: Dashboard?
+    init(dashboard: Dashboard?) { self.dashboard = dashboard }
+    func loadDashboard() throws -> Dashboard? { dashboard }
+    func save(_ dashboard: Dashboard) throws { self.dashboard = dashboard }
+    func clearDashboard() throws { dashboard = nil }
+}
+
+private final class CatalogURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let url = request.url!
+        let section = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "section" }?.value
+        let body: String
+        var status = 200
+        if request.value(forHTTPHeaderField: "X-Test-Authorization") != "attached" {
+            status = 401
+            body = "{}"
+        } else if section == "_sections" {
+            switch url.host {
+            case "empty.example": body = #"{"sections":[]}"#
+            case "invalid.example": body = #"{"sections":[{"id":"","parameter":"A","name":"A"}]}"#
+            case "duplicate.example": body = #"{"sections":[{"id":"a","parameter":"A","name":"A"},{"id":"a","parameter":"B","name":"B"}]}"#
+            case "malformed.example": body = #"{"sections":{}}"#
+            default: body = #"{"sections":[{"id":"b","parameter":"B","name":"New"},{"id":"a","parameter":"A","name":"Renamed"}]}"#
+            }
+        } else if ["A", "B"].contains(section ?? ""), ["valid.example", "partial.example"].contains(url.host ?? "") {
+            status = url.host == "partial.example" && section == "A" ? 500 : 200
+            body = #"{"sections":[{"name":"","values":[{"id":"chart","name":"Chart","type":"OneValue","value":42}]}]}"#
+        } else {
+            status = 404
+            body = "{}"
+        }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

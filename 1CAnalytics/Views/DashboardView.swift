@@ -100,8 +100,9 @@ struct DashboardView: View {
                 .navigationTitle(navigationTitle)
                 .navigationDestination(for: DashboardRoute.self) { route in
                     switch route {
-                    case let .indicator(indicatorID):
-                        if let indicator = viewModel.dashboard?.indicators.first(where: { $0.id == indicatorID }) {
+                    case let .indicator(sectionID, indicatorID):
+                        if let section = viewModel.dashboard?.sections.first(where: { $0.id == sectionID }),
+                           let indicator = (section.indicators + (section.extended?.indicators ?? [])).first(where: { $0.id == indicatorID }) {
                             IndicatorDetailView(indicator: indicator)
                         } else {
                             ContentUnavailableView(
@@ -185,9 +186,15 @@ struct DashboardView: View {
 
                 }
         }
+        .onChange(of: viewModel.dashboard?.sections.map(\.id)) { _, ids in
+            if navigationPath.contains(where: { route in
+                if case let .indicator(sectionID, _) = route { return !(ids ?? []).contains(sectionID) }
+                return false
+            }) { navigationPath.removeAll() }
+        }
         .onChange(of: navigationPath) { oldPath, newPath in
             guard newPath.count < oldPath.count,
-                  case let .indicator(indicatorID) = oldPath.last else {
+                  case let .indicator(_, indicatorID) = oldPath.last else {
                 return
             }
             indicatorIDToRestore = indicatorID
@@ -234,6 +241,9 @@ struct DashboardView: View {
                             .frame(height: 0)
                             .id(Self.feedTopAnchor)
 
+                        if dashboard.sections.isEmpty {
+                            ContentUnavailableView("Нет доступных разделов", systemImage: "rectangle.stack", description: Text("Сервер не предоставил разделов для вашей учётной записи."))
+                        }
                         ForEach(dashboard.sections) { section in
                             dashboardSection(section)
                         }
@@ -273,28 +283,9 @@ struct DashboardView: View {
     }
 
     private var initialLoadingContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ForEach(AnalyticsAPIContract.sections) { section in
-                    let style = DashboardSectionVisualStyle.style(for: section.displayName)
-                    sectionHeaderLabel(
-                        title: section.displayName,
-                        subtitle: "Загрузка графиков…",
-                        symbol: style.symbol,
-                        tint: style.tint,
-                        isExpanded: false,
-                        isLoading: true,
-                        isStale: false
-                    )
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(section.displayName), загрузка графиков")
-                }
-            }
-            .padding(.horizontal, horizontalSizeClass == .regular ? 20 : 16)
-            .padding(.top, 16)
-            .padding(.bottom, 92)
-        }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        ProgressView("Загрузка разделов…")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
     }
 
     private func dashboardSection(_ section: DashboardSection) -> some View {
@@ -343,7 +334,7 @@ struct DashboardView: View {
                 symbol: style.symbol,
                 tint: style.tint,
                 isExpanded: isExpanded,
-                isLoading: false,
+                isLoading: viewModel.isSectionLoading(section.id),
                 isStale: viewModel.staleSectionIDs.contains(section.id)
             )
         }
@@ -449,7 +440,7 @@ struct DashboardView: View {
                 if isEditingLayout {
                     layoutControls(for: indicator, in: section)
                 } else if indicator.supportsDetail {
-                    NavigationLink(value: DashboardRoute.indicator(indicator.id)) {
+                    NavigationLink(value: DashboardRoute.indicator(sectionID: viewModel.dashboard?.sections.first(where: { $0.id == section.id || $0.extended?.id == section.id })?.id ?? section.id, indicatorID: indicator.id)) {
                         Image(systemName: "arrow.up.right")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(indicator.paletteColor(scheme: chartPaletteScheme))

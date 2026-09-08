@@ -18,7 +18,7 @@ struct DashboardSectionOffsetPreferenceKey: PreferenceKey {
 }
 
 enum DashboardRoute: Hashable {
-    case indicator(Indicator.ID)
+    case indicator(sectionID: DashboardSection.ID, indicatorID: Indicator.ID)
 }
 
 enum DashboardCardWidth: Int, Codable, CaseIterable, Sendable {

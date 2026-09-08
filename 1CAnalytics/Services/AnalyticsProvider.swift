@@ -6,35 +6,27 @@ protocol AnalyticsProvider: Sendable {
     func fetchDashboard(
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard
-    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection
+    func fetchExtendedSection(for section: AnalyticsSectionDescriptor) async throws -> DashboardSection
 }
 
 extension AnalyticsProvider {
     func fetchDashboard(
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        AnalyticsAPIContract.sections.forEach { onEvent(.started($0)) }
-        do {
-            let dashboard = try await fetchDashboard()
-            for contract in AnalyticsAPIContract.sections {
-                if let section = dashboard.sections.first(where: {
-                    AnalyticsAPIContract.normalize($0.title) == AnalyticsAPIContract.normalize(contract.displayName)
-                }) {
-                    onEvent(.succeeded(contract, section))
-                } else {
-                    onEvent(.failed(contract, AnalyticsError.invalidResponse.localizedDescription))
-                }
+        let dashboard = try await fetchDashboard()
+        guard let catalog = dashboard.catalog else { throw AnalyticsError.invalidCatalog }
+        try AnalyticsSectionDescriptor.validate(catalog)
+        onEvent(.catalog(catalog))
+        for descriptor in catalog {
+            onEvent(.started(descriptor))
+            if let section = dashboard.sections.first(where: { $0.id == descriptor.id }) {
+                onEvent(.succeeded(descriptor, section))
             }
-            return dashboard
-        } catch {
-            AnalyticsAPIContract.sections.forEach {
-                onEvent(.failed($0, error.localizedDescription))
-            }
-            throw error
         }
+        return dashboard
     }
 
-    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+    func fetchExtendedSection(for section: AnalyticsSectionDescriptor) async throws -> DashboardSection {
         throw AnalyticsError.invalidResponse
     }
 }
@@ -47,6 +39,7 @@ enum AnalyticsProviderFactory {
 }
 
 enum AnalyticsError: LocalizedError, Equatable, Sendable {
+    case invalidCatalog
     case invalidResponse
     case authenticationRequired
     case httpFailure(statusCode: Int)
@@ -54,6 +47,8 @@ enum AnalyticsError: LocalizedError, Equatable, Sendable {
 
     var errorDescription: String? {
         switch self {
+        case .invalidCatalog:
+            "Сервис вернул некорректный каталог разделов. Предыдущий каталог сохранён."
         case .invalidResponse:
             "Сервис аналитики вернул неожиданный ответ."
         case .authenticationRequired:
@@ -67,36 +62,6 @@ enum AnalyticsError: LocalizedError, Equatable, Sendable {
 }
 
 enum AnalyticsAPIContract {
-    static let sections = [
-        Section(queryValue: "Образование", displayName: "Образование"),
-        Section(queryValue: "Финансы", displayName: "Финансы"),
-        Section(queryValue: "Наука", displayName: "Наука"),
-        Section(queryValue: "Приемная_кампания", displayName: "Приемная кампания"),
-        Section(queryValue: "Международная_деятельность", displayName: "Международная деятельность"),
-        Section(queryValue: "Кадры", displayName: "Кадры")
-    ]
-
-    struct Section: Identifiable, Hashable, Sendable {
-        let queryValue: String
-        let displayName: String
-
-        var id: String { queryValue }
-    }
-
-    static func order(of sectionTitle: String) -> Int {
-        let normalizedTitle = normalize(sectionTitle)
-        return sections.firstIndex {
-            normalize($0.displayName) == normalizedTitle || normalize($0.queryValue) == normalizedTitle
-        } ?? .max
-    }
-
-    static func section(matching sectionTitle: String) -> Section? {
-        let normalizedTitle = normalize(sectionTitle)
-        return sections.first {
-            normalize($0.displayName) == normalizedTitle || normalize($0.queryValue) == normalizedTitle
-        }
-    }
-
     static func normalize(_ value: String) -> String {
         value
             .replacingOccurrences(of: "_", with: " ")
@@ -105,8 +70,24 @@ enum AnalyticsAPIContract {
     }
 }
 
+struct AnalyticsSectionDescriptor: Identifiable, Codable, Hashable, Sendable {
+    let id: String
+    let parameter: String
+    let name: String
+
+    static func validate(_ sections: [Self]) throws {
+        var ids = Set<String>()
+        for section in sections {
+            guard !section.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !section.parameter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  ids.insert(section.id).inserted else { throw AnalyticsError.invalidCatalog }
+        }
+    }
+}
+
 enum AnalyticsSectionFetchEvent: Sendable {
-    case started(AnalyticsAPIContract.Section)
-    case succeeded(AnalyticsAPIContract.Section, DashboardSection)
-    case failed(AnalyticsAPIContract.Section, String)
+    case catalog([AnalyticsSectionDescriptor])
+    case started(AnalyticsSectionDescriptor)
+    case succeeded(AnalyticsSectionDescriptor, DashboardSection)
+    case failed(AnalyticsSectionDescriptor, String)
 }

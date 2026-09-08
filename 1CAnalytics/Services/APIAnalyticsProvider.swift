@@ -9,7 +9,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
     static func makeSessionConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.default
         // Each standard section and its second level can have a request in flight.
-        configuration.httpMaximumConnectionsPerHost = AnalyticsAPIContract.sections.count * 2
+        configuration.httpMaximumConnectionsPerHost = 12
         return configuration
     }
 
@@ -32,9 +32,26 @@ final class APIAnalyticsProvider: AnalyticsProvider {
     func fetchDashboard(
         onEvent: @escaping @MainActor @Sendable (AnalyticsSectionFetchEvent) -> Void
     ) async throws -> Dashboard {
-        let preparedRequests: [(Int, AnalyticsAPIContract.Section, URLRequest)]
+        let catalogRequest: URLRequest
         do {
-            preparedRequests = try AnalyticsAPIContract.sections.enumerated().map { index, section in
+            catalogRequest = try makeRequest(for: AnalyticsSectionDescriptor(id: "_sections", parameter: "_sections", name: "Разделы"))
+        } catch AuthenticationError.missingCredentials {
+            throw AnalyticsError.authenticationRequired
+        }
+        let (data, response) = try await urlSession.data(for: catalogRequest)
+        try Self.validate(response)
+        try Self.validatePayloadAuthentication(data)
+        struct CatalogResponse: Decodable { let sections: [AnalyticsSectionDescriptor] }
+        let catalog: [AnalyticsSectionDescriptor]
+        do {
+            catalog = try JSONDecoder().decode(CatalogResponse.self, from: data).sections
+            try AnalyticsSectionDescriptor.validate(catalog)
+        } catch { throw AnalyticsError.invalidCatalog }
+        try Task.checkCancellation()
+        onEvent(.catalog(catalog))
+        let preparedRequests: [(Int, AnalyticsSectionDescriptor, URLRequest)]
+        do {
+            preparedRequests = try catalog.enumerated().map { index, section in
                 (index, section, try makeRequest(for: section))
             }
         } catch AuthenticationError.missingCredentials {
@@ -45,7 +62,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         var receivedSections = [Int: DashboardSection]()
         var failedSections = [(index: Int, name: String, failure: SectionFetchFailure)]()
 
-        AnalyticsAPIContract.sections.forEach { onEvent(.started($0)) }
+        catalog.forEach { onEvent(.started($0)) }
 
         await withTaskGroup(of: SectionFetchOutcome.self) { group in
             for (index, section, request) in preparedRequests {
@@ -62,11 +79,11 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             for await outcome in group {
                 if let section = outcome.section {
                     receivedSections[outcome.index] = section
-                    let contract = AnalyticsAPIContract.sections[outcome.index]
+                    let contract = catalog[outcome.index]
                     onEvent(.succeeded(contract, section))
                 } else if let failure = outcome.failure {
                     failedSections.append((outcome.index, outcome.displayName, failure))
-                    let contract = AnalyticsAPIContract.sections[outcome.index]
+                    let contract = catalog[outcome.index]
                     onEvent(.failed(contract, failure.error.localizedDescription))
                 }
             }
@@ -94,10 +111,12 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         let sections = receivedSections
             .sorted { $0.key < $1.key }
             .map(\.value)
-        return Self.makeDashboard(sections: sections)
+        var dashboard = Self.makeDashboard(sections: sections)
+        dashboard.catalog = catalog
+        return dashboard
     }
 
-    func fetchExtendedSection(for section: AnalyticsAPIContract.Section) async throws -> DashboardSection {
+    func fetchExtendedSection(for section: AnalyticsSectionDescriptor) async throws -> DashboardSection {
         let request: URLRequest
         do {
             request = try makeRequest(for: section, isExtended: true)
@@ -113,14 +132,15 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         decoder.dateDecodingStrategy = .iso8601
         let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
         return try analyticsResponse.dashboardSection(
-            preferredTitle: section.displayName,
+            preferredTitle: section.name,
+            sectionID: section.id,
             fetchedAt: Date(),
             indicatorIDNamespace: "extended"
         )
     }
 
     func makeRequest(
-        for section: AnalyticsAPIContract.Section,
+        for section: AnalyticsSectionDescriptor,
         isExtended: Bool = false
     ) throws -> URLRequest {
         guard var components = URLComponents(
@@ -134,7 +154,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
         queryItems.removeAll { $0.name == "id" || $0.name == "section" }
         queryItems.append(URLQueryItem(
             name: "section",
-            value: isExtended ? "\(section.queryValue)_Расширенный" : section.queryValue
+            value: isExtended ? "\(section.parameter)_Расширенный" : section.parameter
         ))
         components.queryItems = queryItems
 
@@ -161,7 +181,7 @@ final class APIAnalyticsProvider: AnalyticsProvider {
 
     private nonisolated static func fetchSection(
         index: Int,
-        contract: AnalyticsAPIContract.Section,
+        contract: AnalyticsSectionDescriptor,
         request: URLRequest,
         session: URLSession
     ) async -> SectionFetchOutcome {
@@ -174,61 +194,62 @@ final class APIAnalyticsProvider: AnalyticsProvider {
             decoder.dateDecodingStrategy = .iso8601
             let analyticsResponse = try decoder.decode(AnalyticsAPIResponse.self, from: data)
             let section = try analyticsResponse.dashboardSection(
-                preferredTitle: contract.displayName,
+                preferredTitle: contract.name,
+                sectionID: contract.id,
                 fetchedAt: Date()
             )
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: section,
                 failure: nil
             )
         } catch AnalyticsError.authenticationRequired {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .authenticationRequired
             )
         } catch let error as URLError where error.code == .cancelled {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .cancelled
             )
         } catch let error as URLError {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .network(error.code)
             )
         } catch let error as AnalyticsError {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .analytics(error)
             )
         } catch is DecodingError {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .invalidPayload
             )
         } catch is CancellationError {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .cancelled
             )
         } catch {
             return SectionFetchOutcome(
                 index: index,
-                displayName: contract.displayName,
+                displayName: contract.name,
                 section: nil,
                 failure: .other(error.localizedDescription)
             )
@@ -344,6 +365,7 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
 
     func dashboardSection(
         preferredTitle: String,
+        sectionID: String? = nil,
         fetchedAt: Date = Date(),
         indicatorIDNamespace: String? = nil
     ) throws -> DashboardSection {
@@ -359,7 +381,7 @@ struct AnalyticsAPIResponse: Decodable, Sendable {
         let title = rawTitle.isEmpty || AnalyticsAPIContract.normalize(rawTitle) == preferredName
             ? preferredTitle
             : rawTitle
-        let sectionID = title.stableID.isEmpty ? preferredTitle.stableID : title.stableID
+        let sectionID = sectionID ?? (title.stableID.isEmpty ? preferredTitle.stableID : title.stableID)
         return section.toDashboardSection(
             title: title,
             sectionID: sectionID,
@@ -684,7 +706,8 @@ struct AnalyticsAPIIndicator: Decodable, Sendable {
                 return candidate
             }
         }
-        return String(index)
+        // Legacy payloads have no server ID; names remain stable across reordering.
+        return "name:\(name)"
     }
 
     func toIndicator(layoutID: String, sectionID: String) -> Indicator {

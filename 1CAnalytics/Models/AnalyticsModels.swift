@@ -4,6 +4,7 @@ struct Dashboard: Identifiable, Codable, Equatable, Sendable {
     let id: String
     let title: String
     let fetchedAt: Date?
+    var catalog: [AnalyticsSectionDescriptor]? = nil
     let sections: [DashboardSection]
 
     var indicators: [Indicator] {
@@ -33,12 +34,15 @@ struct Dashboard: Identifiable, Codable, Equatable, Sendable {
         case title
         case fetchedAt
         case legacyUpdatedAt = "updatedAt"
+        case catalog
         case sections
         case indicators
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        catalog = try container.decodeIfPresent([AnalyticsSectionDescriptor].self, forKey: .catalog)
+        if let catalog { try AnalyticsSectionDescriptor.validate(catalog) }
         id = try container.decode(String.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
         fetchedAt = try container.decodeIfPresent(Date.self, forKey: .fetchedAt)
@@ -59,6 +63,7 @@ struct Dashboard: Identifiable, Codable, Equatable, Sendable {
         try container.encode(title, forKey: .title)
         try container.encodeIfPresent(fetchedAt, forKey: .fetchedAt)
         try container.encode(sections, forKey: .sections)
+        try container.encodeIfPresent(catalog, forKey: .catalog)
     }
 }
 
