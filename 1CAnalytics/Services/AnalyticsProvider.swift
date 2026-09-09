@@ -75,6 +75,36 @@ struct AnalyticsSectionDescriptor: Identifiable, Codable, Hashable, Sendable {
     let parameter: String
     let name: String
 
+    let androidIcon: String?
+    let iosIcon: String?
+    let color: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, parameter, name, androidIcon, color
+        case iosIcon = "IosIcon"
+    }
+
+    init(id: String, parameter: String, name: String, androidIcon: String? = nil,
+         iosIcon: String? = nil, color: String? = nil) {
+        self.id = id
+        self.parameter = parameter
+        self.name = name
+        self.androidIcon = androidIcon
+        self.iosIcon = iosIcon
+        self.color = color
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        parameter = try container.decode(String.self, forKey: .parameter)
+        name = try container.decode(String.self, forKey: .name)
+        // Optional presentation metadata must not invalidate an otherwise valid catalog.
+        androidIcon = try? container.decode(String.self, forKey: .androidIcon)
+        iosIcon = try? container.decode(String.self, forKey: .iosIcon)
+        color = try? container.decode(String.self, forKey: .color)
+    }
+
     static func validate(_ sections: [Self]) throws {
         var ids = Set<String>()
         for section in sections {

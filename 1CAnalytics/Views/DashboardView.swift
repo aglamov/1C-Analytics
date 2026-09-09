@@ -129,7 +129,10 @@ struct DashboardView: View {
 
                     ToolbarItem(placement: .principal) {
                         if let section = navigationSection {
-                            let style = DashboardSectionVisualStyle.style(for: section.title)
+                            let style = DashboardSectionVisualStyle.style(
+                                for: section.title,
+                                descriptor: viewModel.dashboard?.catalog?.first { $0.id == section.id }
+                            )
                             HStack(spacing: 7) {
                                 Image(systemName: style.symbol)
                                     .font(.caption.weight(.bold))
@@ -322,7 +325,10 @@ struct DashboardView: View {
         _ section: DashboardSection,
         isExpanded: Bool
     ) -> some View {
-        let style = DashboardSectionVisualStyle.style(for: section.title)
+        let style = DashboardSectionVisualStyle.style(
+            for: section.title,
+            descriptor: viewModel.dashboard?.catalog?.first { $0.id == section.id }
+        )
         return Button {
             toggleSection(section.id)
         } label: {

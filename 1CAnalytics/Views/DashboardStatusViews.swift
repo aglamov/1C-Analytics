@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum DashboardSynchronizationItemPresentationPolicy {
     static func isInitiallyExpanded(
@@ -293,6 +294,18 @@ private struct DashboardSynchronizationItemRow: View {
 struct DashboardSectionVisualStyle {
     let symbol: String
     let tint: Color
+
+    static func style(for title: String, descriptor: AnalyticsSectionDescriptor?) -> Self {
+        let fallback = style(for: title)
+        let requestedSymbol = descriptor?.iosIcon?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let symbol: String
+        if let requestedSymbol, !requestedSymbol.isEmpty, UIImage(systemName: requestedSymbol) != nil {
+            symbol = requestedSymbol
+        } else {
+            symbol = fallback.symbol
+        }
+        return Self(symbol: symbol, tint: Color(apiHex: descriptor?.color) ?? fallback.tint)
+    }
 
     static func style(for title: String) -> Self {
         switch AnalyticsAPIContract.normalize(title) {

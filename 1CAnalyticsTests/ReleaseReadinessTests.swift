@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import SwiftUI
 @testable import _C_Analytics
 
 @MainActor
@@ -3695,6 +3696,54 @@ private func fixtureDashboard(id: String, title: String, fetchedAt: Date?, indic
 
 @MainActor
 final class ServerCatalogTests: XCTestCase {
+    func testCatalogAppearanceDecodingAndCacheRoundTrip() throws {
+        let data = Data(##"{"id":"education","parameter":"Образование","name":"Образование","androidIcon":"school","IosIcon":"star.fill","color":"#123456"}"##.utf8)
+        let descriptor = try JSONDecoder().decode(AnalyticsSectionDescriptor.self, from: data)
+        XCTAssertEqual(descriptor.androidIcon, "school")
+        XCTAssertEqual(descriptor.iosIcon, "star.fill")
+        let style = DashboardSectionVisualStyle.style(for: descriptor.name, descriptor: descriptor)
+        XCTAssertEqual(style.symbol, "star.fill")
+        XCTAssertEqual(style.tint, Color(apiHex: "#123456"))
+        var dashboard = Dashboard(id: "analytics", title: "Аналитика", fetchedAt: nil, sections: [])
+        dashboard.catalog = [descriptor]
+        let encoded = try JSONEncoder().encode(dashboard)
+        let restored = try JSONDecoder().decode(Dashboard.self, from: encoded)
+        XCTAssertEqual(restored.catalog, [descriptor])
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(descriptor)) as? [String: Any])
+        XCTAssertEqual(object["IosIcon"] as? String, "star.fill")
+        XCTAssertNil(object["iosIcon"])
+    }
+
+    func testCategoryAppearancePreservesLegacyDefaultsAndFallsBackIndependently() throws {
+        for title in SectionFixtures.sections.map(\.name) + ["Новая категория"] {
+            let legacy = DashboardSectionVisualStyle.style(for: title)
+            let descriptor = AnalyticsSectionDescriptor(id: "stable", parameter: "query", name: title)
+            let unchanged = DashboardSectionVisualStyle.style(for: title, descriptor: descriptor)
+            XCTAssertEqual(unchanged.symbol, legacy.symbol)
+            XCTAssertEqual(unchanged.tint, legacy.tint)
+            let invalid = AnalyticsSectionDescriptor(id: "stable", parameter: "query", name: title,
+                iosIcon: "not.a.real.symbol.123456", color: "invalid")
+            let fallback = DashboardSectionVisualStyle.style(for: title, descriptor: invalid)
+            XCTAssertEqual(fallback.symbol, legacy.symbol)
+            XCTAssertEqual(fallback.tint, legacy.tint)
+            let customColor = AnalyticsSectionDescriptor(id: "stable", parameter: "query", name: title,
+                iosIcon: " ", color: "#123456")
+            let mixed = DashboardSectionVisualStyle.style(for: title, descriptor: customColor)
+            XCTAssertEqual(mixed.symbol, legacy.symbol)
+            XCTAssertEqual(mixed.tint, Color(apiHex: "#123456"))
+        }
+    }
+
+    func testMalformedOptionalAppearanceDoesNotInvalidateCatalog() throws {
+        for fields in ["", #", "androidIcon":false,"IosIcon":[],"color":123"#] {
+            let data = Data((#"{"id":"a","parameter":"A","name":"A""# + fields + "}").utf8)
+            let descriptor = try JSONDecoder().decode(AnalyticsSectionDescriptor.self, from: data)
+            XCTAssertNoThrow(try AnalyticsSectionDescriptor.validate([descriptor]))
+            XCTAssertNil(descriptor.iosIcon)
+            XCTAssertNil(descriptor.color)
+        }
+    }
+
     private func provider(host: String) -> APIAnalyticsProvider {
         let url = URL(string: "https://\(host)/analitycs")!
         let configuration = AppConfiguration(analyticsBaseURL: url, analyticsAPIKey: nil,
